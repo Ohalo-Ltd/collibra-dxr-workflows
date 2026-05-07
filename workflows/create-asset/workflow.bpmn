@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  create-asset workflow
+  =====================
+  A minimal workflow that takes an asset name, type, and domain as inputs
+  and creates the asset via the Collibra Asset API.
+
+  Script placeholders of the form "script:filename.groovy" (double-braces) are
+  resolved by deploy.py before the BPMN is uploaded to Collibra.
+  Edit the .groovy files in scripts/ for IDE support with autocomplete.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2">
+
+  <process id="createAssetProcess"
+           name="Create Asset"
+           isExecutable="true"
+           flowable:candidateStarterGroups="SYSADMIN">
+
+    <startEvent id="startEvent" name="Start">
+      <extensionElements>
+        <!-- These form properties are presented to the user when they start the workflow. -->
+        <flowable:formProperty id="assetName"
+                               name="Asset Name"
+                               type="string"
+                               required="true"/>
+        <flowable:formProperty id="assetTypeId"
+                               name="Asset Type ID (UUID)"
+                               type="string"
+                               required="true"/>
+        <flowable:formProperty id="domainId"
+                               name="Domain ID (UUID)"
+                               type="string"
+                               required="true"/>
+      </extensionElements>
+    </startEvent>
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="createAssetTask"/>
+
+    <!--
+      flowable:autoStoreVariables="true" means any variable set in the Groovy
+      script via assignment (e.g. def x = ...) is automatically persisted as a
+      process variable, available to downstream tasks.
+    -->
+    <scriptTask id="createAssetTask"
+                name="Create Asset"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="true">
+      <script>{{script:create_asset.groovy}}</script>
+    </scriptTask>
+
+    <sequenceFlow id="flow2" sourceRef="createAssetTask" targetRef="endEvent"/>
+
+    <endEvent id="endEvent" name="End"/>
+
+  </process>
+
+  <!-- BPMN diagram layout (optional — Collibra uses this for the visual editor) -->
+  <bpmndi:BPMNDiagram id="BPMNDiagram_createAssetProcess">
+    <bpmndi:BPMNPlane id="BPMNPlane_createAssetProcess" bpmnElement="createAssetProcess">
+
+      <bpmndi:BPMNShape id="BPMNShape_startEvent" bpmnElement="startEvent">
+        <omgdc:Bounds x="100" y="163" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="96" y="206" width="44" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="BPMNShape_createAssetTask" bpmnElement="createAssetTask">
+        <omgdc:Bounds x="210" y="141" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape id="BPMNShape_endEvent" bpmnElement="endEvent">
+        <omgdc:Bounds x="404" y="163" width="36" height="36"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="406" y="206" width="32" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge id="BPMNEdge_flow1" bpmnElement="flow1">
+        <omgdi:waypoint x="136" y="181"/>
+        <omgdi:waypoint x="210" y="181"/>
+      </bpmndi:BPMNEdge>
+
+      <bpmndi:BPMNEdge id="BPMNEdge_flow2" bpmnElement="flow2">
+        <omgdi:waypoint x="330" y="181"/>
+        <omgdi:waypoint x="404" y="181"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>
