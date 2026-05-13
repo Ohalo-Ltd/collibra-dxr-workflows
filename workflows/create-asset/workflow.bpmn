@@ -1,97 +1,130 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  create-asset workflow
-  =====================
-  A minimal workflow that takes an asset name, type, and domain as inputs
-  and creates the asset via the Collibra Asset API.
+  createAsset workflow
+  ====================
+  Presents a user form (Asset Type picker + Domain picker + name field) then
+  creates the asset via the Collibra v2 Asset API.
 
-  Script placeholders of the form "script:filename.groovy" (double-braces) are
-  resolved by deploy.py before the BPMN is uploaded to Collibra.
-  Edit the .groovy files in scripts/ for IDE support with autocomplete.
+  Script placeholders of the form {script:filename.groovy} are resolved by
+  deploy.py before the BPMN is packaged. Edit .groovy files in scripts/ for
+  IDE support with autocomplete.
+
+  Form references (flowable:formKey) point to JSON form files in forms/.
+  The key must match the "metadata.key" field inside the .form file.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
              xmlns:flowable="http://flowable.org/bpmn"
              xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
              xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
              xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
              typeLanguage="http://www.w3.org/2001/XMLSchema"
              expressionLanguage="http://www.w3.org/1999/XPath"
-             targetNamespace="http://www.collibra.com/apiv2">
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
 
-  <process id="createAssetProcess"
+  <process id="createAsset"
            name="Create Asset"
            isExecutable="true"
-           flowable:candidateStarterGroups="SYSADMIN">
+           flowable:candidateStarterGroups="flowableUser">
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
 
-    <startEvent id="startEvent" name="Start">
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
       <extensionElements>
-        <!-- These form properties are presented to the user when they start the workflow. -->
-        <flowable:formProperty id="assetName"
-                               name="Asset Name"
-                               type="string"
-                               required="true"/>
-        <flowable:formProperty id="assetTypeId"
-                               name="Asset Type ID (UUID)"
-                               type="string"
-                               required="true"/>
-        <flowable:formProperty id="domainId"
-                               name="Domain ID (UUID)"
-                               type="string"
-                               required="true"/>
+        <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>
     </startEvent>
 
-    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="createAssetTask"/>
-
     <!--
-      flowable:autoStoreVariables="true" means any variable set in the Groovy
-      script via assignment (e.g. def x = ...) is automatically persisted as a
-      process variable, available to downstream tasks.
+      User task: presents the createAssetForm to the person who started the
+      workflow. Variables set by the form (assetName, assetTypeId, domainId)
+      become process variables available to the script task below.
     -->
+    <userTask id="inputFormTask"
+              name="Asset Details"
+              flowable:candidateUsers="user(${initiator})"
+              flowable:formKey="createAssetForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+
     <scriptTask id="createAssetTask"
                 name="Create Asset"
                 scriptFormat="groovy"
-                flowable:autoStoreVariables="true">
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
       <script>{{script:create_asset.groovy}}</script>
     </scriptTask>
 
-    <sequenceFlow id="flow2" sourceRef="createAssetTask" targetRef="endEvent"/>
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
 
-    <endEvent id="endEvent" name="End"/>
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="inputFormTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow2" sourceRef="inputFormTask" targetRef="createAssetTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow3" sourceRef="createAssetTask" targetRef="endEvent">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
 
   </process>
 
-  <!-- BPMN diagram layout (optional — Collibra uses this for the visual editor) -->
-  <bpmndi:BPMNDiagram id="BPMNDiagram_createAssetProcess">
-    <bpmndi:BPMNPlane id="BPMNPlane_createAssetProcess" bpmnElement="createAssetProcess">
+  <bpmndi:BPMNDiagram id="BPMNDiagram_createAsset">
+    <bpmndi:BPMNPlane bpmnElement="createAsset" id="BPMNPlane_createAsset">
 
-      <bpmndi:BPMNShape id="BPMNShape_startEvent" bpmnElement="startEvent">
-        <omgdc:Bounds x="100" y="163" width="36" height="36"/>
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
+        <omgdc:Bounds x="120" y="255" width="30" height="30"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="96" y="206" width="44" height="14"/>
+          <omgdc:Bounds x="115" y="290" width="40" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape id="BPMNShape_createAssetTask" bpmnElement="createAssetTask">
-        <omgdc:Bounds x="210" y="141" width="120" height="80"/>
+      <bpmndi:BPMNShape bpmnElement="inputFormTask" id="BPMNShape_inputFormTask">
+        <omgdc:Bounds x="210" y="230" width="100" height="80"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape id="BPMNShape_endEvent" bpmnElement="endEvent">
-        <omgdc:Bounds x="404" y="163" width="36" height="36"/>
+      <bpmndi:BPMNShape bpmnElement="createAssetTask" id="BPMNShape_createAssetTask">
+        <omgdc:Bounds x="375" y="230" width="100" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
+        <omgdc:Bounds x="540" y="256" width="28" height="28"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="406" y="206" width="32" height="14"/>
+          <omgdc:Bounds x="537" y="290" width="34" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNEdge id="BPMNEdge_flow1" bpmnElement="flow1">
-        <omgdi:waypoint x="136" y="181"/>
-        <omgdi:waypoint x="210" y="181"/>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="150" y="270"/>
+        <omgdi:waypoint x="210" y="270"/>
       </bpmndi:BPMNEdge>
-
-      <bpmndi:BPMNEdge id="BPMNEdge_flow2" bpmnElement="flow2">
-        <omgdi:waypoint x="330" y="181"/>
-        <omgdi:waypoint x="404" y="181"/>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="310" y="270"/>
+        <omgdi:waypoint x="375" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
+        <omgdi:waypoint x="475" y="270"/>
+        <omgdi:waypoint x="540" y="270"/>
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>

@@ -1,0 +1,7 @@
+{
+  "key": "createAsset",
+  "name": "Create Asset",
+  "description": "Creates a new Collibra asset from user-provided name, type, and domain.",
+  "theme": "theme-1",
+  "icon": "glyphicon-asterisk"
+}
