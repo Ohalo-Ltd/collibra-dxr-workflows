@@ -1,0 +1,7 @@
+{
+  "key": "syncOhaloClassifications",
+  "name": "Sync Ohalo Classifications",
+  "description": "Syncs the Data X-Ray Classification System to Collibra for use in Unstructured Data Search. Fetches classifications, annotators, extractors and labels from the Ohalo Data X-Ray API and mirrors them as Collibra assets with description, link, search link and subtype attributes.",
+  "theme": "theme-1",
+  "icon": "glyphicon-refresh"
+}

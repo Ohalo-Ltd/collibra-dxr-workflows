@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  syncOhaloClassifications workflow
+  =================================
+  Pulls the classification catalog from the Ohalo Data X-Ray API and creates
+  matching Collibra assets in the configured classifications domain.
+
+  All configuration (Ohalo URL, auth token, asset/attribute type UUIDs) is
+  currently hardcoded inside scripts/sync_classifications.groovy. The next
+  iteration will move these to form properties / process variables.
+
+  Script placeholders of the form {script:filename.groovy} are resolved by
+  deploy.py before the BPMN is packaged.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+
+  <process id="syncOhaloClassifications"
+           name="Sync Ohalo Classifications"
+           isExecutable="true"
+           flowable:candidateStarterGroups="flowableUser">
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
+      <extensionElements>
+        <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </startEvent>
+
+    <scriptTask id="syncClassificationsTask"
+                name="Sync Classifications"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:sync_classifications.groovy}}</script>
+    </scriptTask>
+
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="syncClassificationsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow2" sourceRef="syncClassificationsTask" targetRef="endEvent">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_syncOhaloClassifications">
+    <bpmndi:BPMNPlane bpmnElement="syncOhaloClassifications" id="BPMNPlane_syncOhaloClassifications">
+
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
+        <omgdc:Bounds x="120" y="255" width="30" height="30"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="115" y="290" width="40" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="syncClassificationsTask" id="BPMNShape_syncClassificationsTask">
+        <omgdc:Bounds x="210" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
+        <omgdc:Bounds x="395" y="256" width="28" height="28"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="392" y="290" width="34" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="150" y="270"/>
+        <omgdi:waypoint x="210" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="330" y="270"/>
+        <omgdi:waypoint x="395" y="270"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>
