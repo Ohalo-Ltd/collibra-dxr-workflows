@@ -35,8 +35,30 @@
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
     </extensionElements>
 
+    <!--
+      Configuration variables exposed on the workflow's settings page.
+      readable="false" hides them from any start dialog (they're admin config,
+      not user input). writable defaults to true so admins can edit on the
+      Collibra UI workflow settings page.
+
+      Collibra rejects non-readable form properties that have no default,
+      so ohaloAuthToken ships with a sentinel placeholder value. The Groovy
+      script detects that sentinel and refuses to run, with a clear error
+      pointing the admin at the workflow settings page.
+    -->
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
       <extensionElements>
+        <flowable:formProperty id="ohaloUrl" name="Ohalo Base URL" type="string" variable="ohaloUrl" default="&lt;paste Ohalo base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="ohaloAuthToken" name="Ohalo Auth Token (Bearer)" type="string" variable="ohaloAuthToken" default="&lt;paste Ohalo Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="classificationsDomainId" name="Classifications Domain ID" type="string" variable="classificationsDomainId" default="019c9fbf-622c-76f4-9dd6-2a9730a11515" readable="false" required="true"/>
+        <flowable:formProperty id="classificationAssetTypeId" name="Asset Type ID: Classification" type="string" variable="classificationAssetTypeId" default="01965d43-235d-796b-be49-078f91d7472a" readable="false" required="true"/>
+        <flowable:formProperty id="annotatorAssetTypeId" name="Asset Type ID: Annotator" type="string" variable="annotatorAssetTypeId" default="01922a69-e7a0-7ac7-a581-c9ba9286ccf1" readable="false" required="true"/>
+        <flowable:formProperty id="extractorAssetTypeId" name="Asset Type ID: Extractor" type="string" variable="extractorAssetTypeId" default="019c9fbd-a91b-7242-9451-79ab632163a3" readable="false" required="true"/>
+        <flowable:formProperty id="labelAssetTypeId" name="Asset Type ID: Label" type="string" variable="labelAssetTypeId" default="019c9fbe-25c3-71b7-90ac-057dd582fa1e" readable="false" required="true"/>
+        <flowable:formProperty id="linkAttrTypeId" name="Attribute Type ID: Link" type="string" variable="linkAttrTypeId" default="019c9fc5-aa4c-72af-8918-caa54fe61eba" readable="false" required="true"/>
+        <flowable:formProperty id="searchLinkAttrTypeId" name="Attribute Type ID: Search Link" type="string" variable="searchLinkAttrTypeId" default="019c9fc5-8ff5-77a7-962d-4b6b05c69254" readable="false" required="true"/>
+        <flowable:formProperty id="subtypeAttrTypeId" name="Attribute Type ID: Subtype" type="string" variable="subtypeAttrTypeId" default="019c9fc5-ecc8-759b-9c0b-78547fa315ad" readable="false" required="true"/>
+
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>
     </startEvent>

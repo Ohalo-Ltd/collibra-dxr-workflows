@@ -5,39 +5,101 @@
 // domain. For each remote item we create one asset and attach description,
 // link, search-link and subtype attributes when present.
 //
-// Hardcoded configuration is intentional for the first iteration — the next
-// pass will lift these into form variables / process-deployment variables.
+// All configuration is read from workflow configuration variables (form
+// properties on the start event). An admin sets/edits them on the workflow
+// settings page in Collibra; defaults shipped in the BPMN make this work
+// out-of-the-box for the demo instance, except for ohaloAuthToken which has
+// no default and must be supplied before the workflow can run.
+//
+// Sync semantics:
+//   – Upsert by name within the configured classifications domain.
+//   – Every synced asset is tagged with 'ohalo-classification-sync'. Assets in
+//     the domain that carry this tag but are no longer in the current Ohalo
+//     response are deleted. Untagged assets in the domain are never touched,
+//     so anything added by hand is safe.
+//   – If Ohalo returns zero classifications, the deletion step is skipped to
+//     avoid a transient/broken response wiping all assets.
 //
 // Process variables produced (for downstream tasks or audit):
-//   syncCreatedCount (Integer) – assets successfully created
-//   syncFailedCount  (Integer) – classifications that errored out
-//   syncSkippedCount (Integer) – classifications skipped (unknown type, etc.)
+//   syncCreatedCount (Integer) – assets newly created
+//   syncUpdatedCount (Integer) – existing assets reused (attributes resynced)
+//   syncDeletedCount (Integer) – tagged assets removed because they were no longer in Ohalo
+//   syncSkippedCount (Integer) – classifications skipped (missing name, unknown type, etc.)
+//   syncFailedCount  (Integer) – per-classification errors during upsert
 //   syncFailures     (String)  – semicolon-joined "<name>: <error>" list, may be empty
 
 import com.collibra.dgc.core.api.dto.instance.asset.AddAssetRequest
-import com.collibra.dgc.core.api.dto.instance.attribute.AddAttributeRequest
+import com.collibra.dgc.core.api.dto.instance.asset.AddAssetTagsRequest
+import com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest
+import com.collibra.dgc.core.api.dto.instance.asset.SetAssetAttributesRequest
 import com.collibra.dgc.workflow.api.exception.WorkflowException
 import groovy.json.JsonSlurper
 
-// --- Configuration (hardcoded for now) --------------------------------------
+final String SYNC_TAG = 'ohalo-classification-sync'
 
-def ohaloUrl       = 'https://collibra-demo-integration.dataxray.io'
-def ohaloAuthToken = 'REDACTED-LEAKED-TOKEN-REVOKED'
+// --- Read & validate workflow configuration variables -----------------------
 
-def classificationsDomainId = string2Uuid('019c9fbf-622c-76f4-9dd6-2a9730a11515')
+// Required configuration variables: variable name → human label shown in errors
+def requiredConfig = [
+    ohaloUrl                 : 'Ohalo Base URL',
+    ohaloAuthToken           : 'Ohalo Auth Token (Bearer)',
+    classificationsDomainId  : 'Classifications Domain ID',
+    classificationAssetTypeId: 'Asset Type ID: Classification',
+    annotatorAssetTypeId     : 'Asset Type ID: Annotator',
+    extractorAssetTypeId     : 'Asset Type ID: Extractor',
+    labelAssetTypeId         : 'Asset Type ID: Label',
+    linkAttrTypeId           : 'Attribute Type ID: Link',
+    searchLinkAttrTypeId     : 'Attribute Type ID: Search Link',
+    subtypeAttrTypeId        : 'Attribute Type ID: Subtype',
+]
+
+// Collibra requires a non-empty default for non-readable form properties, so
+// variables that have no sensible default (auth token, base URL) ship with a
+// sentinel placeholder in the BPMN — any value of the form "<paste … here>"
+// is treated as unset.
+def isPlaceholder = { String s -> s.startsWith('<paste ') && s.endsWith('>') }
+
+def config  = [:]
+def missing = []
+requiredConfig.each { varName, label ->
+    def raw = execution.getVariable(varName)
+    def v = raw == null ? '' : raw.toString().trim()
+    if (v.isEmpty() || isPlaceholder(v)) {
+        missing << "${label}  (variable: ${varName})"
+    } else {
+        config[varName] = v
+    }
+}
+
+if (!missing.isEmpty()) {
+    def bullets = '\n  • ' + missing.join('\n  • ')
+    def detailMsg = "Cannot run Sync Ohalo Classifications — the following workflow configuration variable(s) are not set:${bullets}\n\nOpen the workflow's settings page and provide a value for each, then start the workflow again."
+    loggerApi.error(detailMsg)
+    def wf = new WorkflowException(detailMsg)
+    wf.setTitleMessage('Ohalo sync misconfigured')
+    wf.setUserMessage(detailMsg)
+    throw wf
+}
+
+def ohaloUrl       = config.ohaloUrl
+def ohaloAuthToken = config.ohaloAuthToken
+
+def classificationsDomainId = string2Uuid(config.classificationsDomainId)
 
 // Map remote type → Collibra asset type UUID
 def assetTypeIdByType = [
-    CLASSIFICATION: string2Uuid('01965d43-235d-796b-be49-078f91d7472a'),
-    ANNOTATOR     : string2Uuid('01922a69-e7a0-7ac7-a581-c9ba9286ccf1'),
-    EXTRACTOR     : string2Uuid('019c9fbd-a91b-7242-9451-79ab632163a3'),
-    LABEL         : string2Uuid('019c9fbe-25c3-71b7-90ac-057dd582fa1e'),
+    CLASSIFICATION: string2Uuid(config.classificationAssetTypeId),
+    ANNOTATOR     : string2Uuid(config.annotatorAssetTypeId),
+    EXTRACTOR     : string2Uuid(config.extractorAssetTypeId),
+    LABEL         : string2Uuid(config.labelAssetTypeId),
 ]
 
+// Collibra system Description attribute type — same UUID on every Collibra
+// instance, so kept as a constant rather than a config variable.
 def descriptionAttrTypeId = string2Uuid('00000000-0000-0000-0000-000000003114')
-def linkAttrTypeId        = string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba')
-def searchLinkAttrTypeId  = string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254')
-def subtypeAttrTypeId     = string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad')
+def linkAttrTypeId        = string2Uuid(config.linkAttrTypeId)
+def searchLinkAttrTypeId  = string2Uuid(config.searchLinkAttrTypeId)
+def subtypeAttrTypeId     = string2Uuid(config.subtypeAttrTypeId)
 
 // --- Fetch classifications from Ohalo ---------------------------------------
 
@@ -54,12 +116,19 @@ try {
 
 loggerApi.info("Ohalo returned ${classifications.size()} classification(s); syncing into Collibra")
 
-// --- Sync each classification ----------------------------------------------
+// --- Index existing assets in the target domain ----------------------------
+
+def existingByName = fetchAllAssetsInDomain(classificationsDomainId)
+loggerApi.info("Found ${existingByName.size()} existing asset(s) in classifications domain")
+
+// --- Upsert each classification --------------------------------------------
 
 int created = 0
+int updated = 0
 int failed  = 0
 int skipped = 0
 def failures = []
+def touchedAssetIds = [] as Set
 
 classifications.eachWithIndex { classification, idx ->
     def name = classification?.name
@@ -78,34 +147,54 @@ classifications.eachWithIndex { classification, idx ->
             return
         }
 
-        def assetReq = AddAssetRequest.builder()
-            .name(name)
-            .displayName(name)
-            .domainId(classificationsDomainId)
-            .typeId(assetTypeId)
-            .build()
-        def asset = assetApi.addAsset(assetReq)
-        def assetId = asset.getId()
-        loggerApi.info("Created ${type} asset '${name}' [${assetId}]")
+        def existing = existingByName[name]
+        UUID assetId
+        boolean isUpdate
+        if (existing) {
+            assetId = existing.getId()
+            isUpdate = true
+        } else {
+            def assetReq = AddAssetRequest.builder()
+                .name(name)
+                .displayName(name)
+                .domainId(classificationsDomainId)
+                .typeId(assetTypeId)
+                .build()
+            def asset = assetApi.addAsset(assetReq)
+            assetId = asset.getId()
+            isUpdate = false
+        }
 
-        // Attributes – each is independent; a single attribute failure should
-        // not abandon the others on the same asset, but should surface in the
-        // per-classification error if every attempt fails.
+        // Tag the asset (idempotent — addAssetTags is a no-op for tags already present)
+        try {
+            assetApi.addAssetTags(AddAssetTagsRequest.builder()
+                .assetId(assetId)
+                .tagNames([SYNC_TAG])
+                .build())
+        } catch (Exception tagEx) {
+            loggerApi.warn("Failed to apply sync tag on ${assetId}: ${tagEx.message}")
+        }
+
+        // setAssetAttributes replaces all values of the given type — works for
+        // both fresh creates and updates.
         def attrErrors = []
-        addAttr(attrErrors, assetId, descriptionAttrTypeId, classification.description, 'description')
-        if (classification.link) {
-            addAttr(attrErrors, assetId, linkAttrTypeId, ohaloUrl + classification.link, 'link')
-        }
-        if (classification.searchLink) {
-            addAttr(attrErrors, assetId, searchLinkAttrTypeId, ohaloUrl + classification.searchLink, 'searchLink')
-        }
-        addAttr(attrErrors, assetId, subtypeAttrTypeId, classification.subtype, 'subtype')
+        syncAttribute(attrErrors, assetId, descriptionAttrTypeId, classification.description, 'description')
+        syncAttribute(attrErrors, assetId, linkAttrTypeId,        classification.link       ? ohaloUrl + classification.link       : null, 'link')
+        syncAttribute(attrErrors, assetId, searchLinkAttrTypeId,  classification.searchLink ? ohaloUrl + classification.searchLink : null, 'searchLink')
+        syncAttribute(attrErrors, assetId, subtypeAttrTypeId,     classification.subtype, 'subtype')
 
         if (!attrErrors.isEmpty()) {
-            loggerApi.warn("Asset '${name}' created but ${attrErrors.size()} attribute(s) failed: ${attrErrors.join('; ')}")
+            loggerApi.warn("Asset '${name}' synced but ${attrErrors.size()} attribute(s) failed: ${attrErrors.join('; ')}")
         }
 
-        created++
+        touchedAssetIds << assetId
+        if (isUpdate) {
+            updated++
+            loggerApi.info("Updated ${type} asset '${name}' [${assetId}]")
+        } else {
+            created++
+            loggerApi.info("Created ${type} asset '${name}' [${assetId}]")
+        }
     } catch (Exception e) {
         failed++
         def msg = "${name ?: "<unnamed @${idx}>"}: ${e.message}"
@@ -114,18 +203,42 @@ classifications.eachWithIndex { classification, idx ->
     }
 }
 
+// --- Delete tagged assets no longer in Ohalo --------------------------------
+
+int deleted = 0
+if (classifications.isEmpty()) {
+    loggerApi.warn("Ohalo returned 0 classifications — skipping deletion step to avoid wiping the domain")
+} else {
+    def taggedInDomain = fetchTaggedAssetsInDomain(classificationsDomainId, SYNC_TAG)
+    def toDelete = taggedInDomain.findAll { !touchedAssetIds.contains(it.getId()) }
+    if (!toDelete.isEmpty()) {
+        loggerApi.info("Removing ${toDelete.size()} asset(s) no longer present in Ohalo")
+        toDelete.each { asset ->
+            try {
+                assetApi.removeAsset(asset.getId())
+                deleted++
+                loggerApi.info("Deleted orphan asset '${asset.getName()}' [${asset.getId()}]")
+            } catch (Exception delEx) {
+                loggerApi.error("Failed to delete orphan '${asset.getName()}' [${asset.getId()}]: ${delEx.message}")
+            }
+        }
+    }
+}
+
 // --- Report -----------------------------------------------------------------
 
 execution.setVariable('syncCreatedCount', created)
-execution.setVariable('syncFailedCount',  failed)
+execution.setVariable('syncUpdatedCount', updated)
+execution.setVariable('syncDeletedCount', deleted)
 execution.setVariable('syncSkippedCount', skipped)
+execution.setVariable('syncFailedCount',  failed)
 execution.setVariable('syncFailures',     failures.join('; '))
 
-loggerApi.info("Ohalo sync complete: created=${created}, failed=${failed}, skipped=${skipped}")
+loggerApi.info("Ohalo sync complete: created=${created}, updated=${updated}, deleted=${deleted}, skipped=${skipped}, failed=${failed}")
 
-// If nothing succeeded and at least one classification was attempted, treat
-// the whole run as a failure so the workflow surfaces in the Collibra UI.
-if (created == 0 && failed > 0) {
+// If nothing was created or updated and at least one item failed, surface the
+// run as a failure in the Collibra UI.
+if (created == 0 && updated == 0 && failed > 0) {
     def wf = new WorkflowException("All ${failed} classification(s) failed to sync. First error: ${failures[0]}")
     wf.setTitleMessage('Ohalo sync failed')
     wf.setUserMessage("All ${failed} classification(s) failed to sync. First error: ${failures[0]}")
@@ -134,21 +247,54 @@ if (created == 0 && failed > 0) {
 
 // --- Helpers ---------------------------------------------------------------
 
-def addAttr(List errors, UUID assetId, UUID typeId, value, String label) {
-    if (value == null || (value instanceof String && value.isEmpty())) {
-        return
-    }
+def syncAttribute(List errors, UUID assetId, UUID typeId, value, String label) {
+    def values = (value == null || (value instanceof String && value.trim().isEmpty())) ? [] : [value]
     try {
-        def req = AddAttributeRequest.builder()
+        def req = SetAssetAttributesRequest.builder()
             .assetId(assetId)
             .typeId(typeId)
-            .value(value)
+            .values(values as List<Object>)
             .build()
-        attributeApi.addAttribute(req)
+        assetApi.setAssetAttributes(req)
     } catch (Exception attrEx) {
         errors << "${label}: ${attrEx.message}"
-        loggerApi.warn("addAttribute(${label}) on ${assetId} failed: ${attrEx.message}")
+        loggerApi.warn("setAssetAttributes(${label}) on ${assetId} failed: ${attrEx.message}")
     }
+}
+
+def fetchAllAssetsInDomain(UUID domainId) {
+    def byName = [:]
+    def cursor = ''
+    while (true) {
+        def req = FindAssetsRequest.builder()
+            .domainId(domainId)
+            .limit(1000)
+            .cursor(cursor)
+            .build()
+        def page = assetApi.findAssets(req)
+        page.getResults().each { asset -> byName[asset.getName()] = asset }
+        cursor = page.getNextCursor()
+        if (!cursor) break
+    }
+    return byName
+}
+
+def fetchTaggedAssetsInDomain(UUID domainId, String tagName) {
+    def results = []
+    def cursor = ''
+    while (true) {
+        def req = FindAssetsRequest.builder()
+            .domainId(domainId)
+            .tagNames([tagName])
+            .limit(1000)
+            .cursor(cursor)
+            .build()
+        def page = assetApi.findAssets(req)
+        results.addAll(page.getResults())
+        cursor = page.getNextCursor()
+        if (!cursor) break
+    }
+    return results
 }
 
 def fetchClassifications(String baseUrl, String authToken, loggerApi) {
