@@ -4,5 +4,8 @@
   },
   "sync-ohalo-classifications": {
     "default": "019e219a-15ae-7525-b342-1dc6b24d098b"
+  },
+  "sync-ohalo-classifications-interactive": {
+    "default": "019e2591-ced3-70f4-95e4-29c722db3ed7"
   }
 }
