@@ -12,7 +12,17 @@
 // no default and must be supplied before the workflow can run.
 //
 // Sync semantics:
-//   – Upsert by name within the configured classifications domain.
+//   – Upsert by Ohalo ID. Each Collibra asset carries an "Ohalo ID" attribute
+//     (type UUID supplied via ohaloIdAttrTypeId) that stores the remote id; we
+//     match on that, so an Ohalo-side rename updates the existing asset rather
+//     than spawning a duplicate.
+//   – Legacy fallback: if no Ohalo-ID match is found, we look for an asset in
+//     the domain with the same name (assets created by the old name-based
+//     sync) and adopt it, stamping the Ohalo ID onto it. After one sync run,
+//     every managed asset is keyed by ID; the name fallback effectively
+//     migrates a legacy domain in place without losing history or relations.
+//   – When matched by ID, if the Ohalo name has diverged from the Collibra
+//     asset name we rename the Collibra asset to match.
 //   – Every synced asset is tagged with 'ohalo-classification-sync'. Assets in
 //     the domain that carry this tag but are no longer in the current Ohalo
 //     response are deleted. Untagged assets in the domain are never touched,
@@ -32,8 +42,10 @@
 
 import com.collibra.dgc.core.api.dto.instance.asset.AddAssetRequest
 import com.collibra.dgc.core.api.dto.instance.asset.AddAssetTagsRequest
+import com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest
 import com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest
 import com.collibra.dgc.core.api.dto.instance.asset.SetAssetAttributesRequest
+import com.collibra.dgc.core.api.dto.instance.attribute.FindAttributesRequest
 import com.collibra.dgc.workflow.api.exception.WorkflowException
 import groovy.json.JsonSlurper
 
@@ -53,6 +65,7 @@ def requiredConfig = [
     linkAttrTypeId           : 'Attribute Type ID: Link',
     searchLinkAttrTypeId     : 'Attribute Type ID: Search Link',
     subtypeAttrTypeId        : 'Attribute Type ID: Subtype',
+    ohaloIdAttrTypeId        : 'Attribute Type ID: Ohalo ID',
 ]
 
 // Collibra requires a non-empty default for non-readable form properties, so
@@ -102,6 +115,7 @@ def descriptionAttrTypeId = string2Uuid('00000000-0000-0000-0000-000000003114')
 def linkAttrTypeId        = string2Uuid(config.linkAttrTypeId)
 def searchLinkAttrTypeId  = string2Uuid(config.searchLinkAttrTypeId)
 def subtypeAttrTypeId     = string2Uuid(config.subtypeAttrTypeId)
+def ohaloIdAttrTypeId     = string2Uuid(config.ohaloIdAttrTypeId)
 
 // --- Fetch classifications from Ohalo ---------------------------------------
 
@@ -120,8 +134,16 @@ loggerApi.info("Ohalo returned ${classifications.size()} classification(s); sync
 
 // --- Index existing assets in the target domain ----------------------------
 
-def existingByName = fetchAllAssetsInDomain(classificationsDomainId)
+def existing = fetchAllAssetsInDomain(classificationsDomainId)
+def existingByName = existing.byName
+def existingById   = existing.byId
 loggerApi.info("Found ${existingByName.size()} existing asset(s) in classifications domain")
+
+// Map Ohalo ID → Collibra asset UUID, restricted to assets in this domain.
+// findAttributes has no domain filter, so we query globally by type and then
+// drop any hits that belong to assets outside the classifications domain.
+def assetIdByOhaloId = fetchAssetIdsByOhaloId(ohaloIdAttrTypeId, existingById.keySet())
+loggerApi.info("Indexed ${assetIdByOhaloId.size()} asset(s) with an Ohalo ID attribute")
 
 // --- Upsert each classification --------------------------------------------
 
@@ -134,10 +156,16 @@ def touchedAssetIds = [] as Set
 
 classifications.eachWithIndex { classification, idx ->
     def name = classification?.name
+    def ohaloId = classification?.id == null ? null : classification.id.toString().trim()
     try {
         if (!name) {
             skipped++
             loggerApi.warn("Skipping classification at index ${idx}: missing 'name'")
+            return
+        }
+        if (!ohaloId) {
+            skipped++
+            loggerApi.warn("Skipping '${name}': missing Ohalo 'id'")
             return
         }
 
@@ -149,13 +177,29 @@ classifications.eachWithIndex { classification, idx ->
             return
         }
 
-        def existing = existingByName[name]
-        UUID assetId
-        boolean isUpdate
-        if (existing) {
-            assetId = existing.getId()
+        // Resolution order: Ohalo ID → legacy name match → create new.
+        UUID assetId = null
+        boolean isUpdate = false
+        String previousName = null
+
+        def idMatch = assetIdByOhaloId[ohaloId]
+        if (idMatch) {
+            assetId = idMatch
             isUpdate = true
-        } else {
+            previousName = existingById[idMatch]?.getName()
+        }
+
+        if (assetId == null) {
+            def nameMatch = existingByName[name]
+            if (nameMatch) {
+                assetId = nameMatch.getId()
+                isUpdate = true
+                previousName = nameMatch.getName()
+                loggerApi.info("Adopting legacy asset '${name}' [${assetId}] by name; stamping Ohalo ID ${ohaloId}")
+            }
+        }
+
+        if (assetId == null) {
             def assetReq = AddAssetRequest.builder()
                 .name(name)
                 .displayName(name)
@@ -164,7 +208,20 @@ classifications.eachWithIndex { classification, idx ->
                 .build()
             def asset = assetApi.addAsset(assetReq)
             assetId = asset.getId()
-            isUpdate = false
+        }
+
+        // Rename if the Ohalo name has diverged from what's in Collibra.
+        if (isUpdate && previousName != null && previousName != name) {
+            try {
+                assetApi.changeAsset(ChangeAssetRequest.builder()
+                    .id(assetId)
+                    .name(name)
+                    .displayName(name)
+                    .build())
+                loggerApi.info("Renamed asset [${assetId}]: '${previousName}' → '${name}'")
+            } catch (Exception renameEx) {
+                loggerApi.warn("Failed to rename '${previousName}' → '${name}' on ${assetId}: ${renameEx.message}")
+            }
         }
 
         // Tag the asset (idempotent — addAssetTags is a no-op for tags already present)
@@ -178,8 +235,10 @@ classifications.eachWithIndex { classification, idx ->
         }
 
         // setAssetAttributes replaces all values of the given type — works for
-        // both fresh creates and updates.
+        // both fresh creates and updates. Stamping the Ohalo ID here covers
+        // first-time-created assets and the legacy name-fallback path.
         def attrErrors = []
+        syncAttribute(attrErrors, assetId, ohaloIdAttrTypeId,     ohaloId, 'ohaloId')
         syncAttribute(attrErrors, assetId, descriptionAttrTypeId, classification.description, 'description')
         syncAttribute(attrErrors, assetId, linkAttrTypeId,        classification.link       ? ohaloUrl + classification.link       : null, 'link')
         syncAttribute(attrErrors, assetId, searchLinkAttrTypeId,  classification.searchLink ? ohaloUrl + classification.searchLink : null, 'searchLink')
@@ -267,6 +326,7 @@ def syncAttribute(List errors, UUID assetId, UUID typeId, value, String label) {
 
 def fetchAllAssetsInDomain(UUID domainId) {
     def byName = [:]
+    def byId   = [:]
     def cursor = ''
     while (true) {
         def req = FindAssetsRequest.builder()
@@ -275,11 +335,37 @@ def fetchAllAssetsInDomain(UUID domainId) {
             .cursor(cursor)
             .build()
         def page = assetApi.findAssets(req)
-        page.getResults().each { asset -> byName[asset.getName()] = asset }
+        page.getResults().each { asset ->
+            byName[asset.getName()] = asset
+            byId[asset.getId()]     = asset
+        }
         cursor = page.getNextCursor()
         if (!cursor) break
     }
-    return byName
+    return [byName: byName, byId: byId]
+}
+
+def fetchAssetIdsByOhaloId(UUID ohaloIdAttrTypeId, Set<UUID> assetsInDomain) {
+    def assetIdByOhaloId = [:]
+    def cursor = ''
+    while (true) {
+        def req = FindAttributesRequest.builder()
+            .typeIds([ohaloIdAttrTypeId])
+            .limit(1000)
+            .cursor(cursor)
+            .build()
+        def page = attributeApi.findAttributes(req)
+        page.getResults().each { attr ->
+            def aid = attr.getAsset()?.getId()
+            def val = attr.getValue()
+            if (aid && val && assetsInDomain.contains(aid)) {
+                assetIdByOhaloId[val.toString()] = aid
+            }
+        }
+        cursor = page.getNextCursor()
+        if (!cursor) break
+    }
+    return assetIdByOhaloId
 }
 
 def fetchTaggedAssetsInDomain(UUID domainId, String tagName) {

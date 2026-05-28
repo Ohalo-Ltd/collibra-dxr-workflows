@@ -56,6 +56,7 @@
         <flowable:formProperty id="linkAttrTypeId" name="Attribute Type ID: Link" type="string" variable="linkAttrTypeId" default="019c9fc5-aa4c-72af-8918-caa54fe61eba" readable="false" required="true"/>
         <flowable:formProperty id="searchLinkAttrTypeId" name="Attribute Type ID: Search Link" type="string" variable="searchLinkAttrTypeId" default="019c9fc5-8ff5-77a7-962d-4b6b05c69254" readable="false" required="true"/>
         <flowable:formProperty id="subtypeAttrTypeId" name="Attribute Type ID: Subtype" type="string" variable="subtypeAttrTypeId" default="019c9fc5-ecc8-759b-9c0b-78547fa315ad" readable="false" required="true"/>
+        <flowable:formProperty id="ohaloIdAttrTypeId" name="Attribute Type ID: Ohalo ID" type="string" variable="ohaloIdAttrTypeId" default="&lt;paste Ohalo ID attribute type UUID here&gt;" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>
