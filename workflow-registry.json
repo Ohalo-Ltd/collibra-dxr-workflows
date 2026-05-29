@@ -1,17 +1,17 @@
 {
   "configure-data-xray-workflows": {
-    "default": "019e7419-49e9-776e-a05e-30347f6ce3fa"
+    "default": "019e7460-051e-71f4-bda1-bbea2ac282e6"
   },
   "create-asset": {
     "default": "019e0389-8a15-756a-9523-fa15d35f22cc"
   },
   "search-data-xray": {
-    "default": "019e7318-6182-76d4-8cd6-6310ca74f66f"
+    "default": "019e7460-0767-701d-8ec2-08cd341249c1"
   },
   "sync-data-xray-classifications": {
-    "default": "019e73b9-cb0e-747f-b818-11e2bc2f019c"
+    "default": "019e7460-098b-748d-b70e-9e9d82d23f3c"
   },
   "sync-data-xray-classifications-nightly": {
-    "default": "019e7398-1065-77cf-9018-20cd661f5518"
+    "default": "019e7460-0bc2-75dd-8f0d-5c17ac8a272c"
   }
 }
