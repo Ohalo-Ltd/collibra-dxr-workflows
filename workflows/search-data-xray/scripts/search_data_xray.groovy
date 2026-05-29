@@ -26,10 +26,14 @@
 //   conditionName  (String)  – the search name the user entered
 //   queryString    (String)  – the composed Data X-Ray query, or "(all files)"
 //   searchUrl      (String)  – the full Data X-Ray files API URL that was called
-//   count          (Integer) – number of matching files (capped at maxResults)
+//   resultCount        (Integer) – total matching files counted (capped at COUNT_CAP)
+//   resultCountDisplay (String)  – resultCount as text, or "many" if the cap was hit
+//   shownCount         (Integer) – rows written to the asset table (≤ maxResults)
 //
 // The matching files themselves are stored as an HTML table attribute on the
-// search-query asset, not surfaced on the results task.
+// search-query asset (first maxResults rows). The response is streamed, never
+// buffered whole, so the total can be counted without loading every file into
+// memory; counting stops at COUNT_CAP and reports "many" beyond that.
 
 import com.collibra.dgc.core.api.dto.instance.asset.AddAssetRequest
 import com.collibra.dgc.core.api.dto.instance.attribute.AddAttributeRequest
@@ -168,9 +172,15 @@ addAttribute(queryId, descriptionAttrTypeId, descParts.join('\n\n'))
 def encodedQuery = URLEncoder.encode(queryString, StandardCharsets.UTF_8.toString())
 def searchUrl = "${ohaloUrl}/api/v1/files?q=${encodedQuery}"
 
-def files
+// Stream the (potentially huge) NDJSON response rather than buffering it: keep
+// only the first maxResults rows for the asset table, but keep counting every
+// row up to COUNT_CAP. If the count reaches the cap we stop early and report
+// the total as "many" rather than an exact figure.
+def COUNT_CAP = 10_000
+
+def preview
 try {
-    files = fetchFiles(searchUrl, ohaloAuthToken)
+    preview = fetchFilePreview(searchUrl, ohaloAuthToken, maxResults, COUNT_CAP)
 } catch (Exception fetchEx) {
     loggerApi.error("Failed to fetch files from Data X-Ray: ${fetchEx.message}")
     def wf = new WorkflowException("Data X-Ray file search failed: ${fetchEx.message}", fetchEx)
@@ -179,16 +189,16 @@ try {
     throw wf
 }
 
-loggerApi.info("Data X-Ray returned ${files.size()} file(s); previewing up to ${maxResults}")
+def shown = preview.shown
+int total = preview.total
+boolean capped = preview.capped
+def totalDisplay = capped ? 'many' : total.toString()
 
-// --- Build the preview (capped at maxResults) -------------------------------
+loggerApi.info("Data X-Ray returned ${capped ? COUNT_CAP + '+' : total} file(s); writing ${shown.size()} to the asset table")
 
-def shown = files.take(maxResults)
-int count = shown.size()
+// --- Store the matching files as an HTML table on the search-query asset -----
 
-// The matching files are stored as an HTML table on the search-query asset
-// only; the results task just reports the count and query.
-if (count == 0) {
+if (shown.isEmpty()) {
     addAttribute(queryId, filesAttrTypeId, 'Query returned 0 results')
 } else {
     def writer = new StringWriter()
@@ -209,9 +219,11 @@ if (count == 0) {
 execution.setVariable('conditionName', conditionName)
 execution.setVariable('queryString', queryString ?: '(all files)')
 execution.setVariable('searchUrl', searchUrl)
-execution.setVariable('count', count)
+execution.setVariable('resultCount', total)
+execution.setVariable('resultCountDisplay', totalDisplay)
+execution.setVariable('shownCount', shown.size())
 
-loggerApi.info("Search Data X-Ray complete: asset=${queryId}, files shown=${count}")
+loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}")
 
 // --- Helpers ----------------------------------------------------------------
 
@@ -279,11 +291,16 @@ def parseIntOrDefault(String s, int fallback) {
     }
 }
 
-// GET the Data X-Ray files endpoint and return a List of file objects. The
-// files endpoint streams newline-delimited JSON (NDJSON) — one file object per
-// line — so we parse line by line. We also tolerate a bare JSON array or an
-// object wrapping the array under data/files/results, in case the shape varies.
-def fetchFiles(String url, String authToken) {
+// GET the Data X-Ray files endpoint and stream the response. The endpoint
+// returns newline-delimited JSON (one file object per line), which can be very
+// large, so we never buffer the whole body: Jackson's MappingIterator reads one
+// value at a time off the input stream. We retain only the first `keepLimit`
+// rows (for the asset table) but keep counting every row up to `countCap`.
+//
+// Returns [shown: List (≤ keepLimit), total: int (≤ countCap), capped: boolean].
+// `capped` is true when the stream was stopped early at countCap, meaning the
+// real total is at least countCap.
+def fetchFilePreview(String url, String authToken, int keepLimit, int countCap) {
     def conn = (HttpURLConnection) new URL(url).openConnection()
     conn.setRequestMethod('GET')
     conn.setRequestProperty('Authorization', "Bearer ${authToken}")
@@ -302,29 +319,30 @@ def fetchFiles(String url, String authToken) {
         throw new RuntimeException("Data X-Ray API returned HTTP ${code}: ${truncate(errBody, 500)}")
     }
 
-    def body = conn.getInputStream().getText('UTF-8')
-    if (!body?.trim()) return []
-
-    // The files endpoint returns a stream of JSON values (one file object per
-    // line). Jackson's readValues reads that sequence regardless of how the
-    // values are delimited, and also iterates the elements of a top-level JSON
-    // array — so it covers every shape this endpoint produces.
-    def items = []
+    def shown = []
+    int total = 0
+    boolean capped = false
+    def input = conn.getInputStream()
     try {
-        def reader = new ObjectMapper().readerFor(Map).readValues(body)
+        def reader = new ObjectMapper().readerFor(Map).readValues(input)
         while (reader.hasNextValue()) {
-            items << reader.nextValue()
+            def f = reader.nextValue()
+            if (total < keepLimit) {
+                shown << f
+            }
+            total++
+            if (total >= countCap) {
+                capped = true
+                break
+            }
         }
     } catch (Exception parseEx) {
-        throw new RuntimeException("Data X-Ray API returned a body that could not be parsed as JSON: ${parseEx.message}; body starts: ${truncate(body, 300)}")
+        throw new RuntimeException("Data X-Ray API response could not be parsed as JSON: ${parseEx.message}")
+    } finally {
+        try { input.close() } catch (Exception ignored) { /* best-effort */ }
+        conn.disconnect()
     }
-
-    // Tolerate a single {data|files|results: [...]} envelope, just in case.
-    if (items.size() == 1 && items[0] instanceof Map) {
-        def list = items[0].data ?: items[0].files ?: items[0].results
-        if (list instanceof List) return list
-    }
-    return items
+    return [shown: shown, total: total, capped: capped]
 }
 
 def truncate(String s, int max) {
