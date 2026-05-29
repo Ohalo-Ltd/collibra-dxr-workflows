@@ -5,11 +5,17 @@
 // domain. For each remote item we create one asset and attach description,
 // link, search-link and subtype attributes when present.
 //
+// This workflow is triggered by a timer start event (nightly at 02:00), so it
+// runs unattended with no user/initiator. On misconfiguration or a transient
+// Ohalo outage it logs the reason and ends cleanly rather than throwing: a
+// timer-triggered workflow that fails before its first async task is retried
+// 3× by Collibra and then permanently disabled until redeployment.
+//
 // All configuration is read from workflow configuration variables (form
 // properties on the start event). An admin sets/edits them on the workflow
 // settings page in Collibra; defaults shipped in the BPMN make this work
 // out-of-the-box for the demo instance, except for ohaloAuthToken which has
-// no default and must be supplied before the workflow can run.
+// no default and must be supplied before the workflow will do anything.
 //
 // Sync semantics:
 //   – Upsert by Ohalo ID. Each Collibra asset carries an "Ohalo ID" attribute
@@ -44,7 +50,6 @@ import com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest
 import com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest
 import com.collibra.dgc.core.api.dto.instance.asset.SetAssetAttributesRequest
 import com.collibra.dgc.core.api.dto.instance.attribute.FindAttributesRequest
-import com.collibra.dgc.workflow.api.exception.WorkflowException
 import groovy.json.JsonSlurper
 
 final String SYNC_TAG = 'ohalo-classification-sync'
@@ -86,12 +91,13 @@ requiredConfig.each { varName, label ->
 
 if (!missing.isEmpty()) {
     def bullets = '\n  • ' + missing.join('\n  • ')
-    def detailMsg = "Cannot run Sync Ohalo Classifications — the following workflow configuration variable(s) are not set:${bullets}\n\nOpen the workflow's settings page and provide a value for each, then start the workflow again."
+    def detailMsg = "Skipping Sync Data X-Ray Classification (Nightly) — the following workflow configuration variable(s) are not set:${bullets}\n\nOpen the workflow's settings page and provide a value for each; the next nightly run will pick them up automatically."
+    // Timer-triggered: end cleanly rather than throw. A WorkflowException here
+    // (before the first async task) would be retried 3× by Collibra and then
+    // permanently disable the schedule until redeployment.
     loggerApi.error(detailMsg)
-    def wf = new WorkflowException(detailMsg)
-    wf.setTitleMessage('Ohalo sync misconfigured')
-    wf.setUserMessage(detailMsg)
-    throw wf
+    recordRunSummary(0, 0, 0, 0, 0, "misconfigured: ${missing.size()} configuration variable(s) unset")
+    return
 }
 
 def ohaloUrl       = config.ohaloUrl
@@ -121,11 +127,11 @@ def classifications
 try {
     classifications = fetchClassifications(ohaloUrl, ohaloAuthToken, loggerApi)
 } catch (Exception fetchEx) {
+    // Timer-triggered: a transient Ohalo outage must not throw (see above) —
+    // log and end cleanly so the schedule survives and retries next night.
     loggerApi.error("Failed to fetch classifications from Ohalo: ${fetchEx.message}")
-    def wf = new WorkflowException("Ohalo classification fetch failed: ${fetchEx.message}", fetchEx)
-    wf.setTitleMessage('Ohalo sync failed')
-    wf.setUserMessage("Could not fetch classifications from Ohalo: ${fetchEx.message}")
-    throw wf
+    recordRunSummary(0, 0, 0, 0, 0, "fetch failed: ${fetchEx.message}")
+    return
 }
 
 loggerApi.info("Ohalo returned ${classifications.size()} classification(s); syncing into Collibra")
@@ -286,25 +292,28 @@ if (classifications.isEmpty()) {
 
 // --- Report -----------------------------------------------------------------
 
-execution.setVariable('syncCreatedCount', created)
-execution.setVariable('syncUpdatedCount', updated)
-execution.setVariable('syncDeletedCount', deleted)
-execution.setVariable('syncSkippedCount', skipped)
-execution.setVariable('syncFailedCount',  failed)
-execution.setVariable('syncFailures',     failures.join('; '))
+recordRunSummary(created, updated, deleted, skipped, failed, failures.join('; '))
 
 loggerApi.info("Ohalo sync complete: created=${created}, updated=${updated}, deleted=${deleted}, skipped=${skipped}, failed=${failed}")
 
-// If nothing was created or updated and at least one item failed, surface the
-// run as a failure in the Collibra UI.
+// If nothing was created or updated and at least one item failed, log it as an
+// error for dgc.log. Timer-triggered: don't throw — a thrown WorkflowException
+// before the first async task is retried 3× and then disables the schedule.
 if (created == 0 && updated == 0 && failed > 0) {
-    def wf = new WorkflowException("All ${failed} classification(s) failed to sync. First error: ${failures[0]}")
-    wf.setTitleMessage('Ohalo sync failed')
-    wf.setUserMessage("All ${failed} classification(s) failed to sync. First error: ${failures[0]}")
-    throw wf
+    loggerApi.error("Ohalo sync run failed: all ${failed} classification(s) failed to sync. First error: ${failures[0]}")
 }
 
 // --- Helpers ---------------------------------------------------------------
+
+// Persist the run outcome to process variables for audit / downstream tasks.
+def recordRunSummary(int created, int updated, int deleted, int skipped, int failed, String failuresJoined) {
+    execution.setVariable('syncCreatedCount', created)
+    execution.setVariable('syncUpdatedCount', updated)
+    execution.setVariable('syncDeletedCount', deleted)
+    execution.setVariable('syncSkippedCount', skipped)
+    execution.setVariable('syncFailedCount',  failed)
+    execution.setVariable('syncFailures',     failuresJoined)
+}
 
 def syncAttribute(List errors, UUID assetId, UUID typeId, value, String label) {
     def values = (value == null || (value instanceof String && value.trim().isEmpty())) ? [] : [value]

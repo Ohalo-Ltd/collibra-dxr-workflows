@@ -1,13 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  syncOhaloClassifications workflow
-  =================================
+  syncDataXrayClassificationsNightly workflow
+  ===========================================
   Pulls the classification catalog from the Ohalo Data X-Ray API and creates
   matching Collibra assets in the configured classifications domain.
 
+  Triggered automatically by a timer start event (cron "0 0 2 * * ?" — daily
+  at 02:00 in the Collibra server timezone). No user initiates it, so the
+  script must not depend on `users`/`item`/`initiator`, and ends cleanly on
+  misconfiguration or a transient Ohalo outage rather than throwing: a timer
+  workflow that fails before its first async task is retried 3× by Collibra
+  and then permanently disabled until redeployment.
+
   All configuration (Ohalo URL, auth token, asset/attribute type UUIDs) is
-  currently hardcoded inside scripts/sync_classifications.groovy. The next
-  iteration will move these to form properties / process variables.
+  read from the readable="false" form properties on the start event below;
+  admins set them on the workflow settings page in the Collibra UI.
 
   Script placeholders of the form {script:filename.groovy} are resolved by
   deploy.py before the BPMN is packaged.
@@ -27,15 +34,17 @@
              exporterVersion="2025.1.09"
              design:palette="flowable-core-process-palette">
 
-  <process id="syncOhaloClassifications"
-           name="Sync Ohalo Classifications"
-           isExecutable="true"
-           flowable:candidateStarterGroups="flowableUser">
+  <process id="syncDataXrayClassificationsNightly"
+           name="Sync Data X-Ray Classification (Nightly)"
+           isExecutable="true">
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
     </extensionElements>
 
     <!--
+      Timer start event: Collibra's scheduler fires this on the cron below
+      (seconds-first Quartz format) — "0 0 2 * * ?" = every day at 02:00.
+
       Configuration variables exposed on the workflow's settings page.
       readable="false" hides them from any start dialog (they're admin config,
       not user input). writable defaults to true so admins can edit on the
@@ -43,10 +52,10 @@
 
       Collibra rejects non-readable form properties that have no default,
       so ohaloAuthToken ships with a sentinel placeholder value. The Groovy
-      script detects that sentinel and refuses to run, with a clear error
-      pointing the admin at the workflow settings page.
+      script detects that sentinel and ends cleanly (logging the reason),
+      so a misconfigured token doesn't trip the timer's retry-then-disable.
     -->
-    <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
+    <startEvent id="startEvent" name="Start">
       <extensionElements>
         <flowable:formProperty id="ohaloUrl" name="Ohalo Base URL" type="string" variable="ohaloUrl" default="&lt;paste Ohalo base URL here&gt;" readable="false" required="true"/>
         <flowable:formProperty id="ohaloAuthToken" name="Ohalo Auth Token (Bearer)" type="string" variable="ohaloAuthToken" default="&lt;paste Ohalo Bearer token here&gt;" readable="false" required="true"/>
@@ -60,8 +69,11 @@
         <flowable:formProperty id="subtypeAttrTypeId" name="Attribute Type ID: Subtype" type="string" variable="subtypeAttrTypeId" default="019c9fc5-ecc8-759b-9c0b-78547fa315ad" readable="false" required="true"/>
         <flowable:formProperty id="ohaloIdAttrTypeId" name="Attribute Type ID: Ohalo ID" type="string" variable="ohaloIdAttrTypeId" default="&lt;paste Ohalo ID attribute type UUID here&gt;" readable="false" required="true"/>
 
-        <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
+        <design:stencilid><![CDATA[StartTimerEvent]]></design:stencilid>
       </extensionElements>
+      <timerEventDefinition>
+        <timeCycle flowable:type="cron">0 0 2 * * ?</timeCycle>
+      </timerEventDefinition>
     </startEvent>
 
     <scriptTask id="syncClassificationsTask"
@@ -93,8 +105,8 @@
 
   </process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_syncOhaloClassifications">
-    <bpmndi:BPMNPlane bpmnElement="syncOhaloClassifications" id="BPMNPlane_syncOhaloClassifications">
+  <bpmndi:BPMNDiagram id="BPMNDiagram_syncDataXrayClassificationsNightly">
+    <bpmndi:BPMNPlane bpmnElement="syncDataXrayClassificationsNightly" id="BPMNPlane_syncDataXrayClassificationsNightly">
 
       <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
         <omgdc:Bounds x="120" y="255" width="30" height="30"/>
