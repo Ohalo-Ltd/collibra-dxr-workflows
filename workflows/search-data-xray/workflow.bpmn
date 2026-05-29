@@ -51,12 +51,6 @@
       <extensionElements>
         <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
         <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="queryDomainId" name="Query Domain ID" type="string" variable="queryDomainId" default="019dcf96-233a-72e1-bf25-8398b8c9146e" readable="false" required="true"/>
-        <flowable:formProperty id="queryAssetTypeId" name="Asset Type ID: Search Query" type="string" variable="queryAssetTypeId" default="019dcf97-3bac-72c3-8b59-b6ddbe8a8396" readable="false" required="true"/>
-        <flowable:formProperty id="groupsRelationTypeId" name="Relation Type ID: Query → Classification" type="string" variable="groupsRelationTypeId" default="00000000-0000-0000-0000-000000007017" readable="false" required="true"/>
-        <flowable:formProperty id="descriptionAttrTypeId" name="Attribute Type ID: Description" type="string" variable="descriptionAttrTypeId" default="00000000-0000-0000-0000-000000003114" readable="false" required="true"/>
-        <flowable:formProperty id="filesAttrTypeId" name="Attribute Type ID: Files Table" type="string" variable="filesAttrTypeId" default="019e2736-8bd0-727a-b4ab-6899517a3e73" readable="false" required="true"/>
-        <flowable:formProperty id="maxResults" name="Max Files To Preview" type="string" variable="maxResults" default="20" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>

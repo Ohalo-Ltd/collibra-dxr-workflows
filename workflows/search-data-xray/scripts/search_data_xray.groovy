@@ -18,9 +18,11 @@
 //   7. Store a rich HTML results table on the asset, and publish process
 //      variables the results form renders.
 //
-// Configuration is read from form properties on the start event; an admin sets
-// them on the workflow settings page. Secrets (base URL, auth token) ship with
-// a "<paste … here>" sentinel default that this script treats as "unset".
+// The only configuration variables are the per-instance secrets (base URL and
+// auth token), set by an admin on the workflow settings page; they ship with a
+// "<paste … here>" sentinel default that this script treats as "unset". All
+// operating-model IDs are fixed constants (see below), created by the
+// configure-data-xray-workflows admin workflow.
 //
 // Process variables produced (for the results form / audit):
 //   conditionName  (String)  – the search name the user entered
@@ -46,16 +48,12 @@ import java.nio.charset.StandardCharsets
 
 // --- Read & validate workflow configuration variables -----------------------
 
-// Required configuration variables: variable name → human label shown in errors
+// Only the per-instance secrets are configuration variables. The operating-model
+// IDs are fixed across instances (see the constants block below), so they're not
+// configurable here.
 def requiredConfig = [
-    dataxrayUrl          : 'Data X-Ray Base URL',
-    dataxrayAuthToken    : 'Data X-Ray Auth Token (Bearer)',
-    queryDomainId        : 'Query Domain ID',
-    queryAssetTypeId     : 'Asset Type ID: Search Query',
-    groupsRelationTypeId : 'Relation Type ID: Query → Classification',
-    descriptionAttrTypeId: 'Attribute Type ID: Description',
-    filesAttrTypeId      : 'Attribute Type ID: Files Table',
-    maxResults           : 'Max Files To Preview',
+    dataxrayUrl      : 'Data X-Ray Base URL',
+    dataxrayAuthToken: 'Data X-Ray Auth Token (Bearer)',
 ]
 
 // Collibra requires a non-empty default for non-readable form properties, so
@@ -88,12 +86,20 @@ if (!missing.isEmpty()) {
 
 def dataxrayUrl           = config.dataxrayUrl.replaceAll('/+$', '')
 def dataxrayAuthToken     = config.dataxrayAuthToken
-def queryDomainId         = string2Uuid(config.queryDomainId)
-def queryAssetTypeId      = string2Uuid(config.queryAssetTypeId)
-def groupsRelationTypeId  = string2Uuid(config.groupsRelationTypeId)
-def descriptionAttrTypeId = string2Uuid(config.descriptionAttrTypeId)
-def filesAttrTypeId       = string2Uuid(config.filesAttrTypeId)
-def maxResults            = parseIntOrDefault(config.maxResults, 20)
+
+// Canonical operating-model IDs — fixed across all instances. The
+// configure-data-xray-workflows admin workflow creates the matching elements
+// with exactly these UUIDs, so they're constants here rather than configuration
+// variables (which would just be indirection wrapping a constant). The same
+// IDs are also baked into searchDataXrayForm.form's asset pickers.
+def queryDomainId         = string2Uuid('019dcf96-233a-72e1-bf25-8398b8c9146e')
+def queryAssetTypeId      = string2Uuid('019dcf97-3bac-72c3-8b59-b6ddbe8a8396')
+def groupsRelationTypeId  = string2Uuid('00000000-0000-0000-0000-000000007017')
+def descriptionAttrTypeId = string2Uuid('00000000-0000-0000-0000-000000003114')
+def filesAttrTypeId       = string2Uuid('019e2736-8bd0-727a-b4ab-6899517a3e73')
+
+// Max files to preview on the query asset (fixed; previously a config variable).
+def maxResults            = 50
 
 // --- Read user inputs from the start form -----------------------------------
 
@@ -281,15 +287,6 @@ def addAttribute(UUID assetId, UUID typeId, String value) {
 
 def dataSourceName(f) { (f?.datasource?.name ?: '').toString() }
 def filePath(f) { (f?.path ?: f?.filePath ?: '').toString() }
-
-def parseIntOrDefault(String s, int fallback) {
-    try {
-        def n = Integer.parseInt(s.trim())
-        return n > 0 ? n : fallback
-    } catch (Exception ignored) {
-        return fallback
-    }
-}
 
 // GET the Data X-Ray files endpoint and stream the response. The endpoint
 // returns newline-delimited JSON (one file object per line), which can be very
