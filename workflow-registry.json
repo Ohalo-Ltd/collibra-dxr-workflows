@@ -5,10 +5,10 @@
   "search-data-xray": {
     "default": "019e7318-6182-76d4-8cd6-6310ca74f66f"
   },
+  "sync-data-xray-classifications": {
+    "default": "019e73b9-cb0e-747f-b818-11e2bc2f019c"
+  },
   "sync-data-xray-classifications-nightly": {
     "default": "019e7398-1065-77cf-9018-20cd661f5518"
-  },
-  "sync-ohalo-classifications-interactive": {
-    "default": "019e2591-ced3-70f4-95e4-29c722db3ed7"
   }
 }

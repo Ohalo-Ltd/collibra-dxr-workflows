@@ -1,39 +1,34 @@
 // sync_classifications.groovy
 //
-// Pulls classifications/annotators/extractors/labels from the Ohalo Data X-Ray
-// API and mirrors them as Collibra assets in the configured classifications
+// Pulls classifications/annotators/extractors/labels from the Data X-Ray API
+// and mirrors them as Collibra assets in the configured classifications
 // domain. For each remote item we create one asset and attach description,
 // link, search-link and subtype attributes when present.
 //
 // All configuration is read from workflow configuration variables (form
 // properties on the start event). An admin sets/edits them on the workflow
 // settings page in Collibra; defaults shipped in the BPMN make this work
-// out-of-the-box for the demo instance, except for ohaloAuthToken which has
+// out-of-the-box for the demo instance, except for dataxrayAuthToken which has
 // no default and must be supplied before the workflow can run.
 //
 // Sync semantics:
-//   – Upsert by Ohalo ID. Each Collibra asset carries an "Ohalo ID" attribute
-//     (type UUID supplied via ohaloIdAttrTypeId) that stores the remote id; we
-//     match on that, so an Ohalo-side rename updates the existing asset rather
-//     than spawning a duplicate.
-//   – Legacy fallback: if no Ohalo-ID match is found, we look for an asset in
-//     the domain with the same name (assets created by the old name-based
-//     sync) and adopt it, stamping the Ohalo ID onto it. After one sync run,
-//     every managed asset is keyed by ID; the name fallback effectively
-//     migrates a legacy domain in place without losing history or relations.
-//   – When matched by ID, if the Ohalo name has diverged from the Collibra
+//   – Upsert by Data X-Ray ID. Each Collibra asset carries a "Data X-Ray ID"
+//     attribute (type UUID supplied via dataxrayIdAttrTypeId) that stores the
+//     remote id; we match on that, so a Data X-Ray-side rename updates the
+//     existing asset rather than spawning a duplicate.
+//   – When matched by ID, if the Data X-Ray name has diverged from the Collibra
 //     asset name we rename the Collibra asset to match.
-//   – Every synced asset is tagged with 'ohalo-classification-sync'. Assets in
-//     the domain that carry this tag but are no longer in the current Ohalo
-//     response are deleted. Untagged assets in the domain are never touched,
-//     so anything added by hand is safe.
-//   – If Ohalo returns zero classifications, the deletion step is skipped to
-//     avoid a transient/broken response wiping all assets.
+//   – Every synced asset is tagged with 'dataxray-classification-sync'. Assets
+//     in the domain that carry this tag but are no longer in the current Data
+//     X-Ray response are deleted. Untagged assets in the domain are never
+//     touched, so anything added by hand is safe.
+//   – If Data X-Ray returns zero classifications, the deletion step is skipped
+//     to avoid a transient/broken response wiping all assets.
 //
 // Process variables produced (for downstream tasks or audit):
 //   syncCreatedCount (Integer) – assets newly created
 //   syncUpdatedCount (Integer) – existing assets reused (attributes resynced)
-//   syncDeletedCount (Integer) – tagged assets removed because they were no longer in Ohalo
+//   syncDeletedCount (Integer) – tagged assets removed because they were no longer in Data X-Ray
 //   syncSkippedCount (Integer) – classifications skipped (missing name, unknown type, etc.)
 //   syncFailedCount  (Integer) – per-classification errors during upsert
 //   syncFailures     (String)  – semicolon-joined "<name>: <error>" list, may be empty
@@ -49,14 +44,14 @@ import com.collibra.dgc.core.api.dto.instance.attribute.FindAttributesRequest
 import com.collibra.dgc.workflow.api.exception.WorkflowException
 import groovy.json.JsonSlurper
 
-final String SYNC_TAG = 'ohalo-classification-sync'
+final String SYNC_TAG = 'dataxray-classification-sync'
 
 // --- Read & validate workflow configuration variables -----------------------
 
 // Required configuration variables: variable name → human label shown in errors
 def requiredConfig = [
-    ohaloUrl                 : 'Ohalo Base URL',
-    ohaloAuthToken           : 'Ohalo Auth Token (Bearer)',
+    dataxrayUrl              : 'Data X-Ray Base URL',
+    dataxrayAuthToken        : 'Data X-Ray Auth Token (Bearer)',
     classificationsDomainId  : 'Classifications Domain ID',
     classificationAssetTypeId: 'Asset Type ID: Classification',
     annotatorAssetTypeId     : 'Asset Type ID: Annotator',
@@ -65,7 +60,7 @@ def requiredConfig = [
     linkAttrTypeId           : 'Attribute Type ID: Link',
     searchLinkAttrTypeId     : 'Attribute Type ID: Search Link',
     subtypeAttrTypeId        : 'Attribute Type ID: Subtype',
-    ohaloIdAttrTypeId        : 'Attribute Type ID: Ohalo ID',
+    dataxrayIdAttrTypeId     : 'Attribute Type ID: Data X-Ray ID',
 ]
 
 // Collibra requires a non-empty default for non-readable form properties, so
@@ -88,16 +83,16 @@ requiredConfig.each { varName, label ->
 
 if (!missing.isEmpty()) {
     def bullets = '\n  • ' + missing.join('\n  • ')
-    def detailMsg = "Cannot run Sync Ohalo Classifications — the following workflow configuration variable(s) are not set:${bullets}\n\nOpen the workflow's settings page and provide a value for each, then start the workflow again."
+    def detailMsg = "Cannot run Sync Data X-Ray Classifications — the following workflow configuration variable(s) are not set:${bullets}\n\nOpen the workflow's settings page and provide a value for each, then start the workflow again."
     loggerApi.error(detailMsg)
     def wf = new WorkflowException(detailMsg)
-    wf.setTitleMessage('Ohalo sync misconfigured')
+    wf.setTitleMessage('Data X-Ray sync misconfigured')
     wf.setUserMessage(detailMsg)
     throw wf
 }
 
-def ohaloUrl       = config.ohaloUrl
-def ohaloAuthToken = config.ohaloAuthToken
+def dataxrayUrl       = config.dataxrayUrl
+def dataxrayAuthToken = config.dataxrayAuthToken
 
 def classificationsDomainId = string2Uuid(config.classificationsDomainId)
 
@@ -115,35 +110,33 @@ def descriptionAttrTypeId = string2Uuid('00000000-0000-0000-0000-000000003114')
 def linkAttrTypeId        = string2Uuid(config.linkAttrTypeId)
 def searchLinkAttrTypeId  = string2Uuid(config.searchLinkAttrTypeId)
 def subtypeAttrTypeId     = string2Uuid(config.subtypeAttrTypeId)
-def ohaloIdAttrTypeId     = string2Uuid(config.ohaloIdAttrTypeId)
+def dataxrayIdAttrTypeId  = string2Uuid(config.dataxrayIdAttrTypeId)
 
-// --- Fetch classifications from Ohalo ---------------------------------------
+// --- Fetch classifications from Data X-Ray ----------------------------------
 
 def classifications
 try {
-    classifications = fetchClassifications(ohaloUrl, ohaloAuthToken, loggerApi)
+    classifications = fetchClassifications(dataxrayUrl, dataxrayAuthToken, loggerApi)
 } catch (Exception fetchEx) {
-    loggerApi.error("Failed to fetch classifications from Ohalo: ${fetchEx.message}")
-    def wf = new WorkflowException("Ohalo classification fetch failed: ${fetchEx.message}", fetchEx)
-    wf.setTitleMessage('Ohalo sync failed')
-    wf.setUserMessage("Could not fetch classifications from Ohalo: ${fetchEx.message}")
+    loggerApi.error("Failed to fetch classifications from Data X-Ray: ${fetchEx.message}")
+    def wf = new WorkflowException("Data X-Ray classification fetch failed: ${fetchEx.message}", fetchEx)
+    wf.setTitleMessage('Data X-Ray sync failed')
+    wf.setUserMessage("Could not fetch classifications from Data X-Ray: ${fetchEx.message}")
     throw wf
 }
 
-loggerApi.info("Ohalo returned ${classifications.size()} classification(s); syncing into Collibra")
+loggerApi.info("Data X-Ray returned ${classifications.size()} classification(s); syncing into Collibra")
 
 // --- Index existing assets in the target domain ----------------------------
 
-def existing = fetchAllAssetsInDomain(classificationsDomainId)
-def existingByName = existing.byName
-def existingById   = existing.byId
-loggerApi.info("Found ${existingByName.size()} existing asset(s) in classifications domain")
+def existingById = fetchAllAssetsInDomain(classificationsDomainId)
+loggerApi.info("Found ${existingById.size()} existing asset(s) in classifications domain")
 
-// Map Ohalo ID → Collibra asset UUID, restricted to assets in this domain.
+// Map Data X-Ray ID → Collibra asset UUID, restricted to assets in this domain.
 // findAttributes has no domain filter, so we query globally by type and then
 // drop any hits that belong to assets outside the classifications domain.
-def assetIdByOhaloId = fetchAssetIdsByOhaloId(ohaloIdAttrTypeId, existingById.keySet())
-loggerApi.info("Indexed ${assetIdByOhaloId.size()} asset(s) with an Ohalo ID attribute")
+def assetIdByDataxrayId = fetchAssetIdsByDataxrayId(dataxrayIdAttrTypeId, existingById.keySet())
+loggerApi.info("Indexed ${assetIdByDataxrayId.size()} asset(s) with a Data X-Ray ID attribute")
 
 // --- Upsert each classification --------------------------------------------
 
@@ -156,16 +149,16 @@ def touchedAssetIds = [] as Set
 
 classifications.eachWithIndex { classification, idx ->
     def name = classification?.name
-    def ohaloId = classification?.id == null ? null : classification.id.toString().trim()
+    def dataxrayId = classification?.id == null ? null : classification.id.toString().trim()
     try {
         if (!name) {
             skipped++
             loggerApi.warn("Skipping classification at index ${idx}: missing 'name'")
             return
         }
-        if (!ohaloId) {
+        if (!dataxrayId) {
             skipped++
-            loggerApi.warn("Skipping '${name}': missing Ohalo 'id'")
+            loggerApi.warn("Skipping '${name}': missing Data X-Ray 'id'")
             return
         }
 
@@ -177,26 +170,16 @@ classifications.eachWithIndex { classification, idx ->
             return
         }
 
-        // Resolution order: Ohalo ID → legacy name match → create new.
+        // Resolution: match by Data X-Ray ID, else create a new asset.
         UUID assetId = null
         boolean isUpdate = false
         String previousName = null
 
-        def idMatch = assetIdByOhaloId[ohaloId]
+        def idMatch = assetIdByDataxrayId[dataxrayId]
         if (idMatch) {
             assetId = idMatch
             isUpdate = true
             previousName = existingById[idMatch]?.getName()
-        }
-
-        if (assetId == null) {
-            def nameMatch = existingByName[name]
-            if (nameMatch) {
-                assetId = nameMatch.getId()
-                isUpdate = true
-                previousName = nameMatch.getName()
-                loggerApi.info("Adopting legacy asset '${name}' [${assetId}] by name; stamping Ohalo ID ${ohaloId}")
-            }
         }
 
         if (assetId == null) {
@@ -210,7 +193,7 @@ classifications.eachWithIndex { classification, idx ->
             assetId = asset.getId()
         }
 
-        // Rename if the Ohalo name has diverged from what's in Collibra.
+        // Rename if the Data X-Ray name has diverged from what's in Collibra.
         if (isUpdate && previousName != null && previousName != name) {
             try {
                 assetApi.changeAsset(ChangeAssetRequest.builder()
@@ -235,13 +218,13 @@ classifications.eachWithIndex { classification, idx ->
         }
 
         // setAssetAttributes replaces all values of the given type — works for
-        // both fresh creates and updates. Stamping the Ohalo ID here covers
-        // first-time-created assets and the legacy name-fallback path.
+        // both fresh creates and updates. Stamping the Data X-Ray ID here keys
+        // first-time-created assets for future runs.
         def attrErrors = []
-        syncAttribute(attrErrors, assetId, ohaloIdAttrTypeId,     ohaloId, 'ohaloId')
+        syncAttribute(attrErrors, assetId, dataxrayIdAttrTypeId,  dataxrayId, 'dataxrayId')
         syncAttribute(attrErrors, assetId, descriptionAttrTypeId, classification.description, 'description')
-        syncAttribute(attrErrors, assetId, linkAttrTypeId,        classification.link       ? ohaloUrl + classification.link       : null, 'link')
-        syncAttribute(attrErrors, assetId, searchLinkAttrTypeId,  classification.searchLink ? ohaloUrl + classification.searchLink : null, 'searchLink')
+        syncAttribute(attrErrors, assetId, linkAttrTypeId,        classification.link       ? dataxrayUrl + classification.link       : null, 'link')
+        syncAttribute(attrErrors, assetId, searchLinkAttrTypeId,  classification.searchLink ? dataxrayUrl + classification.searchLink : null, 'searchLink')
         syncAttribute(attrErrors, assetId, subtypeAttrTypeId,     classification.subtype, 'subtype')
 
         if (!attrErrors.isEmpty()) {
@@ -264,16 +247,16 @@ classifications.eachWithIndex { classification, idx ->
     }
 }
 
-// --- Delete tagged assets no longer in Ohalo --------------------------------
+// --- Delete tagged assets no longer in Data X-Ray ---------------------------
 
 int deleted = 0
 if (classifications.isEmpty()) {
-    loggerApi.warn("Ohalo returned 0 classifications — skipping deletion step to avoid wiping the domain")
+    loggerApi.warn("Data X-Ray returned 0 classifications — skipping deletion step to avoid wiping the domain")
 } else {
     def taggedInDomain = fetchTaggedAssetsInDomain(classificationsDomainId, SYNC_TAG)
     def toDelete = taggedInDomain.findAll { !touchedAssetIds.contains(it.getId()) }
     if (!toDelete.isEmpty()) {
-        loggerApi.info("Removing ${toDelete.size()} asset(s) no longer present in Ohalo")
+        loggerApi.info("Removing ${toDelete.size()} asset(s) no longer present in Data X-Ray")
         toDelete.each { asset ->
             try {
                 assetApi.removeAsset(asset.getId())
@@ -296,13 +279,13 @@ execution.setVariable('syncFailedCount',  failed)
 execution.setVariable('syncFailures',     failures.join('; '))
 execution.setVariable('syncFailuresDisplay', failures.isEmpty() ? 'None' : failures.join('; '))
 
-loggerApi.info("Ohalo sync complete: created=${created}, updated=${updated}, deleted=${deleted}, skipped=${skipped}, failed=${failed}")
+loggerApi.info("Data X-Ray sync complete: created=${created}, updated=${updated}, deleted=${deleted}, skipped=${skipped}, failed=${failed}")
 
 // If nothing was created or updated and at least one item failed, surface the
 // run as a failure in the Collibra UI.
 if (created == 0 && updated == 0 && failed > 0) {
     def wf = new WorkflowException("All ${failed} classification(s) failed to sync. First error: ${failures[0]}")
-    wf.setTitleMessage('Ohalo sync failed')
+    wf.setTitleMessage('Data X-Ray sync failed')
     wf.setUserMessage("All ${failed} classification(s) failed to sync. First error: ${failures[0]}")
     throw wf
 }
@@ -325,8 +308,7 @@ def syncAttribute(List errors, UUID assetId, UUID typeId, value, String label) {
 }
 
 def fetchAllAssetsInDomain(UUID domainId) {
-    def byName = [:]
-    def byId   = [:]
+    def byId = [:]
     def cursor = ''
     while (true) {
         def req = FindAssetsRequest.builder()
@@ -336,21 +318,20 @@ def fetchAllAssetsInDomain(UUID domainId) {
             .build()
         def page = assetApi.findAssets(req)
         page.getResults().each { asset ->
-            byName[asset.getName()] = asset
-            byId[asset.getId()]     = asset
+            byId[asset.getId()] = asset
         }
         cursor = page.getNextCursor()
         if (!cursor) break
     }
-    return [byName: byName, byId: byId]
+    return byId
 }
 
-def fetchAssetIdsByOhaloId(UUID ohaloIdAttrTypeId, Set<UUID> assetsInDomain) {
-    def assetIdByOhaloId = [:]
+def fetchAssetIdsByDataxrayId(UUID dataxrayIdAttrTypeId, Set<UUID> assetsInDomain) {
+    def assetIdByDataxrayId = [:]
     def cursor = ''
     while (true) {
         def req = FindAttributesRequest.builder()
-            .typeIds([ohaloIdAttrTypeId])
+            .typeIds([dataxrayIdAttrTypeId])
             .limit(1000)
             .cursor(cursor)
             .build()
@@ -359,13 +340,13 @@ def fetchAssetIdsByOhaloId(UUID ohaloIdAttrTypeId, Set<UUID> assetsInDomain) {
             def aid = attr.getAsset()?.getId()
             def val = attr.getValue()
             if (aid && val && assetsInDomain.contains(aid)) {
-                assetIdByOhaloId[val.toString()] = aid
+                assetIdByDataxrayId[val.toString()] = aid
             }
         }
         cursor = page.getNextCursor()
         if (!cursor) break
     }
-    return assetIdByOhaloId
+    return assetIdByDataxrayId
 }
 
 def fetchTaggedAssetsInDomain(UUID domainId, String tagName) {
@@ -403,7 +384,7 @@ def fetchClassifications(String baseUrl, String authToken, loggerApi) {
         } catch (Exception ignored) {
             // best-effort
         }
-        throw new RuntimeException("Ohalo API returned HTTP ${code}: ${truncate(errBody, 500)}")
+        throw new RuntimeException("Data X-Ray API returned HTTP ${code}: ${truncate(errBody, 500)}")
     }
 
     def body = conn.getInputStream().getText('UTF-8')
@@ -411,12 +392,12 @@ def fetchClassifications(String baseUrl, String authToken, loggerApi) {
     try {
         parsed = new JsonSlurper().parseText(body)
     } catch (Exception parseEx) {
-        throw new RuntimeException("Ohalo API returned non-JSON body: ${parseEx.message}")
+        throw new RuntimeException("Data X-Ray API returned non-JSON body: ${parseEx.message}")
     }
 
     def data = parsed?.data
     if (!(data instanceof List)) {
-        throw new RuntimeException("Ohalo API response missing 'data' array; got keys: ${parsed?.keySet()}")
+        throw new RuntimeException("Data X-Ray API response missing 'data' array; got keys: ${parsed?.keySet()}")
     }
     return data
 }
