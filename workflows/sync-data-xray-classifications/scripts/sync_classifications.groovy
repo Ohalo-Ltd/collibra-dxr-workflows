@@ -15,6 +15,21 @@
 //     attribute (type UUID supplied via dataxrayIdAttrTypeId) that stores the
 //     remote id; we match on that, so a Data X-Ray-side rename updates the
 //     existing asset rather than spawning a duplicate.
+//   – Name fallback: if no ID match is found but an asset with the same name
+//     already exists in the domain (e.g. created by an older name-based sync,
+//     so it has no Data X-Ray ID attribute), we adopt that asset and stamp the
+//     ID onto it instead of attempting a create Collibra rejects with
+//     termAlreadyExists. The next run then matches it by ID. Each existing
+//     asset is adopted at most once, so two remote items sharing a name surface
+//     the second as a normal per-item failure rather than colliding silently.
+//   – Name disambiguation: Collibra enforces full-name uniqueness per domain.
+//     When one name is used by more than one Data X-Ray resource (e.g. two
+//     annotators both named "VAT Number", one Named Entity and one Regular
+//     Expression), each such asset's Collibra name is suffixed to keep them
+//     distinct — "VAT Number (Named Entity)", "VAT Number (Regular Expression)".
+//     The suffix is the subtype (the discriminator shown in the Data X-Ray UI),
+//     falling back to type, then to a short id fragment if those still tie.
+//     Names used by a single resource are left untouched.
 //   – When matched by ID, if the Data X-Ray name has diverged from the Collibra
 //     asset name we rename the Collibra asset to match.
 //   – Every synced asset is tagged with 'dataxray-classification-sync'. Assets
@@ -127,11 +142,61 @@ loggerApi.info("Data X-Ray returned ${classifications.size()} classification(s);
 def existingById = fetchAllAssetsInDomain(classificationsDomainId)
 loggerApi.info("Found ${existingById.size()} existing asset(s) in classifications domain")
 
+// Name → asset index for the name-based adoption fallback below. Collibra
+// enforces full-name uniqueness per domain (the source of termAlreadyExists),
+// so within this domain getName() is effectively a unique key.
+def existingByName = [:]
+existingById.values().each { a -> existingByName[a.getName()] = a }
+
 // Map Data X-Ray ID → Collibra asset UUID, restricted to assets in this domain.
 // findAttributes has no domain filter, so we query globally by type and then
 // drop any hits that belong to assets outside the classifications domain.
 def assetIdByDataxrayId = fetchAssetIdsByDataxrayId(dataxrayIdAttrTypeId, existingById.keySet())
 loggerApi.info("Indexed ${assetIdByDataxrayId.size()} asset(s) with a Data X-Ray ID attribute")
+
+// --- Disambiguate colliding asset names --------------------------------------
+
+// Collibra enforces full-name uniqueness per domain, so two Data X-Ray
+// resources sharing a name can't both land here under that bare name — e.g.
+// "VAT Number" exists twice: a Named Entity annotator and a Regular Expression
+// one. For any name used by more than one resource, derive a distinct Collibra
+// name by suffixing each with its subtype (the discriminator shown in the Data
+// X-Ray UI), falling back to its type, and finally to a short id fragment if
+// those still tie. Names used by a single resource are left untouched.
+//
+// Keyed by Data X-Ray id so the loop can look up each item's resolved name.
+def itemsByName = [:]
+classifications.each { c ->
+    def nm = c?.name
+    def ty = c?.type as String
+    if (nm && assetTypeIdByType[ty]) {
+        def key = nm.toString()
+        def list = itemsByName[key]
+        if (list == null) { list = []; itemsByName[key] = list }
+        list << c
+    }
+}
+
+def disambiguatedName = [:]
+itemsByName.each { baseName, items ->
+    if (items.size() <= 1) return
+    def labels = items.collect { humanize(it.subtype as String) ?: typeLabel(it.type as String) }
+    def labelCounts = labels.countBy { it }
+    items.eachWithIndex { item, i ->
+        def label = labels[i]
+        if ((labelCounts[label] ?: 0) > 1) {
+            // subtype/type still ties (e.g. two same-subtype resources) — append
+            // a short, stable id fragment so the names can never collide.
+            def idFrag = (item?.id == null ? '' : item.id.toString()).replaceAll('-', '').take(8)
+            label = label ? "${label} ${idFrag}" : idFrag
+        }
+        def did = item?.id == null ? null : item.id.toString().trim()
+        if (did) disambiguatedName[did] = "${baseName} (${label})".toString()
+    }
+}
+if (!disambiguatedName.isEmpty()) {
+    loggerApi.info("Disambiguated ${disambiguatedName.size()} colliding asset name(s): ${disambiguatedName.values().join(', ')}")
+}
 
 // --- Upsert each classification --------------------------------------------
 
@@ -165,7 +230,14 @@ classifications.eachWithIndex { classification, idx ->
             return
         }
 
-        // Resolution: match by Data X-Ray ID, else create a new asset.
+        // The Collibra asset name. Disambiguated (see disambiguatedName) only
+        // when this name is shared by more than one Data X-Ray resource, so
+        // collisions get distinct names rather than failing a create with
+        // termAlreadyExists; otherwise the bare Data X-Ray name is used.
+        def assetName = (dataxrayId && disambiguatedName.containsKey(dataxrayId)) ? disambiguatedName[dataxrayId] : name.toString()
+
+        // Resolution: match by Data X-Ray ID, else adopt a same-named asset
+        // already in the domain, else create a new asset.
         UUID assetId = null
         boolean isUpdate = false
         String previousName = null
@@ -177,10 +249,28 @@ classifications.eachWithIndex { classification, idx ->
             previousName = existingById[idMatch]?.getName()
         }
 
+        // Fallback: a same-named asset already exists in the domain but has no
+        // Data X-Ray ID attribute (e.g. created by an older name-based sync).
+        // Adopt it rather than attempting a create Collibra would reject with
+        // termAlreadyExists; the ID attribute is stamped below, so the next run
+        // matches it by ID directly. Guard on touchedAssetIds so each existing
+        // asset is adopted at most once — if Data X-Ray returns two items with
+        // the same name (different ids/types), the second falls through to a
+        // visible termAlreadyExists failure instead of silently overwriting the
+        // first's stamped ID.
+        if (assetId == null) {
+            def nameMatch = existingByName[assetName]
+            if (nameMatch && !touchedAssetIds.contains(nameMatch.getId())) {
+                assetId = nameMatch.getId()
+                isUpdate = true
+                previousName = nameMatch.getName()
+            }
+        }
+
         if (assetId == null) {
             def assetReq = AddAssetRequest.builder()
-                .name(name)
-                .displayName(name)
+                .name(assetName)
+                .displayName(assetName)
                 .domainId(classificationsDomainId)
                 .typeId(assetTypeId)
                 .build()
@@ -188,17 +278,19 @@ classifications.eachWithIndex { classification, idx ->
             assetId = asset.getId()
         }
 
-        // Rename if the Data X-Ray name has diverged from what's in Collibra.
-        if (isUpdate && previousName != null && previousName != name) {
+        // Rename if the desired (possibly type-suffixed) name has diverged from
+        // what's in Collibra — covers both Data X-Ray-side renames and an asset
+        // newly becoming/ceasing to be a cross-type collision.
+        if (isUpdate && previousName != null && previousName != assetName) {
             try {
                 assetApi.changeAsset(ChangeAssetRequest.builder()
                     .id(assetId)
-                    .name(name)
-                    .displayName(name)
+                    .name(assetName)
+                    .displayName(assetName)
                     .build())
-                loggerApi.info("Renamed asset [${assetId}]: '${previousName}' → '${name}'")
+                loggerApi.info("Renamed asset [${assetId}]: '${previousName}' → '${assetName}'")
             } catch (Exception renameEx) {
-                loggerApi.warn("Failed to rename '${previousName}' → '${name}' on ${assetId}: ${renameEx.message}")
+                loggerApi.warn("Failed to rename '${previousName}' → '${assetName}' on ${assetId}: ${renameEx.message}")
             }
         }
 
@@ -229,10 +321,10 @@ classifications.eachWithIndex { classification, idx ->
         touchedAssetIds << assetId
         if (isUpdate) {
             updated++
-            loggerApi.info("Updated ${type} asset '${name}' [${assetId}]")
+            loggerApi.info("Updated ${type} asset '${assetName}' [${assetId}]")
         } else {
             created++
-            loggerApi.info("Created ${type} asset '${name}' [${assetId}]")
+            loggerApi.info("Created ${type} asset '${assetName}' [${assetId}]")
         }
     } catch (Exception e) {
         failed++
@@ -400,4 +492,20 @@ def fetchClassifications(String baseUrl, String authToken, loggerApi) {
 def truncate(String s, int max) {
     if (s == null) return ''
     return s.length() <= max ? s : s.substring(0, max) + '…'
+}
+
+// Title-case a Data X-Ray resource type (e.g. CLASSIFICATION → "Classification")
+// for use as a disambiguating name suffix when no subtype is available.
+def typeLabel(String t) {
+    if (!t) return ''
+    return t.substring(0, 1).toUpperCase() + t.substring(1).toLowerCase()
+}
+
+// Humanise a Data X-Ray enum-style value (e.g. NAMED_ENTITY → "Named Entity")
+// for use as a disambiguating name suffix; returns '' for null/blank input.
+def humanize(String s) {
+    if (!s?.trim()) return ''
+    return s.trim().split('[_\\s]+').collect { w ->
+        w.isEmpty() ? w : w.substring(0, 1).toUpperCase() + w.substring(1).toLowerCase()
+    }.join(' ')
 }
