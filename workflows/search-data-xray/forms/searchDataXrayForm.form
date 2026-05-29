@@ -3,26 +3,10 @@
     {
       "cols": [
         {
-          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
-          "label": "Search Data X-Ray",
-          "value": "<p>Build a Data X-Ray search query from your Collibra classifications. Pick any combination of <b>annotators</b>, <b>extractors</b> and <b>labels</b>, optionally add a phrase to match, and give the search a name.</p><p>When you click <b>Send</b>, a search-query asset is created and linked to the classifications you chose, the matching files are fetched from Data X-Ray, and a <b>Search Results</b> task appears in your task inbox with the results.</p>",
-          "defaultValue": false,
-          "size": 12,
-          "ignore": false,
-          "visible": true,
-          "enabled": true,
-          "isRequired": false,
-          "id": "searchDataXrayInfo",
-          "type": "htmlComponent"
-        }
-      ]
-    },
-    {
-      "cols": [
-        {
           "designInfo": { "stencilSuperIds": ["cloud-text"], "stencilId": "cloud-text" },
-          "label": "Search Query Name",
+          "label": "Name",
           "value": "{{conditionName}}",
+          "placeholder": "Enter search query name",
           "size": 12,
           "ignore": false,
           "visible": true,
@@ -38,11 +22,44 @@
     {
       "cols": [
         {
+          "designInfo": { "stencilSuperIds": ["cloud-text-area"], "stencilId": "cloud-text-area" },
+          "label": "Description",
+          "value": "{{description}}",
+          "placeholder": "Describe the purpose of this search query",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "description",
+          "type": "textarea"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Search query",
+          "value": "<p>Create a query that satisfies all selected criteria (AND query).</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "searchQueryHeading",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
           "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
-          "label": "Annotators",
-          "value": "{{annotator}}",
-          "description": "Choose the data classifications (annotators) for this search.",
-          "size": 6,
+          "label": "Label",
+          "value": "{{label}}",
+          "size": 12,
           "ignore": false,
           "visible": true,
           "enabled": true,
@@ -50,21 +67,24 @@
           "extraSettings": {
             "storage": "Id",
             "multiValue": true,
-            "assetTypeIds": ["01922a69-e7a0-7ac7-a581-c9ba9286ccf1"],
+            "assetTypeIds": ["019c9fbe-25c3-71b7-90ac-057dd582fa1e"],
             "assetTypeInheritance": true,
             "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
             "excludeMeta": true,
             "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
           },
-          "id": "annotator",
+          "id": "label",
           "type": "asset"
-        },
+        }
+      ]
+    },
+    {
+      "cols": [
         {
           "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
-          "label": "Extractors",
+          "label": "Extractor",
           "value": "{{extractor}}",
-          "description": "Choose the data categorization (extractors) for this search.",
-          "size": 6,
+          "size": 12,
           "ignore": false,
           "visible": true,
           "enabled": true,
@@ -87,10 +107,9 @@
       "cols": [
         {
           "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
-          "label": "Labels",
-          "value": "{{label}}",
-          "description": "Choose the smart labels for this search.",
-          "size": 6,
+          "label": "Annotators",
+          "value": "{{annotator}}",
+          "size": 12,
           "ignore": false,
           "visible": true,
           "enabled": true,
@@ -98,22 +117,25 @@
           "extraSettings": {
             "storage": "Id",
             "multiValue": true,
-            "assetTypeIds": ["019c9fbe-25c3-71b7-90ac-057dd582fa1e"],
+            "assetTypeIds": ["01922a69-e7a0-7ac7-a581-c9ba9286ccf1"],
             "assetTypeInheritance": true,
             "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
             "excludeMeta": true,
             "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
           },
-          "id": "label",
+          "id": "annotator",
           "type": "asset"
-        },
+        }
+      ]
+    },
+    {
+      "cols": [
         {
           "designInfo": { "stencilSuperIds": ["cloud-text"], "stencilId": "cloud-text" },
-          "label": "Filter",
+          "label": "Annotated text",
           "value": "{{filter}}",
-          "description": "Optional phrase to match within documents (e.g. a client name).",
-          "tooltip": "Type a phrase to filter results by, for example the name of the client whose data you are searching for.",
-          "size": 6,
+          "placeholder": "Enter text to search",
+          "size": 12,
           "ignore": false,
           "visible": true,
           "enabled": true,
@@ -124,29 +146,12 @@
           "type": "text"
         }
       ]
-    },
-    {
-      "cols": [
-        {
-          "designInfo": { "stencilSuperIds": ["cloud-text-area"], "stencilId": "cloud-text-area" },
-          "label": "Description",
-          "value": "{{description}}",
-          "description": "Optionally describe this search query.",
-          "size": 12,
-          "ignore": false,
-          "visible": true,
-          "enabled": true,
-          "isRequired": false,
-          "id": "description",
-          "type": "textarea"
-        }
-      ]
     }
   ],
   "metadata": {
     "key": "searchDataXrayForm",
     "name": "Search Data X-Ray",
-    "description": "Pick the annotators, extractors and labels (plus an optional phrase) to build a Data X-Ray search query.",
+    "description": "Pick the labels, extractors and annotators (plus optional annotated text) to build a Data X-Ray search query.",
     "version": "1",
     "modelType": "form",
     "flowableDesignVersion": 3110,
