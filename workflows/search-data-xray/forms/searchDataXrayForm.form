@@ -133,6 +133,7 @@
         {
           "designInfo": { "stencilSuperIds": ["cloud-text"], "stencilId": "cloud-text" },
           "label": "Annotated text",
+          "description": "Contains search: your text is matched anywhere inside an annotation (case-insensitive). Scoped to the Annotators selected above — a file matches when one of those annotators has an annotation containing this text. If no annotators are selected, all annotators are searched.",
           "value": "{{filter}}",
           "placeholder": "Enter text to search",
           "size": 12,
