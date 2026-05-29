@@ -12,7 +12,8 @@
 //   4. Link that asset to each chosen classification via the configured
 //      relation type, resolving each classification's name along the way.
 //   5. Compose the equivalent Data X-Ray query string from those names plus the
-//      phrase filter, and store it on the asset as its Description.
+//      phrase filter (a "contains" match scoped to the picked annotators), and
+//      store it on the asset as its Description.
 //   6. Call the Data X-Ray files API with that query and collect up to
 //      `maxResults` matches.
 //   7. Store a rich HTML results table on the asset, and publish process
@@ -149,16 +150,26 @@ def extractorNames = resolveAndRelate(extractorIds, queryId, groupsRelationTypeI
 // --- Compose the Data X-Ray query string ------------------------------------
 
 // Each category becomes one clause; multiple selections within a category are
-// OR-ed together, and the categories are AND-ed. The phrase filter, if given,
-// is AND-ed on as an annotations match. Mirrors the field names the Data X-Ray
-// files API expects: labels.name, annotators.name, extractors.name,
-// annotators.annotations.phrase.
+// OR-ed together, and the categories are AND-ed. Mirrors the field names the
+// Data X-Ray files API expects: labels.name, annotators.name, extractors.name.
+//
+// The phrase filter, if given, is a "contains" match scoped to the picked
+// annotators via the nested object syntax — annotators: { name:… AND
+// annotations.phrase:"*text*" } — so the phrase and the annotator identity must
+// belong to the same annotator (see buildAnnotatorPhraseClause).
 def clauses = []
 appendNameClause(clauses, 'labels.name', labelNames)
-appendNameClause(clauses, 'annotators.name', annotatorNames)
 appendNameClause(clauses, 'extractors.name', extractorNames)
-if (!filter.isEmpty()) {
-    clauses << "annotators.annotations.phrase:\"${filter}\"".toString()
+
+if (filter.isEmpty()) {
+    // No phrase: annotator selection is an independent name filter, as before.
+    appendNameClause(clauses, 'annotators.name', annotatorNames)
+} else {
+    // Phrase present: scope it to the picked annotators using the nested object
+    // syntax so the phrase and annotator identity belong to the SAME annotator.
+    // Wildcards make it a "contains" match (anchored, case-insensitive in the API).
+    // No annotators picked => search the phrase across all annotators.
+    clauses << buildAnnotatorPhraseClause(annotatorNames, filter)
 }
 def queryString = clauses.join(' AND ')
 if (queryString.isEmpty()) {
@@ -270,6 +281,23 @@ def appendNameClause(List clauses, String field, List names) {
     if (present.isEmpty()) return
     def terms = present.collect { "${field}:\"${it}\"".toString() }
     clauses << (terms.size() == 1 ? terms[0] : "(${terms.join(' OR ')})".toString())
+}
+
+// Build a nested annotator clause that ties a "contains" phrase match to the
+// picked annotators:  annotators: { (name:"A" OR name:"B") AND annotations.phrase:"*text*" }
+// With no names, scopes to all annotators: annotators: { annotations.phrase:"*text*" }
+def buildAnnotatorPhraseClause(List names, String phrase) {
+    def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
+    def phraseTerm = "annotations.phrase:\"*${phrase}*\""
+    def inner
+    if (present.isEmpty()) {
+        inner = phraseTerm
+    } else {
+        def nameTerms = present.collect { "name:\"${it}\"".toString() }
+        def nameClause = nameTerms.size() == 1 ? nameTerms[0] : "(${nameTerms.join(' OR ')})"
+        inner = "${nameClause} AND ${phraseTerm}"
+    }
+    return "annotators: { ${inner} }".toString()
 }
 
 def addAttribute(UUID assetId, UUID typeId, String value) {
