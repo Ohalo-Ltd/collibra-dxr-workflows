@@ -189,7 +189,7 @@ int count = shown.size()
 // The matching files are stored as an HTML table on the search-query asset
 // only; the results task just reports the count and query.
 if (count == 0) {
-    addAttribute(queryId, filesAttrTypeId, 'No files match these criteria.')
+    addAttribute(queryId, filesAttrTypeId, 'Query returned 0 results')
 } else {
     def writer = new StringWriter()
     def html = new MarkupBuilder(writer)
