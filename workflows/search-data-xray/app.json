@@ -1,0 +1,9 @@
+{
+  "key": "searchDataXray",
+  "name": "Search Data X-Ray",
+  "description": "Started from Collibra's global Create menu. The user picks any combination of annotators, extractors and labels (Collibra classification assets) plus an optional free-text phrase, names the search, and submits. The workflow creates a search-query asset in Collibra, links it to the chosen classifications, builds the equivalent Data X-Ray query, calls the Data X-Ray files API, and shows the matching files on a results task. All connection settings (Data X-Ray URL, auth token, domain and asset/attribute/relation type IDs) are hidden admin configuration on the workflow settings page.",
+  "theme": "theme-3",
+  "icon": "glyphicon-inbox",
+  "businessItemResourceType": "GLOBAL",
+  "globalCreate": true
+}

@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  searchDataXray workflow
+  =======================
+  Create a Data X-Ray search query from Collibra classifications:
+    startEvent (form: searchDataXrayForm — rendered as the + Create dialog)
+      → searchDataXrayTask (script)
+      → resultsTask (user form: searchResultsForm — appears as an inbox task)
+      → endEvent
+
+  The input form is attached to the start event so Collibra renders it as the
+  modal dialog when the workflow is launched from the global + Create button.
+  The results form is a userTask because Flowable has no native post-completion
+  modal — the inbox task is the standard way to surface per-run results.
+
+  All connection/UUID configuration lives on the start event as non-readable
+  formProperty entries (hidden admin settings edited on the workflow settings
+  page). They do not appear on the start dialog. Each carries a non-empty
+  default because Collibra rejects empty defaults on non-readable properties;
+  secrets that have no sensible default ship a "<paste … here>" sentinel that
+  the script detects as "unset".
+
+  Script placeholders of the form {script:filename.groovy} are resolved by
+  deploy.py before the BPMN is packaged.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+
+  <process id="searchDataXray"
+           name="Search Data X-Ray"
+           isExecutable="true"
+           flowable:candidateStarterGroups="flowableUser">
+    <documentation>Create a Data X-Ray search query from Collibra classifications and preview the matching files.</documentation>
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="searchDataXrayForm">
+      <extensionElements>
+        <flowable:formProperty id="ohaloUrl" name="Data X-Ray Base URL" type="string" variable="ohaloUrl" default="&lt;paste Ohalo base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="ohaloAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="ohaloAuthToken" default="&lt;paste Ohalo Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="queryDomainId" name="Query Domain ID" type="string" variable="queryDomainId" default="019dcf96-233a-72e1-bf25-8398b8c9146e" readable="false" required="true"/>
+        <flowable:formProperty id="queryAssetTypeId" name="Asset Type ID: Search Query" type="string" variable="queryAssetTypeId" default="019dcf97-3bac-72c3-8b59-b6ddbe8a8396" readable="false" required="true"/>
+        <flowable:formProperty id="groupsRelationTypeId" name="Relation Type ID: Query → Classification" type="string" variable="groupsRelationTypeId" default="00000000-0000-0000-0000-000000007017" readable="false" required="true"/>
+        <flowable:formProperty id="descriptionAttrTypeId" name="Attribute Type ID: Description" type="string" variable="descriptionAttrTypeId" default="00000000-0000-0000-0000-000000003114" readable="false" required="true"/>
+        <flowable:formProperty id="filesAttrTypeId" name="Attribute Type ID: Files Table" type="string" variable="filesAttrTypeId" default="019e2736-8bd0-727a-b4ab-6899517a3e73" readable="false" required="true"/>
+        <flowable:formProperty id="maxResults" name="Max Files To Preview" type="string" variable="maxResults" default="20" readable="false" required="true"/>
+
+        <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </startEvent>
+
+    <scriptTask id="searchDataXrayTask"
+                name="Search Data X-Ray"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:search_data_xray.groovy}}</script>
+    </scriptTask>
+
+    <userTask id="resultsTask"
+              name="Search Results"
+              flowable:candidateUsers="user(${initiator})"
+              flowable:formKey="searchResultsForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="searchDataXrayTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow2" sourceRef="searchDataXrayTask" targetRef="resultsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow3" sourceRef="resultsTask" targetRef="endEvent">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_searchDataXray">
+    <bpmndi:BPMNPlane bpmnElement="searchDataXray" id="BPMNPlane_searchDataXray">
+
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
+        <omgdc:Bounds x="120" y="255" width="30" height="30"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="115" y="290" width="40" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="searchDataXrayTask" id="BPMNShape_searchDataXrayTask">
+        <omgdc:Bounds x="210" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="resultsTask" id="BPMNShape_resultsTask">
+        <omgdc:Bounds x="400" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
+        <omgdc:Bounds x="570" y="256" width="28" height="28"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="567" y="290" width="34" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="150" y="270"/>
+        <omgdi:waypoint x="210" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="350" y="270"/>
+        <omgdi:waypoint x="400" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
+        <omgdi:waypoint x="520" y="270"/>
+        <omgdi:waypoint x="570" y="270"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>
