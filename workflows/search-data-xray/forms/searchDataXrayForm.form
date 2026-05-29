@@ -1,0 +1,160 @@
+{
+  "rows": [
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["cloud-text"], "stencilId": "cloud-text" },
+          "label": "Name",
+          "value": "{{conditionName}}",
+          "placeholder": "Enter search query name",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": true,
+          "tabIndex": 0,
+          "extraSettings": { "useDelay": true, "delay": 200 },
+          "id": "conditionName",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["cloud-text-area"], "stencilId": "cloud-text-area" },
+          "label": "Description",
+          "value": "{{description}}",
+          "placeholder": "Describe the purpose of this search query",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "description",
+          "type": "textarea"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Search query",
+          "value": "<p>Create a query that satisfies all selected criteria (AND query).</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "searchQueryHeading",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
+          "label": "Label",
+          "value": "{{label}}",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "extraSettings": {
+            "storage": "Id",
+            "multiValue": true,
+            "assetTypeIds": ["019c9fbe-25c3-71b7-90ac-057dd582fa1e"],
+            "assetTypeInheritance": true,
+            "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
+            "excludeMeta": true,
+            "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
+          },
+          "id": "label",
+          "type": "asset"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
+          "label": "Extractor",
+          "value": "{{extractor}}",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "extraSettings": {
+            "storage": "Id",
+            "multiValue": true,
+            "assetTypeIds": ["019c9fbd-a91b-7242-9451-79ab632163a3"],
+            "assetTypeInheritance": true,
+            "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
+            "excludeMeta": true,
+            "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
+          },
+          "id": "extractor",
+          "type": "asset"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
+          "label": "Annotators",
+          "value": "{{annotator}}",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "extraSettings": {
+            "storage": "Id",
+            "multiValue": true,
+            "assetTypeIds": ["01922a69-e7a0-7ac7-a581-c9ba9286ccf1"],
+            "assetTypeInheritance": true,
+            "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
+            "excludeMeta": true,
+            "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
+          },
+          "id": "annotator",
+          "type": "asset"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["cloud-text"], "stencilId": "cloud-text" },
+          "label": "Annotated text",
+          "value": "{{filter}}",
+          "placeholder": "Enter text to search",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "tabIndex": 0,
+          "extraSettings": { "useDelay": true, "delay": 200 },
+          "id": "filter",
+          "type": "text"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "key": "searchDataXrayForm",
+    "name": "Search Data X-Ray",
+    "description": "Pick the labels, extractors and annotators (plus optional annotated text) to build a Data X-Ray search query.",
+    "version": "1",
+    "modelType": "form",
+    "flowableDesignVersion": 3110,
+    "palette": "flowable-core-form-palette"
+  }
+}

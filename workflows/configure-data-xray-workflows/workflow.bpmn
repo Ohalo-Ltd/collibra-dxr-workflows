@@ -1,16 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  createAsset workflow
-  ====================
-  Presents a user form (Asset Type picker + Domain picker + name field) then
-  creates the asset via the Collibra v2 Asset API.
+  configureDataXrayWorkflows workflow
+  ===================================
+  One-time, Create-menu-triggered operating-model bootstrap, run by an admin:
+    startEvent (form: confirm — rendered as a modal when triggered from Create)
+      → configureTask (script)
+      → resultsTask (user form: results — appears as an inbox task)
+      → endEvent
+
+  This workflow has NO configuration variables of its own. Everything it needs
+  (the canonical UUIDs of the elements to create, and the process IDs of the
+  workflows to configure) is baked into the script. It creates elements with
+  fixed UUIDs that match the defaults already shipped in the sync/search BPMNs
+  and the hardcoded UUIDs in searchDataXrayForm.form, so a fresh instance lines
+  up without any form edits.
 
   Script placeholders of the form {script:filename.groovy} are resolved by
-  deploy.py before the BPMN is packaged. Edit .groovy files in scripts/ for
-  IDE support with autocomplete.
-
-  Form references (flowable:formKey) point to JSON form files in forms/.
-  The key must match the "metadata.key" field inside the .form file.
+  deploy.py before the BPMN is packaged.
 -->
 <definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -27,43 +33,38 @@
              exporterVersion="2025.1.09"
              design:palette="flowable-core-process-palette">
 
-  <process id="createAsset"
-           name="Create Asset"
+  <process id="configureDataXrayWorkflows"
+           name="Configure Data X-Ray Workflows"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
     </extensionElements>
 
-    <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="startConfigureForm">
       <extensionElements>
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>
     </startEvent>
 
-    <!--
-      User task: presents the createAssetForm to the person who started the
-      workflow. Variables set by the form (assetName, assetTypeId, domainId)
-      become process variables available to the script task below.
-    -->
-    <userTask id="inputFormTask"
-              name="Asset Details"
-              flowable:candidateUsers="user(${initiator})"
-              flowable:formKey="createAssetForm">
-      <extensionElements>
-        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
-      </extensionElements>
-    </userTask>
-
-    <scriptTask id="createAssetTask"
-                name="Create Asset"
+    <scriptTask id="configureTask"
+                name="Configure Operating Model"
                 scriptFormat="groovy"
                 flowable:autoStoreVariables="false">
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:create_asset.groovy}}</script>
+      <script>{{script:configure_data_xray.groovy}}</script>
     </scriptTask>
+
+    <userTask id="resultsTask"
+              name="Configuration Results"
+              flowable:candidateUsers="user(${initiator})"
+              flowable:formKey="configureResultsForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
 
     <endEvent id="endEvent" name="End">
       <extensionElements>
@@ -71,17 +72,17 @@
       </extensionElements>
     </endEvent>
 
-    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="inputFormTask">
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="configureTask">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow2" sourceRef="inputFormTask" targetRef="createAssetTask">
+    <sequenceFlow id="flow2" sourceRef="configureTask" targetRef="resultsTask">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow3" sourceRef="createAssetTask" targetRef="endEvent">
+    <sequenceFlow id="flow3" sourceRef="resultsTask" targetRef="endEvent">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
@@ -89,8 +90,8 @@
 
   </process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_createAsset">
-    <bpmndi:BPMNPlane bpmnElement="createAsset" id="BPMNPlane_createAsset">
+  <bpmndi:BPMNDiagram id="BPMNDiagram_configureDataXrayWorkflows">
+    <bpmndi:BPMNPlane bpmnElement="configureDataXrayWorkflows" id="BPMNPlane_configureDataXrayWorkflows">
 
       <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
         <omgdc:Bounds x="120" y="255" width="30" height="30"/>
@@ -99,18 +100,18 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape bpmnElement="inputFormTask" id="BPMNShape_inputFormTask">
-        <omgdc:Bounds x="210" y="230" width="100" height="80"/>
+      <bpmndi:BPMNShape bpmnElement="configureTask" id="BPMNShape_configureTask">
+        <omgdc:Bounds x="210" y="230" width="140" height="80"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape bpmnElement="createAssetTask" id="BPMNShape_createAssetTask">
-        <omgdc:Bounds x="375" y="230" width="100" height="80"/>
+      <bpmndi:BPMNShape bpmnElement="resultsTask" id="BPMNShape_resultsTask">
+        <omgdc:Bounds x="400" y="230" width="120" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
-        <omgdc:Bounds x="540" y="256" width="28" height="28"/>
+        <omgdc:Bounds x="570" y="256" width="28" height="28"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="537" y="290" width="34" height="14"/>
+          <omgdc:Bounds x="567" y="290" width="34" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
@@ -119,12 +120,12 @@
         <omgdi:waypoint x="210" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
-        <omgdi:waypoint x="310" y="270"/>
-        <omgdi:waypoint x="375" y="270"/>
+        <omgdi:waypoint x="350" y="270"/>
+        <omgdi:waypoint x="400" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
-        <omgdi:waypoint x="475" y="270"/>
-        <omgdi:waypoint x="540" y="270"/>
+        <omgdi:waypoint x="520" y="270"/>
+        <omgdi:waypoint x="570" y="270"/>
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>

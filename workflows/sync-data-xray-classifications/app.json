@@ -1,0 +1,9 @@
+{
+  "key": "syncDataXrayClassifications",
+  "name": "Sync Data X-Ray Classifications",
+  "description": "Sync the Data X-Ray classification catalog into Collibra and show what changed.",
+  "theme": "theme-1",
+  "icon": "glyphicon-refresh",
+  "businessItemResourceType": "GLOBAL",
+  "globalCreate": true
+}

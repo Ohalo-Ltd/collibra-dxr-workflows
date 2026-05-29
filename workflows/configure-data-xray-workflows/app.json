@@ -1,0 +1,9 @@
+{
+  "key": "configureDataXrayWorkflows",
+  "name": "Configure Data X-Ray Workflows",
+  "description": "One-time setup, run by an admin: creates the Data X-Ray operating model (community, domains, asset types, attribute types, assignments) and populates the Data X-Ray sync & search workflows' settings. Idempotent — safe to re-run. You still set each workflow's Base URL and Bearer token by hand.",
+  "theme": "theme-2",
+  "icon": "glyphicon-cog",
+  "businessItemResourceType": "GLOBAL",
+  "globalCreate": true
+}

@@ -1,0 +1,9 @@
+{
+  "key": "searchDataXray",
+  "name": "Search Data X-Ray",
+  "description": "Search Data X-Ray for files matching the labels, extractors and annotators you choose.",
+  "theme": "theme-3",
+  "icon": "glyphicon-inbox",
+  "businessItemResourceType": "GLOBAL",
+  "globalCreate": true
+}

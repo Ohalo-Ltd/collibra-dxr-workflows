@@ -1,9 +1,0 @@
-{
-  "key": "syncOhaloClassificationsInteractive",
-  "name": "Sync Ohalo Classifications (Interactive)",
-  "description": "Interactive variant of the Sync Ohalo Classifications workflow. Started from Collibra's global Create menu: confirms the action on a start form, runs the same Ohalo-to-Collibra sync (classifications, annotators, extractors, labels), then shows a results form with per-category counts and any failures. All connection settings (Ohalo URL, auth token, domain and asset/attribute type IDs) remain hidden admin configuration on the workflow settings page.",
-  "theme": "theme-1",
-  "icon": "glyphicon-refresh",
-  "businessItemResourceType": "GLOBAL",
-  "globalCreate": true
-}

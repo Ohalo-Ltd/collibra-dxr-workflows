@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  syncDataXrayClassificationsNightly workflow
+  ===========================================
+  Pulls the classification catalog from the Data X-Ray API and creates
+  matching Collibra assets in the configured classifications domain.
+
+  Triggered automatically by a timer start event (cron "0 0 2 * * ?" — daily
+  at 02:00 in the Collibra server timezone). No user initiates it, so the
+  script must not depend on `users`/`item`/`initiator`, and ends cleanly on
+  misconfiguration or a transient Data X-Ray outage rather than throwing: a
+  timer workflow that fails before its first async task is retried 3× by
+  Collibra and then permanently disabled until redeployment.
+
+  All configuration (Data X-Ray URL, auth token, asset/attribute type UUIDs)
+  is read from the readable="false" form properties on the start event below;
+  admins set them on the workflow settings page in the Collibra UI.
+
+  Script placeholders of the form {script:filename.groovy} are resolved by
+  deploy.py before the BPMN is packaged.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+
+  <process id="syncDataXrayClassificationsNightly"
+           name="Sync Data X-Ray Classification (Nightly)"
+           isExecutable="true">
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+
+    <!--
+      Timer start event: Collibra's scheduler fires this on the cron below
+      (seconds-first Quartz format) — "0 0 2 * * ?" = every day at 02:00.
+
+      Configuration variables exposed on the workflow's settings page.
+      readable="false" hides them from any start dialog (they're admin config,
+      not user input). writable defaults to true so admins can edit on the
+      Collibra UI workflow settings page.
+
+      Collibra rejects non-readable form properties that have no default,
+      so dataxrayAuthToken ships with a sentinel placeholder value. The Groovy
+      script detects that sentinel and ends cleanly (logging the reason),
+      so a misconfigured token doesn't trip the timer's retry-then-disable.
+    -->
+    <startEvent id="startEvent" name="Start">
+      <extensionElements>
+        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="classificationsDomainId" name="Classifications Domain ID" type="string" variable="classificationsDomainId" default="019c9fbf-622c-76f4-9dd6-2a9730a11515" readable="false" required="true"/>
+        <flowable:formProperty id="classificationAssetTypeId" name="Asset Type ID: Classification" type="string" variable="classificationAssetTypeId" default="01965d43-235d-796b-be49-078f91d7472a" readable="false" required="true"/>
+        <flowable:formProperty id="annotatorAssetTypeId" name="Asset Type ID: Annotator" type="string" variable="annotatorAssetTypeId" default="01922a69-e7a0-7ac7-a581-c9ba9286ccf1" readable="false" required="true"/>
+        <flowable:formProperty id="extractorAssetTypeId" name="Asset Type ID: Extractor" type="string" variable="extractorAssetTypeId" default="019c9fbd-a91b-7242-9451-79ab632163a3" readable="false" required="true"/>
+        <flowable:formProperty id="labelAssetTypeId" name="Asset Type ID: Label" type="string" variable="labelAssetTypeId" default="019c9fbe-25c3-71b7-90ac-057dd582fa1e" readable="false" required="true"/>
+        <flowable:formProperty id="linkAttrTypeId" name="Attribute Type ID: Link" type="string" variable="linkAttrTypeId" default="019c9fc5-aa4c-72af-8918-caa54fe61eba" readable="false" required="true"/>
+        <flowable:formProperty id="searchLinkAttrTypeId" name="Attribute Type ID: Search Link" type="string" variable="searchLinkAttrTypeId" default="019c9fc5-8ff5-77a7-962d-4b6b05c69254" readable="false" required="true"/>
+        <flowable:formProperty id="subtypeAttrTypeId" name="Attribute Type ID: Subtype" type="string" variable="subtypeAttrTypeId" default="019c9fc5-ecc8-759b-9c0b-78547fa315ad" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayIdAttrTypeId" name="Attribute Type ID: Data X-Ray ID" type="string" variable="dataxrayIdAttrTypeId" default="019e73ae-1aa8-700c-8086-626326822c22" readable="false" required="true"/>
+
+        <design:stencilid><![CDATA[StartTimerEvent]]></design:stencilid>
+      </extensionElements>
+      <timerEventDefinition>
+        <timeCycle flowable:type="cron">0 0 2 * * ?</timeCycle>
+      </timerEventDefinition>
+    </startEvent>
+
+    <scriptTask id="syncClassificationsTask"
+                name="Sync Classifications"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:sync_classifications.groovy}}</script>
+    </scriptTask>
+
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="syncClassificationsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow2" sourceRef="syncClassificationsTask" targetRef="endEvent">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_syncDataXrayClassificationsNightly">
+    <bpmndi:BPMNPlane bpmnElement="syncDataXrayClassificationsNightly" id="BPMNPlane_syncDataXrayClassificationsNightly">
+
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
+        <omgdc:Bounds x="120" y="255" width="30" height="30"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="115" y="290" width="40" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="syncClassificationsTask" id="BPMNShape_syncClassificationsTask">
+        <omgdc:Bounds x="210" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
+        <omgdc:Bounds x="395" y="256" width="28" height="28"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="392" y="290" width="34" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="150" y="270"/>
+        <omgdi:waypoint x="210" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="330" y="270"/>
+        <omgdi:waypoint x="395" y="270"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>

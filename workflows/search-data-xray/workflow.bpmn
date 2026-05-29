@@ -1,22 +1,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  syncOhaloClassificationsInteractive workflow
-  ============================================
-  Interactive variant of syncOhaloClassifications:
-    startEvent (form: confirm — rendered as a modal when triggered from Create)
-      → syncClassificationsTask (script)
-      → resultsTask (user form: results — appears as an inbox task)
+  searchDataXray workflow
+  =======================
+  Create a Data X-Ray search query from Collibra classifications:
+    startEvent (form: searchDataXrayForm — rendered as the + Create dialog)
+      → searchDataXrayTask (script)
+      → resultsTask (user form: searchResultsForm — appears as an inbox task)
       → endEvent
 
-  The confirmation form is attached to the start event so Collibra renders it
-  as a modal dialog at trigger time, without creating an inbox task. The
-  results form is a userTask because Flowable has no native post-completion
+  The input form is attached to the start event so Collibra renders it as the
+  modal dialog when the workflow is launched from the global + Create button.
+  The results form is a userTask because Flowable has no native post-completion
   modal — the inbox task is the standard way to surface per-run results.
 
-  All connection/UUID configuration variables are the same hidden admin
-  settings as the headless workflow — they live on the start event as
-  non-readable formProperty entries and are edited on the workflow settings
-  page in Collibra. They do not appear on the start dialog.
+  All connection/UUID configuration lives on the start event as non-readable
+  formProperty entries (hidden admin settings edited on the workflow settings
+  page). They do not appear on the start dialog. Each carries a non-empty
+  default because Collibra rejects empty defaults on non-readable properties;
+  secrets that have no sensible default ship a "<paste … here>" sentinel that
+  the script detects as "unset".
 
   Script placeholders of the form {script:filename.groovy} are resolved by
   deploy.py before the BPMN is packaged.
@@ -36,45 +38,44 @@
              exporterVersion="2025.1.09"
              design:palette="flowable-core-process-palette">
 
-  <process id="syncOhaloClassificationsInteractive"
-           name="Sync Ohalo Classifications (Interactive)"
+  <process id="searchDataXray"
+           name="Search Data X-Ray"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
+    <documentation>Create a Data X-Ray search query from Collibra classifications and preview the matching files.</documentation>
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
     </extensionElements>
 
-    <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="startSyncForm">
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="searchDataXrayForm">
       <extensionElements>
-        <flowable:formProperty id="ohaloUrl" name="Ohalo Base URL" type="string" variable="ohaloUrl" default="&lt;paste Ohalo base URL here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="ohaloAuthToken" name="Ohalo Auth Token (Bearer)" type="string" variable="ohaloAuthToken" default="&lt;paste Ohalo Bearer token here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="classificationsDomainId" name="Classifications Domain ID" type="string" variable="classificationsDomainId" default="019c9fbf-622c-76f4-9dd6-2a9730a11515" readable="false" required="true"/>
-        <flowable:formProperty id="classificationAssetTypeId" name="Asset Type ID: Classification" type="string" variable="classificationAssetTypeId" default="01965d43-235d-796b-be49-078f91d7472a" readable="false" required="true"/>
-        <flowable:formProperty id="annotatorAssetTypeId" name="Asset Type ID: Annotator" type="string" variable="annotatorAssetTypeId" default="01922a69-e7a0-7ac7-a581-c9ba9286ccf1" readable="false" required="true"/>
-        <flowable:formProperty id="extractorAssetTypeId" name="Asset Type ID: Extractor" type="string" variable="extractorAssetTypeId" default="019c9fbd-a91b-7242-9451-79ab632163a3" readable="false" required="true"/>
-        <flowable:formProperty id="labelAssetTypeId" name="Asset Type ID: Label" type="string" variable="labelAssetTypeId" default="019c9fbe-25c3-71b7-90ac-057dd582fa1e" readable="false" required="true"/>
-        <flowable:formProperty id="linkAttrTypeId" name="Attribute Type ID: Link" type="string" variable="linkAttrTypeId" default="019c9fc5-aa4c-72af-8918-caa54fe61eba" readable="false" required="true"/>
-        <flowable:formProperty id="searchLinkAttrTypeId" name="Attribute Type ID: Search Link" type="string" variable="searchLinkAttrTypeId" default="019c9fc5-8ff5-77a7-962d-4b6b05c69254" readable="false" required="true"/>
-        <flowable:formProperty id="subtypeAttrTypeId" name="Attribute Type ID: Subtype" type="string" variable="subtypeAttrTypeId" default="019c9fc5-ecc8-759b-9c0b-78547fa315ad" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="queryDomainId" name="Query Domain ID" type="string" variable="queryDomainId" default="019dcf96-233a-72e1-bf25-8398b8c9146e" readable="false" required="true"/>
+        <flowable:formProperty id="queryAssetTypeId" name="Asset Type ID: Search Query" type="string" variable="queryAssetTypeId" default="019dcf97-3bac-72c3-8b59-b6ddbe8a8396" readable="false" required="true"/>
+        <flowable:formProperty id="groupsRelationTypeId" name="Relation Type ID: Query → Classification" type="string" variable="groupsRelationTypeId" default="00000000-0000-0000-0000-000000007017" readable="false" required="true"/>
+        <flowable:formProperty id="descriptionAttrTypeId" name="Attribute Type ID: Description" type="string" variable="descriptionAttrTypeId" default="00000000-0000-0000-0000-000000003114" readable="false" required="true"/>
+        <flowable:formProperty id="filesAttrTypeId" name="Attribute Type ID: Files Table" type="string" variable="filesAttrTypeId" default="019e2736-8bd0-727a-b4ab-6899517a3e73" readable="false" required="true"/>
+        <flowable:formProperty id="maxResults" name="Max Files To Preview" type="string" variable="maxResults" default="20" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>
     </startEvent>
 
-    <scriptTask id="syncClassificationsTask"
-                name="Sync Classifications"
+    <scriptTask id="searchDataXrayTask"
+                name="Search Data X-Ray"
                 scriptFormat="groovy"
                 flowable:autoStoreVariables="false">
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:sync_classifications.groovy}}</script>
+      <script>{{script:search_data_xray.groovy}}</script>
     </scriptTask>
 
     <userTask id="resultsTask"
-              name="Sync Results"
+              name="Search Results"
               flowable:candidateUsers="user(${initiator})"
-              flowable:formKey="syncResultsForm">
+              flowable:formKey="searchResultsForm">
       <extensionElements>
         <design:stencilid><![CDATA[FormTask]]></design:stencilid>
       </extensionElements>
@@ -86,12 +87,12 @@
       </extensionElements>
     </endEvent>
 
-    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="syncClassificationsTask">
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="searchDataXrayTask">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow2" sourceRef="syncClassificationsTask" targetRef="resultsTask">
+    <sequenceFlow id="flow2" sourceRef="searchDataXrayTask" targetRef="resultsTask">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
@@ -104,8 +105,8 @@
 
   </process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_syncOhaloClassificationsInteractive">
-    <bpmndi:BPMNPlane bpmnElement="syncOhaloClassificationsInteractive" id="BPMNPlane_syncOhaloClassificationsInteractive">
+  <bpmndi:BPMNDiagram id="BPMNDiagram_searchDataXray">
+    <bpmndi:BPMNPlane bpmnElement="searchDataXray" id="BPMNPlane_searchDataXray">
 
       <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
         <omgdc:Bounds x="120" y="255" width="30" height="30"/>
@@ -114,7 +115,7 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape bpmnElement="syncClassificationsTask" id="BPMNShape_syncClassificationsTask">
+      <bpmndi:BPMNShape bpmnElement="searchDataXrayTask" id="BPMNShape_searchDataXrayTask">
         <omgdc:Bounds x="210" y="230" width="140" height="80"/>
       </bpmndi:BPMNShape>
 

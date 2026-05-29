@@ -1,13 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  syncOhaloClassifications workflow
-  =================================
-  Pulls the classification catalog from the Ohalo Data X-Ray API and creates
-  matching Collibra assets in the configured classifications domain.
+  syncDataXrayClassifications workflow
+  ====================================
+  Interactive, Create-menu-triggered classification sync:
+    startEvent (form: confirm — rendered as a modal when triggered from Create)
+      → syncClassificationsTask (script)
+      → resultsTask (user form: results — appears as an inbox task)
+      → endEvent
 
-  All configuration (Ohalo URL, auth token, asset/attribute type UUIDs) is
-  currently hardcoded inside scripts/sync_classifications.groovy. The next
-  iteration will move these to form properties / process variables.
+  The confirmation form is attached to the start event so Collibra renders it
+  as a modal dialog at trigger time, without creating an inbox task. The
+  results form is a userTask because Flowable has no native post-completion
+  modal — the inbox task is the standard way to surface per-run results.
+
+  All connection/UUID configuration variables are the same hidden admin
+  settings as the headless workflow — they live on the start event as
+  non-readable formProperty entries and are edited on the workflow settings
+  page in Collibra. They do not appear on the start dialog.
 
   Script placeholders of the form {script:filename.groovy} are resolved by
   deploy.py before the BPMN is packaged.
@@ -27,29 +36,18 @@
              exporterVersion="2025.1.09"
              design:palette="flowable-core-process-palette">
 
-  <process id="syncOhaloClassifications"
-           name="Sync Ohalo Classifications"
+  <process id="syncDataXrayClassifications"
+           name="Sync Data X-Ray Classifications"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
     </extensionElements>
 
-    <!--
-      Configuration variables exposed on the workflow's settings page.
-      readable="false" hides them from any start dialog (they're admin config,
-      not user input). writable defaults to true so admins can edit on the
-      Collibra UI workflow settings page.
-
-      Collibra rejects non-readable form properties that have no default,
-      so ohaloAuthToken ships with a sentinel placeholder value. The Groovy
-      script detects that sentinel and refuses to run, with a clear error
-      pointing the admin at the workflow settings page.
-    -->
-    <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="startSyncForm">
       <extensionElements>
-        <flowable:formProperty id="ohaloUrl" name="Ohalo Base URL" type="string" variable="ohaloUrl" default="&lt;paste Ohalo base URL here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="ohaloAuthToken" name="Ohalo Auth Token (Bearer)" type="string" variable="ohaloAuthToken" default="&lt;paste Ohalo Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
         <flowable:formProperty id="classificationsDomainId" name="Classifications Domain ID" type="string" variable="classificationsDomainId" default="019c9fbf-622c-76f4-9dd6-2a9730a11515" readable="false" required="true"/>
         <flowable:formProperty id="classificationAssetTypeId" name="Asset Type ID: Classification" type="string" variable="classificationAssetTypeId" default="01965d43-235d-796b-be49-078f91d7472a" readable="false" required="true"/>
         <flowable:formProperty id="annotatorAssetTypeId" name="Asset Type ID: Annotator" type="string" variable="annotatorAssetTypeId" default="01922a69-e7a0-7ac7-a581-c9ba9286ccf1" readable="false" required="true"/>
@@ -58,6 +56,7 @@
         <flowable:formProperty id="linkAttrTypeId" name="Attribute Type ID: Link" type="string" variable="linkAttrTypeId" default="019c9fc5-aa4c-72af-8918-caa54fe61eba" readable="false" required="true"/>
         <flowable:formProperty id="searchLinkAttrTypeId" name="Attribute Type ID: Search Link" type="string" variable="searchLinkAttrTypeId" default="019c9fc5-8ff5-77a7-962d-4b6b05c69254" readable="false" required="true"/>
         <flowable:formProperty id="subtypeAttrTypeId" name="Attribute Type ID: Subtype" type="string" variable="subtypeAttrTypeId" default="019c9fc5-ecc8-759b-9c0b-78547fa315ad" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayIdAttrTypeId" name="Attribute Type ID: Data X-Ray ID" type="string" variable="dataxrayIdAttrTypeId" default="019e73ae-1aa8-700c-8086-626326822c22" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>
@@ -73,6 +72,15 @@
       <script>{{script:sync_classifications.groovy}}</script>
     </scriptTask>
 
+    <userTask id="resultsTask"
+              name="Sync Results"
+              flowable:candidateUsers="user(${initiator})"
+              flowable:formKey="syncResultsForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+
     <endEvent id="endEvent" name="End">
       <extensionElements>
         <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
@@ -84,7 +92,12 @@
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow2" sourceRef="syncClassificationsTask" targetRef="endEvent">
+    <sequenceFlow id="flow2" sourceRef="syncClassificationsTask" targetRef="resultsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow3" sourceRef="resultsTask" targetRef="endEvent">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
@@ -92,8 +105,8 @@
 
   </process>
 
-  <bpmndi:BPMNDiagram id="BPMNDiagram_syncOhaloClassifications">
-    <bpmndi:BPMNPlane bpmnElement="syncOhaloClassifications" id="BPMNPlane_syncOhaloClassifications">
+  <bpmndi:BPMNDiagram id="BPMNDiagram_syncDataXrayClassifications">
+    <bpmndi:BPMNPlane bpmnElement="syncDataXrayClassifications" id="BPMNPlane_syncDataXrayClassifications">
 
       <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
         <omgdc:Bounds x="120" y="255" width="30" height="30"/>
@@ -103,13 +116,17 @@
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="syncClassificationsTask" id="BPMNShape_syncClassificationsTask">
-        <omgdc:Bounds x="210" y="230" width="120" height="80"/>
+        <omgdc:Bounds x="210" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="resultsTask" id="BPMNShape_resultsTask">
+        <omgdc:Bounds x="400" y="230" width="120" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
-        <omgdc:Bounds x="395" y="256" width="28" height="28"/>
+        <omgdc:Bounds x="570" y="256" width="28" height="28"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="392" y="290" width="34" height="14"/>
+          <omgdc:Bounds x="567" y="290" width="34" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
@@ -118,8 +135,12 @@
         <omgdi:waypoint x="210" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
-        <omgdi:waypoint x="330" y="270"/>
-        <omgdi:waypoint x="395" y="270"/>
+        <omgdi:waypoint x="350" y="270"/>
+        <omgdi:waypoint x="400" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
+        <omgdi:waypoint x="520" y="270"/>
+        <omgdi:waypoint x="570" y="270"/>
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>
