@@ -1,0 +1,52 @@
+name: Bundle Data X-Ray Workflow ZIPs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write          # required for `gh release upload`
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Export all four workflow ZIPs
+        run: |
+          set -euo pipefail
+          for wf in \
+            configure-data-xray-workflows \
+            search-data-xray \
+            sync-data-xray-classifications \
+            sync-data-xray-classifications-nightly; do
+            python deploy.py "$wf" --export-zip dist
+          done
+
+      - name: Assemble combined bundle
+        run: |
+          set -euo pipefail
+          cp workflows/deployment-guide.md dist/
+          (cd dist && zip -j ../collibra-data-xray-workflows.zip *.zip deployment-guide.md)
+
+      - name: Attach bundle to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" collibra-data-xray-workflows.zip --clobber
+
+      - name: Upload bundle as build artifact (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: collibra-data-xray-workflows
+          path: collibra-data-xray-workflows.zip
