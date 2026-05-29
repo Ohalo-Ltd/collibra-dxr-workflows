@@ -13,6 +13,33 @@
 //   2. Ensures the custom attribute types are surfaced on the asset pages by
 //      creating a per-type assignment — but only where one isn't already in
 //      effect, so existing (hand-tuned) assignments are never disturbed.
+//   3. Ensures the two access-control roles exist with FIXED canonical UUIDs:
+//        - 'Data X-Ray Admin' — granted the WORKFLOW_ADMINISTRATION global
+//          permission, so holders (alongside Sysadmins) can open each Data
+//          X-Ray workflow's settings page and set the Base URL + Bearer token.
+//          NOTE: WORKFLOW_ADMINISTRATION is a *global* permission — it confers
+//          admin over ALL workflows on the instance, not only the Data X-Ray
+//          ones; Collibra has no per-workflow administration permission.
+//        - 'Data X-Ray User' — a plain membership role, no permissions; it only
+//          exists to gate who may *run* the search/sync workflows.
+//   4. Sets each Data X-Ray workflow definition's start roles ("who can run"):
+//        - searchDataXray / syncDataXrayClassifications → User + Admin
+//        - syncDataXrayClassificationsNightly / configureDataXrayWorkflows → Admin
+//      This is applied at runtime via workflowDefinitionApi (a partial update —
+//      it does NOT touch the configuration variables, so admin-set tokens are
+//      preserved). This runtime assignment is the ONLY thing that enforces start
+//      access: the BPMN's flowable:candidateStarterGroups is inert in Collibra
+//      (verified — a fresh deploy lands with no start-role restriction until this
+//      runs). Start roles, like configuration variables, then PERSIST across an
+//      in-place redeploy and reset only if a workflow is deleted and reimported.
+//      Any target not yet deployed is skipped — re-run this workflow after
+//      deploying the rest, and re-run it after any delete-then-reimport.
+//
+// The configuration variables (Base URL + Bearer token) themselves carry NO
+// per-role visibility — readable="false" already hides them from everyone who
+// starts a workflow, and only Sysadmin / WORKFLOW_ADMINISTRATION holders can
+// edit them on the settings page. Granting the Admin role that permission (3)
+// is the only knob; nothing here "hides" the token from Users — it already is.
 //
 // The Data X-Ray workflows reference these elements by fixed UUID directly, so
 // there are NO configuration variables to write — the admin only sets each
@@ -40,6 +67,10 @@ import com.collibra.dgc.core.api.dto.assignment.AddAssignmentRequest
 import com.collibra.dgc.core.api.dto.assignment.CharacteristicTypeAssignmentReference
 import com.collibra.dgc.core.api.model.meta.type.AssetTypeSymbolType
 import com.collibra.dgc.core.api.model.meta.type.attribute.StringType
+import com.collibra.dgc.core.api.dto.role.AddRoleRequest
+import com.collibra.dgc.core.api.dto.role.ChangeRoleRequest
+import com.collibra.dgc.core.api.model.security.Permission
+import com.collibra.dgc.core.api.dto.workflow.ChangeWorkflowDefinitionRequest
 
 // --- Canonical identifiers (fixed across instances) -------------------------
 
@@ -62,6 +93,29 @@ def FILES_ATTR_ID       = '019e2736-8bd0-727a-b4ab-6899517a3e73'
 // System parent asset types — present on every instance.
 def DATA_CONCEPT_TYPE_ID = '00000000-0000-0000-0000-000000031113'
 def DATA_ASSET_TYPE_ID   = '00000000-0000-0000-0000-000000031002'
+
+// --- Access-control roles (fixed canonical UUIDs) ---------------------------
+// Created here if missing. 'Data X-Ray Admin' gets WORKFLOW_ADMINISTRATION so
+// it can edit the Base URL + Bearer token; 'Data X-Ray User' is a bare
+// membership role used only to gate who can run the search/sync workflows.
+def ROLE_ADMIN_ID   = '019e9000-abcd-7000-a115-74a17d050000'
+def ROLE_ADMIN_NAME = 'Data X-Ray Admin'
+def ROLE_USER_ID    = '019e9000-abce-7000-9e7d-a7a7115e0000'
+def ROLE_USER_NAME  = 'Data X-Ray User'
+
+// Which start roles ("who can run") each workflow definition should carry,
+// keyed by its BPMN process id. Setting these by UUID at runtime is the sole
+// enforcement (the BPMN's flowable:candidateStarterGroups is inert in Collibra).
+def starterRoleDefs = [
+    [processId: 'searchDataXray',                     name: 'Search Data X-Ray',
+     roleIds: [ROLE_USER_ID, ROLE_ADMIN_ID]],
+    [processId: 'syncDataXrayClassifications',        name: 'Sync Data X-Ray Classifications',
+     roleIds: [ROLE_USER_ID, ROLE_ADMIN_ID]],
+    [processId: 'syncDataXrayClassificationsNightly', name: 'Sync Data X-Ray Classifications (Nightly)',
+     roleIds: [ROLE_ADMIN_ID]],
+    [processId: 'configureDataXrayWorkflows',         name: 'Configure Data X-Ray Workflows',
+     roleIds: [ROLE_ADMIN_ID]],
+]
 
 def domainDefs = [
     [id: '019c9fbf-622c-76f4-9dd6-2a9730a11515', name: 'Data xRay Classifications'],
@@ -125,9 +179,10 @@ def STANDARD_STATUS_IDS = [
 
 // --- Result accumulators ----------------------------------------------------
 
-def created = []
-def skipped = []
-def failed  = []
+def created    = []
+def skipped    = []
+def failed     = []
+def configured = []   // run-access (start roles) applied this run; idempotent
 
 // --- Phase 1: community -----------------------------------------------------
 
@@ -288,6 +343,73 @@ assignmentDefs.each { spec ->
     }
 }
 
+// --- Phase 6: access-control roles ------------------------------------------
+
+// Create a role if missing; if present, ensure it carries the required global
+// permissions (adding any that are absent without disturbing existing ones).
+def ensureRole = { String roleId, String roleName, List requiredPerms ->
+    try {
+        def rid = string2Uuid(roleId)
+        if (roleApi.exists(rid)) {
+            if (requiredPerms.isEmpty()) {
+                skipped << "Role '${roleName}'"
+                return
+            }
+            def current = roleApi.getRole(rid).getPermissions() ?: []
+            def missing = requiredPerms.findAll { !current.contains(it) }
+            if (missing.isEmpty()) {
+                skipped << "Role '${roleName}'"
+            } else {
+                def merged = (current + missing).unique()
+                roleApi.changeRole(ChangeRoleRequest.builder()
+                    .id(rid).name(roleName).permissions(merged).build())
+                configured << "Role '${roleName}' — granted ${missing.collect { it.name() }.join(', ')}"
+                loggerApi.info("Granted ${missing} to role ${roleName} [${roleId}]")
+            }
+        } else {
+            def b = AddRoleRequest.builder().id(rid).name(roleName).global(true)
+            if (!requiredPerms.isEmpty()) { b.permissions(requiredPerms) }
+            roleApi.addRole(b.build())
+            created << "Role '${roleName}'"
+            loggerApi.info("Created role ${roleName} [${roleId}]")
+        }
+    } catch (Exception e) {
+        failed << "Role '${roleName}': ${e.message}"
+        loggerApi.error("ensure role ${roleName} failed: ${e.message}")
+    }
+}
+
+ensureRole(ROLE_ADMIN_ID, ROLE_ADMIN_NAME, [Permission.WORKFLOW_ADMINISTRATION])
+ensureRole(ROLE_USER_ID,  ROLE_USER_NAME,  [])
+
+// --- Phase 7: workflow run-access (start roles) -----------------------------
+
+// Set each Data X-Ray workflow definition's start roles by UUID. This is a
+// partial update: only startRoleIds is sent, so configuration variables (the
+// admin-set Base URL + Bearer token) are left untouched. A workflow that isn't
+// deployed yet is skipped — re-run this once everything is deployed.
+starterRoleDefs.each { s ->
+    try {
+        def wd = workflowDefinitionApi.getWorkflowDefinitionByProcessId(s.processId)
+        if (wd == null) {
+            skipped << "Run-access for '${s.name}' (not deployed yet)"
+            return
+        }
+        def roleUuids = s.roleIds.collect { string2Uuid(it) }
+        workflowDefinitionApi.changeWorkflowDefinition(ChangeWorkflowDefinitionRequest.builder()
+            .id(wd.getId())
+            .startRoleIds(roleUuids)
+            .build())
+        def who = s.roleIds.contains(ROLE_USER_ID) ? 'User + Admin' : 'Admin only'
+        configured << "Run-access for '${s.name}' → ${who}"
+        loggerApi.info("Set start roles for ${s.processId}: ${roleUuids}")
+    } catch (Exception e) {
+        // getWorkflowDefinitionByProcessId throws if the definition is absent.
+        skipped << "Run-access for '${s.name}' (not deployed yet)"
+        loggerApi.warn("set run-access ${s.name} skipped: ${e.message}")
+    }
+}
+
 // --- Publish results for the form -------------------------------------------
 
 def htmlSection = { String title, List items ->
@@ -298,6 +420,7 @@ def htmlSection = { String title, List items ->
 
 def detail = ''
 detail += htmlSection('Created', created)
+detail += htmlSection('Access &amp; run roles configured', configured)
 detail += htmlSection('Already present', skipped)
 detail += htmlSection('Failed', failed)
 if (detail.isEmpty()) { detail = '<p>Nothing to do.</p>' }
