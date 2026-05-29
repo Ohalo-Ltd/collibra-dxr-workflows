@@ -1,7 +1,7 @@
 {
   "key": "syncDataXrayClassificationsNightly",
   "name": "Sync Data X-Ray Classification (Nightly)",
-  "description": "Runs nightly (02:00) to sync the Data X-Ray Classification System into Collibra for use in Unstructured Data Search. Fetches classifications, annotators, extractors and labels from the Data X-Ray API and mirrors them as Collibra assets with description, link, search link and subtype attributes.",
+  "description": "Mirror the Data X-Ray classification catalog into Collibra automatically every night.",
   "theme": "theme-1",
   "icon": "glyphicon-refresh",
   "businessItemResourceType": "GLOBAL"

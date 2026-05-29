@@ -1,7 +1,7 @@
 {
   "key": "syncDataXrayClassifications",
   "name": "Sync Data X-Ray Classifications",
-  "description": "Started from Collibra's global Create menu: confirms the action on a start form, runs the Data X-Ray-to-Collibra classification sync (classifications, annotators, extractors, labels), then shows a results form with per-category counts and any failures. All connection settings (Data X-Ray URL, auth token, domain and asset/attribute type IDs) remain hidden admin configuration on the workflow settings page.",
+  "description": "Sync the Data X-Ray classification catalog into Collibra and show what changed.",
   "theme": "theme-1",
   "icon": "glyphicon-refresh",
   "businessItemResourceType": "GLOBAL",
