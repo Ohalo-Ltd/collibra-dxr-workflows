@@ -59,15 +59,6 @@
       <extensionElements>
         <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
         <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="classificationsDomainId" name="Classifications Domain ID" type="string" variable="classificationsDomainId" default="019c9fbf-622c-76f4-9dd6-2a9730a11515" readable="false" required="true"/>
-        <flowable:formProperty id="classificationAssetTypeId" name="Asset Type ID: Classification" type="string" variable="classificationAssetTypeId" default="01965d43-235d-796b-be49-078f91d7472a" readable="false" required="true"/>
-        <flowable:formProperty id="annotatorAssetTypeId" name="Asset Type ID: Annotator" type="string" variable="annotatorAssetTypeId" default="01922a69-e7a0-7ac7-a581-c9ba9286ccf1" readable="false" required="true"/>
-        <flowable:formProperty id="extractorAssetTypeId" name="Asset Type ID: Extractor" type="string" variable="extractorAssetTypeId" default="019c9fbd-a91b-7242-9451-79ab632163a3" readable="false" required="true"/>
-        <flowable:formProperty id="labelAssetTypeId" name="Asset Type ID: Label" type="string" variable="labelAssetTypeId" default="019c9fbe-25c3-71b7-90ac-057dd582fa1e" readable="false" required="true"/>
-        <flowable:formProperty id="linkAttrTypeId" name="Attribute Type ID: Link" type="string" variable="linkAttrTypeId" default="019c9fc5-aa4c-72af-8918-caa54fe61eba" readable="false" required="true"/>
-        <flowable:formProperty id="searchLinkAttrTypeId" name="Attribute Type ID: Search Link" type="string" variable="searchLinkAttrTypeId" default="019c9fc5-8ff5-77a7-962d-4b6b05c69254" readable="false" required="true"/>
-        <flowable:formProperty id="subtypeAttrTypeId" name="Attribute Type ID: Subtype" type="string" variable="subtypeAttrTypeId" default="019c9fc5-ecc8-759b-9c0b-78547fa315ad" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayIdAttrTypeId" name="Attribute Type ID: Data X-Ray ID" type="string" variable="dataxrayIdAttrTypeId" default="019e73ae-1aa8-700c-8086-626326822c22" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartTimerEvent]]></design:stencilid>
       </extensionElements>

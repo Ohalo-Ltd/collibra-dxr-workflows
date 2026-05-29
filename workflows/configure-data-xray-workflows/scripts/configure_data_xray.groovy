@@ -6,28 +6,28 @@
 // What it does:
 //   1. Ensures the community, domains, asset types and attribute types the
 //      Data X-Ray sync & search workflows depend on all exist — creating any
-//      that are missing with FIXED canonical UUIDs. Those UUIDs match the
-//      defaults shipped in the sync/search BPMNs and the hardcoded picker IDs
-//      in searchDataXrayForm.form, so a fresh instance lines up with no edits.
+//      that are missing with FIXED canonical UUIDs. Those UUIDs are the same
+//      ones hardcoded as constants in the sync/search scripts and baked into
+//      searchDataXrayForm.form's pickers, so a fresh instance lines up with no
+//      edits — no per-workflow configuration is needed.
 //   2. Ensures the custom attribute types are surfaced on the asset pages by
 //      creating a per-type assignment — but only where one isn't already in
 //      effect, so existing (hand-tuned) assignments are never disturbed.
-//   3. Writes those canonical IDs into the configuration variables of the three
-//      Data X-Ray workflows (sync, nightly sync, search). It NEVER touches the
-//      Base URL or Bearer token — the admin sets those by hand.
+//
+// The Data X-Ray workflows reference these elements by fixed UUID directly, so
+// there are NO configuration variables to write — the admin only sets each
+// workflow's Base URL and Bearer token by hand.
 //
 // Idempotent: anything that already exists is left untouched. Safe to re-run.
 //
 // Operating-model elements are created/looked up via the meta APIs
 // (assetTypeApi, attributeTypeApi, assignmentApi, statusApi) and the instance
-// APIs (communityApi, domainApi). Configuration variables on the other
-// workflows are written via workflowDefinitionApi. Every step is wrapped so a
-// single failure is reported but never aborts the rest of the run.
+// APIs (communityApi, domainApi). Every step is wrapped so a single failure is
+// reported but never aborts the rest of the run.
 //
 // Process variables produced (for the results form):
 //   configureCreatedCount  (int)    – elements created this run
 //   configureSkippedCount  (int)    – elements already present, left untouched
-//   configurePatchedCount  (int)    – workflows whose settings were written
 //   configureFailedCount   (int)    – steps that errored
 //   configureDetail        (String) – HTML breakdown of the above
 
@@ -38,7 +38,6 @@ import com.collibra.dgc.core.api.dto.meta.attributetype.AddAttributeTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AttributeKind
 import com.collibra.dgc.core.api.dto.assignment.AddAssignmentRequest
 import com.collibra.dgc.core.api.dto.assignment.CharacteristicTypeAssignmentReference
-import com.collibra.dgc.core.api.dto.workflow.ChangeWorkflowDefinitionRequest
 import com.collibra.dgc.core.api.model.meta.type.AssetTypeSymbolType
 import com.collibra.dgc.core.api.model.meta.type.attribute.StringType
 
@@ -124,33 +123,10 @@ def STANDARD_STATUS_IDS = [
     '00000000-0000-0000-0000-000000005055', // Implemented
 ]
 
-// Configuration variables to write onto the sync workflows (model IDs only —
-// never the Base URL or Bearer token).
-def MODEL_SYNC_VARS = [
-    classificationsDomainId  : '019c9fbf-622c-76f4-9dd6-2a9730a11515',
-    classificationAssetTypeId: '01965d43-235d-796b-be49-078f91d7472a',
-    annotatorAssetTypeId     : '01922a69-e7a0-7ac7-a581-c9ba9286ccf1',
-    extractorAssetTypeId     : '019c9fbd-a91b-7242-9451-79ab632163a3',
-    labelAssetTypeId         : '019c9fbe-25c3-71b7-90ac-057dd582fa1e',
-    linkAttrTypeId           : LINK_ATTR_ID,
-    searchLinkAttrTypeId     : SEARCH_LINK_ATTR_ID,
-    subtypeAttrTypeId        : SUBTYPE_ATTR_ID,
-    dataxrayIdAttrTypeId     : DXID_ATTR_ID,
-]
-
-def SEARCH_VARS = [
-    queryDomainId        : '019dcf96-233a-72e1-bf25-8398b8c9146e',
-    queryAssetTypeId     : '019dcf97-3bac-72c3-8b59-b6ddbe8a8396',
-    groupsRelationTypeId : '00000000-0000-0000-0000-000000007017',
-    descriptionAttrTypeId: DESCRIPTION_ATTR_ID,
-    filesAttrTypeId      : FILES_ATTR_ID,
-]
-
 // --- Result accumulators ----------------------------------------------------
 
 def created = []
 def skipped = []
-def patched = []
 def failed  = []
 
 // --- Phase 1: community -----------------------------------------------------
@@ -312,30 +288,6 @@ assignmentDefs.each { spec ->
     }
 }
 
-// --- Phase 6: write configuration variables onto the other workflows --------
-
-def patchWorkflow = { String processId, Map vars ->
-    try {
-        def wd = workflowDefinitionApi.getWorkflowDefinitionByProcessId(processId)
-        if (wd == null) {
-            failed << "Configure '${processId}': workflow not deployed yet"
-            return
-        }
-        def b = ChangeWorkflowDefinitionRequest.builder().id(wd.getId())
-        vars.each { k, v -> b.addConfigurationVariable(k, v) }
-        workflowDefinitionApi.changeWorkflowDefinition(b.build())
-        patched << "${processId} (${vars.size()} setting(s))"
-        loggerApi.info("Configured workflow ${processId} with ${vars.size()} model variable(s)")
-    } catch (Exception e) {
-        failed << "Configure '${processId}': ${e.message} (is it deployed?)"
-        loggerApi.error("patch workflow ${processId} failed: ${e.message}")
-    }
-}
-
-patchWorkflow('syncDataXrayClassifications', MODEL_SYNC_VARS)
-patchWorkflow('syncDataXrayClassificationsNightly', MODEL_SYNC_VARS)
-patchWorkflow('searchDataXray', SEARCH_VARS)
-
 // --- Publish results for the form -------------------------------------------
 
 def htmlSection = { String title, List items ->
@@ -347,15 +299,13 @@ def htmlSection = { String title, List items ->
 def detail = ''
 detail += htmlSection('Created', created)
 detail += htmlSection('Already present', skipped)
-detail += htmlSection('Workflows configured', patched)
 detail += htmlSection('Failed', failed)
 if (detail.isEmpty()) { detail = '<p>Nothing to do.</p>' }
 
 execution.setVariable('configureCreatedCount', created.size())
 execution.setVariable('configureSkippedCount', skipped.size())
-execution.setVariable('configurePatchedCount', patched.size())
 execution.setVariable('configureFailedCount', failed.size())
 execution.setVariable('configureDetail', detail)
 
 loggerApi.info("Configure Data X-Ray complete: created=${created.size()}, " +
-    "skipped=${skipped.size()}, configured=${patched.size()}, failed=${failed.size()}")
+    "skipped=${skipped.size()}, failed=${failed.size()}")

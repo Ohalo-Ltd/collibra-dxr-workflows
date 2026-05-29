@@ -11,11 +11,11 @@
 // a timer-triggered workflow that fails before its first async task is retried
 // 3× by Collibra and then permanently disabled until redeployment.
 //
-// All configuration is read from workflow configuration variables (form
-// properties on the start event). An admin sets/edits them on the workflow
-// settings page in Collibra; defaults shipped in the BPMN make this work
-// out-of-the-box for the demo instance, except for dataxrayAuthToken which has
-// no default and must be supplied before the workflow will do anything.
+// The only configuration variables are the per-instance secrets (Base URL and
+// Bearer token), set by an admin on the workflow settings page; until the token
+// is supplied the nightly run skips cleanly. All operating-model IDs are fixed
+// constants (see below), created by the configure-data-xray-workflows admin
+// workflow with exactly those UUIDs.
 //
 // Sync semantics:
 //   – Upsert by Data X-Ray ID. Each Collibra asset carries a "Data X-Ray ID"
@@ -51,19 +51,12 @@ final String SYNC_TAG = 'dataxray-classification-sync'
 
 // --- Read & validate workflow configuration variables -----------------------
 
-// Required configuration variables: variable name → human label shown in errors
+// Only the per-instance secrets are configuration variables. The operating-model
+// IDs are fixed across instances (see the constants block below), so they're not
+// configurable here.
 def requiredConfig = [
-    dataxrayUrl              : 'Data X-Ray Base URL',
-    dataxrayAuthToken        : 'Data X-Ray Auth Token (Bearer)',
-    classificationsDomainId  : 'Classifications Domain ID',
-    classificationAssetTypeId: 'Asset Type ID: Classification',
-    annotatorAssetTypeId     : 'Asset Type ID: Annotator',
-    extractorAssetTypeId     : 'Asset Type ID: Extractor',
-    labelAssetTypeId         : 'Asset Type ID: Label',
-    linkAttrTypeId           : 'Attribute Type ID: Link',
-    searchLinkAttrTypeId     : 'Attribute Type ID: Search Link',
-    subtypeAttrTypeId        : 'Attribute Type ID: Subtype',
-    dataxrayIdAttrTypeId     : 'Attribute Type ID: Data X-Ray ID',
+    dataxrayUrl      : 'Data X-Ray Base URL',
+    dataxrayAuthToken: 'Data X-Ray Auth Token (Bearer)',
 ]
 
 // Collibra requires a non-empty default for non-readable form properties, so
@@ -98,23 +91,26 @@ if (!missing.isEmpty()) {
 def dataxrayUrl       = config.dataxrayUrl
 def dataxrayAuthToken = config.dataxrayAuthToken
 
-def classificationsDomainId = string2Uuid(config.classificationsDomainId)
+// Canonical operating-model IDs — fixed across all instances. The
+// configure-data-xray-workflows admin workflow creates the matching elements
+// with exactly these UUIDs, so they're constants here rather than configuration
+// variables (which would just be indirection wrapping a constant).
+def classificationsDomainId = string2Uuid('019c9fbf-622c-76f4-9dd6-2a9730a11515')
 
-// Map remote type → Collibra asset type UUID
+// Map remote type → Collibra asset type UUID.
 def assetTypeIdByType = [
-    CLASSIFICATION: string2Uuid(config.classificationAssetTypeId),
-    ANNOTATOR     : string2Uuid(config.annotatorAssetTypeId),
-    EXTRACTOR     : string2Uuid(config.extractorAssetTypeId),
-    LABEL         : string2Uuid(config.labelAssetTypeId),
+    CLASSIFICATION: string2Uuid('01965d43-235d-796b-be49-078f91d7472a'),
+    ANNOTATOR     : string2Uuid('01922a69-e7a0-7ac7-a581-c9ba9286ccf1'),
+    EXTRACTOR     : string2Uuid('019c9fbd-a91b-7242-9451-79ab632163a3'),
+    LABEL         : string2Uuid('019c9fbe-25c3-71b7-90ac-057dd582fa1e'),
 ]
 
-// Collibra system Description attribute type — same UUID on every Collibra
-// instance, so kept as a constant rather than a config variable.
+// Collibra system Description attribute type — same UUID on every instance.
 def descriptionAttrTypeId = string2Uuid('00000000-0000-0000-0000-000000003114')
-def linkAttrTypeId        = string2Uuid(config.linkAttrTypeId)
-def searchLinkAttrTypeId  = string2Uuid(config.searchLinkAttrTypeId)
-def subtypeAttrTypeId     = string2Uuid(config.subtypeAttrTypeId)
-def dataxrayIdAttrTypeId  = string2Uuid(config.dataxrayIdAttrTypeId)
+def linkAttrTypeId        = string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba')
+def searchLinkAttrTypeId  = string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254')
+def subtypeAttrTypeId     = string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad')
+def dataxrayIdAttrTypeId  = string2Uuid('019e73ae-1aa8-700c-8086-626326822c22')
 
 // --- Fetch classifications from Data X-Ray ----------------------------------
 
