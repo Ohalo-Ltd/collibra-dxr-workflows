@@ -2,18 +2,18 @@
 <!--
   syncDataXrayClassificationsNightly workflow
   ===========================================
-  Pulls the classification catalog from the Ohalo Data X-Ray API and creates
+  Pulls the classification catalog from the Data X-Ray API and creates
   matching Collibra assets in the configured classifications domain.
 
   Triggered automatically by a timer start event (cron "0 0 2 * * ?" — daily
   at 02:00 in the Collibra server timezone). No user initiates it, so the
   script must not depend on `users`/`item`/`initiator`, and ends cleanly on
-  misconfiguration or a transient Ohalo outage rather than throwing: a timer
-  workflow that fails before its first async task is retried 3× by Collibra
-  and then permanently disabled until redeployment.
+  misconfiguration or a transient Data X-Ray outage rather than throwing: a
+  timer workflow that fails before its first async task is retried 3× by
+  Collibra and then permanently disabled until redeployment.
 
-  All configuration (Ohalo URL, auth token, asset/attribute type UUIDs) is
-  read from the readable="false" form properties on the start event below;
+  All configuration (Data X-Ray URL, auth token, asset/attribute type UUIDs)
+  is read from the readable="false" form properties on the start event below;
   admins set them on the workflow settings page in the Collibra UI.
 
   Script placeholders of the form {script:filename.groovy} are resolved by
@@ -51,14 +51,14 @@
       Collibra UI workflow settings page.
 
       Collibra rejects non-readable form properties that have no default,
-      so ohaloAuthToken ships with a sentinel placeholder value. The Groovy
+      so dataxrayAuthToken ships with a sentinel placeholder value. The Groovy
       script detects that sentinel and ends cleanly (logging the reason),
       so a misconfigured token doesn't trip the timer's retry-then-disable.
     -->
     <startEvent id="startEvent" name="Start">
       <extensionElements>
-        <flowable:formProperty id="ohaloUrl" name="Ohalo Base URL" type="string" variable="ohaloUrl" default="&lt;paste Ohalo base URL here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="ohaloAuthToken" name="Ohalo Auth Token (Bearer)" type="string" variable="ohaloAuthToken" default="&lt;paste Ohalo Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
         <flowable:formProperty id="classificationsDomainId" name="Classifications Domain ID" type="string" variable="classificationsDomainId" default="019c9fbf-622c-76f4-9dd6-2a9730a11515" readable="false" required="true"/>
         <flowable:formProperty id="classificationAssetTypeId" name="Asset Type ID: Classification" type="string" variable="classificationAssetTypeId" default="01965d43-235d-796b-be49-078f91d7472a" readable="false" required="true"/>
         <flowable:formProperty id="annotatorAssetTypeId" name="Asset Type ID: Annotator" type="string" variable="annotatorAssetTypeId" default="01922a69-e7a0-7ac7-a581-c9ba9286ccf1" readable="false" required="true"/>
@@ -67,7 +67,7 @@
         <flowable:formProperty id="linkAttrTypeId" name="Attribute Type ID: Link" type="string" variable="linkAttrTypeId" default="019c9fc5-aa4c-72af-8918-caa54fe61eba" readable="false" required="true"/>
         <flowable:formProperty id="searchLinkAttrTypeId" name="Attribute Type ID: Search Link" type="string" variable="searchLinkAttrTypeId" default="019c9fc5-8ff5-77a7-962d-4b6b05c69254" readable="false" required="true"/>
         <flowable:formProperty id="subtypeAttrTypeId" name="Attribute Type ID: Subtype" type="string" variable="subtypeAttrTypeId" default="019c9fc5-ecc8-759b-9c0b-78547fa315ad" readable="false" required="true"/>
-        <flowable:formProperty id="ohaloIdAttrTypeId" name="Attribute Type ID: Ohalo ID" type="string" variable="ohaloIdAttrTypeId" default="&lt;paste Ohalo ID attribute type UUID here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayIdAttrTypeId" name="Attribute Type ID: Data X-Ray ID" type="string" variable="dataxrayIdAttrTypeId" default="&lt;paste Data X-Ray ID attribute type UUID here&gt;" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartTimerEvent]]></design:stencilid>
       </extensionElements>
