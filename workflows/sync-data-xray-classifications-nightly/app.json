@@ -1,7 +1,7 @@
 {
   "key": "syncDataXrayClassificationsNightly",
   "name": "Sync Data X-Ray Classification (Nightly)",
-  "description": "Mirror the Data X-Ray classification catalog into Collibra automatically every night.",
+  "description": "Sync the Data X-Ray classification catalog into Collibra automatically every night.",
   "theme": "theme-1",
   "icon": "glyphicon-refresh",
   "businessItemResourceType": "GLOBAL"
