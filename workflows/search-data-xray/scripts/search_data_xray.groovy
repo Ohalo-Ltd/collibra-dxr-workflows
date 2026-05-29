@@ -194,10 +194,10 @@ if (count == 0) {
     def writer = new StringWriter()
     def html = new MarkupBuilder(writer)
     html.table {
-        thead { tr { th('File Name'); th('Path') } }
+        thead { tr { th('Datasource'); th('Path') } }
         tbody {
             shown.each { f ->
-                tr { td(fileName(f)); td(filePath(f)) }
+                tr { td(dataSourceName(f)); td(filePath(f)) }
             }
         }
     }
@@ -267,7 +267,7 @@ def addAttribute(UUID assetId, UUID typeId, String value) {
     }
 }
 
-def fileName(f) { (f?.fileName ?: f?.name ?: '').toString() }
+def dataSourceName(f) { (f?.datasource?.name ?: '').toString() }
 def filePath(f) { (f?.path ?: f?.filePath ?: '').toString() }
 
 def parseIntOrDefault(String s, int fallback) {
