@@ -48,8 +48,8 @@ import java.nio.charset.StandardCharsets
 
 // Required configuration variables: variable name → human label shown in errors
 def requiredConfig = [
-    ohaloUrl             : 'Data X-Ray Base URL',
-    ohaloAuthToken       : 'Data X-Ray Auth Token (Bearer)',
+    dataxrayUrl          : 'Data X-Ray Base URL',
+    dataxrayAuthToken    : 'Data X-Ray Auth Token (Bearer)',
     queryDomainId        : 'Query Domain ID',
     queryAssetTypeId     : 'Asset Type ID: Search Query',
     groupsRelationTypeId : 'Relation Type ID: Query → Classification',
@@ -86,8 +86,8 @@ if (!missing.isEmpty()) {
     throw wf
 }
 
-def ohaloUrl              = config.ohaloUrl.replaceAll('/+$', '')
-def ohaloAuthToken        = config.ohaloAuthToken
+def dataxrayUrl           = config.dataxrayUrl.replaceAll('/+$', '')
+def dataxrayAuthToken     = config.dataxrayAuthToken
 def queryDomainId         = string2Uuid(config.queryDomainId)
 def queryAssetTypeId      = string2Uuid(config.queryAssetTypeId)
 def groupsRelationTypeId  = string2Uuid(config.groupsRelationTypeId)
@@ -170,7 +170,7 @@ addAttribute(queryId, descriptionAttrTypeId, descParts.join('\n\n'))
 // --- Call the Data X-Ray files API ------------------------------------------
 
 def encodedQuery = URLEncoder.encode(queryString, StandardCharsets.UTF_8.toString())
-def searchUrl = "${ohaloUrl}/api/v1/files?q=${encodedQuery}"
+def searchUrl = "${dataxrayUrl}/api/v1/files?q=${encodedQuery}"
 
 // Stream the (potentially huge) NDJSON response rather than buffering it: keep
 // only the first maxResults rows for the asset table, but keep counting every
@@ -180,7 +180,7 @@ def COUNT_CAP = 10_000
 
 def preview
 try {
-    preview = fetchFilePreview(searchUrl, ohaloAuthToken, maxResults, COUNT_CAP)
+    preview = fetchFilePreview(searchUrl, dataxrayAuthToken, maxResults, COUNT_CAP)
 } catch (Exception fetchEx) {
     loggerApi.error("Failed to fetch files from Data X-Ray: ${fetchEx.message}")
     def wf = new WorkflowException("Data X-Ray file search failed: ${fetchEx.message}", fetchEx)
