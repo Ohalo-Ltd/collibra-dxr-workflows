@@ -14,10 +14,11 @@
 //   5. Compose the equivalent Data X-Ray query string from those names plus the
 //      phrase filter (a "contains" match scoped to the picked annotators), and
 //      store it on the asset as its Description.
-//   6. Call the Data X-Ray files API with that query and collect up to
-//      `maxResults` matches.
-//   7. Store a rich HTML results table on the asset, and publish process
-//      variables the results form renders.
+//   6. Call the Data X-Ray files API with that query, streaming every matching
+//      file into a CSV that is compressed on the fly into a ZIP, and keep the
+//      first `maxResults` rows for an inline HTML preview.
+//   7. Attach the results ZIP to the asset, store the HTML preview table, and
+//      publish process variables the results form renders.
 //
 // The only configuration variables are the per-instance secrets (base URL and
 // auth token), set by an admin on the workflow settings page; they ship with a
@@ -29,23 +30,32 @@
 //   conditionName  (String)  – the search name the user entered
 //   queryString    (String)  – the composed Data X-Ray query, or "(all files)"
 //   searchUrl      (String)  – the full Data X-Ray files API URL that was called
-//   resultCount        (Integer) – total matching files counted (capped at COUNT_CAP)
-//   resultCountDisplay (String)  – resultCount as text, or "many" if the cap was hit
-//   shownCount         (Integer) – rows written to the asset table (≤ maxResults)
+//   resultCount        (Integer) – total matching files (exact)
+//   resultCountDisplay (String)  – resultCount as text
+//   shownCount         (Integer) – rows shown in the inline preview table (≤ maxResults)
+//   attachmentName     (String)  – filename of the attached results ZIP, or "" if none
+//   zipCapped          (Boolean) – true if the ZIP was truncated at the 25 MB size cap
 //
-// The matching files themselves are stored as an HTML table attribute on the
-// search-query asset (first maxResults rows). The response is streamed, never
-// buffered whole, so the total can be counted without loading every file into
-// memory; counting stops at COUNT_CAP and reports "many" beyond that.
+// Every matching file is streamed straight into a CSV that is compressed on the
+// fly into a ZIP (only compressed bytes are ever held in memory), which is then
+// attached to the search-query asset. The response is never buffered whole, so
+// the exact total is counted without loading every file into memory. The ZIP is
+// capped at 25 MB: once that size is reached the CSV stops growing but the total
+// keeps counting, so the attachment is a bounded sample of a very large result set.
+// The first `maxResults` rows are additionally rendered as an inline HTML preview
+// table attribute on the asset.
 
 import com.collibra.dgc.core.api.dto.instance.asset.AddAssetRequest
 import com.collibra.dgc.core.api.dto.instance.attribute.AddAttributeRequest
+import com.collibra.dgc.core.api.dto.instance.attachment.AddAttachmentRequest
 import com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest
 import com.collibra.dgc.workflow.api.exception.WorkflowException
 import com.fasterxml.jackson.databind.ObjectMapper
 import groovy.xml.MarkupBuilder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 // --- Read & validate workflow configuration variables -----------------------
 
@@ -189,15 +199,17 @@ addAttribute(queryId, descriptionAttrTypeId, descParts.join('\n\n'))
 def encodedQuery = URLEncoder.encode(queryString, StandardCharsets.UTF_8.toString())
 def searchUrl = "${dataxrayUrl}/api/v1/files?q=${encodedQuery}"
 
-// Stream the (potentially huge) NDJSON response rather than buffering it: keep
-// only the first maxResults rows for the asset table, but keep counting every
-// row up to COUNT_CAP. If the count reaches the cap we stop early and report
-// the total as "many" rather than an exact figure.
-def COUNT_CAP = 10_000
+// Stream the (potentially huge) NDJSON response rather than buffering it:
+// compress every matching file straight into a ZIP'd CSV (only compressed bytes
+// are held in memory), keep the first maxResults rows for the inline preview
+// table, and count the exact total. The ZIP stops growing at MAX_ZIP_BYTES but
+// counting continues, so a very large result set yields a bounded sample plus an
+// accurate total.
+def MAX_ZIP_BYTES = 25 * 1024 * 1024  // 25 MB cap on the attached results ZIP
 
-def preview
+def result
 try {
-    preview = fetchFilePreview(searchUrl, dataxrayAuthToken, maxResults, COUNT_CAP)
+    result = fetchAndArchive(searchUrl, dataxrayAuthToken, maxResults, MAX_ZIP_BYTES)
 } catch (Exception fetchEx) {
     loggerApi.error("Failed to fetch files from Data X-Ray: ${fetchEx.message}")
     def wf = new WorkflowException("Data X-Ray file search failed: ${fetchEx.message}", fetchEx)
@@ -206,25 +218,57 @@ try {
     throw wf
 }
 
-def shown = preview.shown
-int total = preview.total
-boolean capped = preview.capped
-def totalDisplay = capped ? 'many' : total.toString()
+def shown = result.shown
+int total = result.total
+boolean zipCapped = result.zipCapped
+def zipBytes = result.zipBytes
+def totalDisplay = total.toString()
 
-loggerApi.info("Data X-Ray returned ${capped ? COUNT_CAP + '+' : total} file(s); writing ${shown.size()} to the asset table")
+loggerApi.info("Data X-Ray returned ${total} file(s); ZIP is ${zipBytes.length} byte(s)${zipCapped ? ' (capped at 25 MB)' : ''}, preview shows ${shown.size()}")
 
-// --- Store the matching files as an HTML table on the search-query asset -----
+// --- Attach the full results as a ZIP'd CSV to the search-query asset ---------
+
+// Filename derived from the search name; keep only filesystem-safe characters.
+def safeName = conditionName.replaceAll('[^A-Za-z0-9._-]+', '_').replaceAll('^_+|_+$', '')
+if (safeName.isEmpty()) safeName = 'search'
+def attachmentName = "${safeName}-results.zip".toString()
+
+if (total > 0) {
+    try {
+        attachmentApi.addAttachment(AddAttachmentRequest.builder()
+            .baseResourceId(queryId)
+            .baseResourceDiscriminator('Asset')
+            .fileName(attachmentName)
+            .fileStream(new ByteArrayInputStream(zipBytes))
+            .build())
+        loggerApi.info("Attached ${attachmentName} to asset ${queryId}")
+    } catch (Exception attachEx) {
+        // Best-effort: the asset and inline preview still stand if the attach fails.
+        loggerApi.warn("Failed to attach results ZIP to asset ${queryId}: ${attachEx.message}")
+        attachmentName = ''
+    }
+} else {
+    attachmentName = ''
+}
+
+// --- Store the first maxResults matches as an HTML preview table --------------
 
 if (shown.isEmpty()) {
     addAttribute(queryId, filesAttrTypeId, 'Query returned 0 results')
 } else {
+    def moreNote = total > shown.size()
+        ? " The full result set (${totalDisplay} file(s)${zipCapped ? ', capped at 25 MB' : ''}) is attached to this asset as ${attachmentName ?: 'a ZIP'}."
+        : ''
     def writer = new StringWriter()
     def html = new MarkupBuilder(writer)
-    html.table {
-        thead { tr { th('Datasource'); th('Path') } }
-        tbody {
-            shown.each { f ->
-                tr { td(dataSourceName(f)); td(filePath(f)) }
+    html.div {
+        p("Preview — first ${shown.size()} of ${totalDisplay} matching file(s).${moreNote}".toString())
+        table {
+            thead { tr { th('Datasource'); th('Path') } }
+            tbody {
+                shown.each { f ->
+                    tr { td(dataSourceName(f)); td(filePath(f)) }
+                }
             }
         }
     }
@@ -239,8 +283,10 @@ execution.setVariable('searchUrl', searchUrl)
 execution.setVariable('resultCount', total)
 execution.setVariable('resultCountDisplay', totalDisplay)
 execution.setVariable('shownCount', shown.size())
+execution.setVariable('attachmentName', attachmentName)
+execution.setVariable('zipCapped', zipCapped)
 
-loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}")
+loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, attachment=${attachmentName ?: '(none)'}")
 
 // --- Helpers ----------------------------------------------------------------
 
@@ -316,22 +362,36 @@ def addAttribute(UUID assetId, UUID typeId, String value) {
 def dataSourceName(f) { (f?.datasource?.name ?: '').toString() }
 def filePath(f) { (f?.path ?: f?.filePath ?: '').toString() }
 
+// Escape one CSV field per RFC 4180: quote it when it contains a comma, quote,
+// CR or LF, doubling any embedded quotes.
+def csvEscape(value) {
+    def s = (value ?: '').toString()
+    if (s.indexOf('"') >= 0 || s.indexOf(',') >= 0 || s.indexOf('\n') >= 0 || s.indexOf('\r') >= 0) {
+        return '"' + s.replace('"', '""') + '"'
+    }
+    return s
+}
+
 // GET the Data X-Ray files endpoint and stream the response. The endpoint
 // returns newline-delimited JSON (one file object per line), which can be very
 // large, so we never buffer the whole body: Jackson's MappingIterator reads one
-// value at a time off the input stream. We retain only the first `keepLimit`
-// rows (for the asset table) but keep counting every row up to `countCap`.
+// value at a time off the input stream. Each row is written to a CSV that is
+// compressed on the fly into a single-entry ZIP (results.csv) held in a
+// ByteArrayOutputStream — so only *compressed* bytes accumulate in memory. The
+// first `keepLimit` rows are also retained for the inline preview table.
 //
-// Returns [shown: List (≤ keepLimit), total: int (≤ countCap), capped: boolean].
-// `capped` is true when the stream was stopped early at countCap, meaning the
-// real total is at least countCap.
-def fetchFilePreview(String url, String authToken, int keepLimit, int countCap) {
+// The ZIP stops growing once its compressed size reaches `maxZipBytes` (we stop
+// a headroom margin early so the final flush + central directory stay under the
+// cap), but every row is still counted, so `total` is always exact.
+//
+// Returns [shown: List (≤ keepLimit), total: int, zipCapped: boolean, zipBytes: byte[]].
+def fetchAndArchive(String url, String authToken, int keepLimit, int maxZipBytes) {
     def conn = (HttpURLConnection) new URL(url).openConnection()
     conn.setRequestMethod('GET')
     conn.setRequestProperty('Authorization', "Bearer ${authToken}")
     conn.setRequestProperty('Content-Type', 'application/json')
     conn.setConnectTimeout(30_000)
-    conn.setReadTimeout(60_000)
+    conn.setReadTimeout(300_000)  // reading every matching row can take minutes
 
     def code = conn.getResponseCode()
     if (code != 200) {
@@ -344,9 +404,20 @@ def fetchFilePreview(String url, String authToken, int keepLimit, int countCap) 
         throw new RuntimeException("Data X-Ray API returned HTTP ${code}: ${truncate(errBody, 500)}")
     }
 
+    // Stop the CSV a little before the hard cap so the deflater's final flush and
+    // the ZIP central directory (written on close) cannot push it over 25 MB.
+    def stopAt = Math.max(0, maxZipBytes - 256 * 1024)
+
     def shown = []
     int total = 0
-    boolean capped = false
+    boolean zipCapped = false
+
+    def baos = new ByteArrayOutputStream()
+    def zos = new ZipOutputStream(baos)
+    zos.putNextEntry(new ZipEntry('results.csv'))
+    def csv = new OutputStreamWriter(zos, StandardCharsets.UTF_8)
+    csv.write('Datasource,Path\r\n')
+
     def input = conn.getInputStream()
     try {
         def reader = new ObjectMapper().readerFor(Map).readValues(input)
@@ -355,11 +426,14 @@ def fetchFilePreview(String url, String authToken, int keepLimit, int countCap) 
             if (total < keepLimit) {
                 shown << f
             }
-            total++
-            if (total >= countCap) {
-                capped = true
-                break
+            if (!zipCapped) {
+                csv.write(csvEscape(dataSourceName(f)) + ',' + csvEscape(filePath(f)) + '\r\n')
+                csv.flush()
+                if (baos.size() >= stopAt) {
+                    zipCapped = true
+                }
             }
+            total++
         }
     } catch (Exception parseEx) {
         throw new RuntimeException("Data X-Ray API response could not be parsed as JSON: ${parseEx.message}")
@@ -367,7 +441,16 @@ def fetchFilePreview(String url, String authToken, int keepLimit, int countCap) 
         try { input.close() } catch (Exception ignored) { /* best-effort */ }
         conn.disconnect()
     }
-    return [shown: shown, total: total, capped: capped]
+
+    try {
+        csv.flush()
+        zos.closeEntry()
+        zos.close()
+    } catch (Exception ignored) {
+        // best-effort: baos already holds the compressed bytes written so far
+    }
+
+    return [shown: shown, total: total, zipCapped: zipCapped, zipBytes: baos.toByteArray()]
 }
 
 def truncate(String s, int max) {
