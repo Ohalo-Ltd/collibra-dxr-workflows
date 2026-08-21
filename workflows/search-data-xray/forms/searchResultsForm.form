@@ -5,7 +5,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Search complete",
-          "value": "<p>The search query <b>{{conditionName}}</b> was created and linked to your selected classifications.</p><p><b>Data X-Ray query:</b> <code>{{queryString}}</code></p><p><b>Matching files:</b> {{resultCountDisplay}}</p><p>A <b>preview</b> of the first {{shownCount}} match(es) is stored as a table on the search-query asset, and the full result set is attached to the asset as a ZIP'd CSV (<code>{{attachmentName}}</code>). Open the asset to review the preview and download the attachment. Full detail is also in <code>dgc.log</code>. Click <b>Send</b> to close this task.</p>",
+          "value": "<p>The search query <b>{{conditionName}}</b> was created and linked to your selected classifications.</p><p><b>Data X-Ray query:</b> <code>{{queryString}}</code></p><p><b>Matching files:</b> {{resultCountDisplay}}</p><p>A <b>preview</b> of the first {{shownCount}} match(es) is stored as a table on the search-query asset, and the full result set is attached to the asset as a ZIP'd CSV (<code>{{attachmentName}}</code>). Open the asset to review the preview and download the attachment. Full detail is also in <code>dgc.log</code>.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -16,12 +16,114 @@
           "type": "htmlComponent"
         }
       ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Import as assets",
+          "value": "<p>You can import all <b>{{resultCountDisplay}}</b> matching files as <b>Data X-Ray File</b> assets in the <b>Data X-Ray Files</b> domain, each carrying its datasource, path, size, last-modified date, a link back to Data X-Ray, and relations to the classifications it matched. The import runs in the background in batches; an <b>Import Summary</b> task will appear in your inbox when it finishes.</p><p>Tick <b>Keep in sync nightly</b> to have this search rerun automatically every night — new files are imported, changed files updated, and files that no longer match are <b>retired</b> (never deleted, so their history is kept).</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{importAllowed}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "importOffer",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Large import",
+          "value": "<p>⚠️ This search matched more than 10,000 files. The import will work, but expect it to run for a while in the background — check the <b>Data X-Ray Files</b> domain or wait for the <b>Import Summary</b> task.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{importWarn}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "importWarnNote",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Import unavailable",
+          "value": "<p>🚫 {{importBlockedMessage}}</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{importBlocked}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "importBlockedNote",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["cloud-boolean"], "stencilId": "cloud-boolean" },
+          "label": "Import all {{resultCountDisplay}} matching files as assets",
+          "value": "{{importDecision}}",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{importAllowed}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "importDecision",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["cloud-boolean"], "stencilId": "cloud-boolean" },
+          "label": "Keep in sync nightly (rerun this search and re-sync its file assets every night)",
+          "value": "{{keepInSync}}",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{importAllowed}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "keepInSync",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Finish",
+          "value": "<p>Click <b>Send</b> to close this task. If you ticked the import box, the import starts immediately in the background.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "finishNote",
+          "type": "htmlComponent"
+        }
+      ]
     }
   ],
   "metadata": {
     "key": "searchResultsForm",
     "name": "Search Results",
-    "description": "Shows the composed Data X-Ray query and the matching files after the search-query asset is created.",
+    "description": "Shows the composed Data X-Ray query and the matching files, and offers to import the results as assets.",
     "version": "1",
     "modelType": "form",
     "flowableDesignVersion": 3110,

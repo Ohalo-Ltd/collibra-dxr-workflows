@@ -4,8 +4,9 @@
 // run by an admin from the + Create menu.
 //
 // What it does:
-//   1. Ensures the community, domains, asset types and attribute types the
-//      Data X-Ray sync & search workflows depend on all exist — creating any
+//   1. Ensures the community, domains, asset types, attribute types and the
+//      "returns / returned by" relation type the Data X-Ray sync, search,
+//      import and rerun workflows depend on all exist — creating any
 //      that are missing with FIXED canonical UUIDs. Those UUIDs are the same
 //      ones hardcoded as constants in the sync/search scripts and baked into
 //      searchDataXrayForm.form's pickers, so a fresh instance lines up with no
@@ -23,8 +24,14 @@
 //        - 'Data X-Ray User' — a plain membership role, no permissions; it only
 //          exists to gate who may *run* the search/sync workflows.
 //   4. Sets each Data X-Ray workflow definition's start roles ("who can run"):
-//        - searchDataXray / syncDataXrayClassifications → User + Admin
-//        - syncDataXrayClassificationsNightly / configureDataXrayWorkflows → Admin
+//        - searchDataXray / syncDataXrayClassifications / rerunDataXraySearch → User + Admin
+//        - syncDataXrayClassificationsNightly / syncDataXrayFilesNightly /
+//          configureDataXrayWorkflows → Admin
+//      For rerunDataXraySearch it additionally sets exclusivity UNCONSTRAINED
+//      (so an open rerun-summary task never hides the action or blocks the
+//      nightly driver). The action cannot be scoped to the query asset type
+//      (asset-type assignment rules reject global start roles), so the rerun
+//      script hard-guards the asset type at runtime instead.
 //      This is applied at runtime via workflowDefinitionApi (a partial update —
 //      it does NOT touch the configuration variables, so admin-set tokens are
 //      preserved). This runtime assignment is the ONLY thing that enforces start
@@ -63,19 +70,23 @@ import com.collibra.dgc.core.api.dto.instance.domain.AddDomainRequest
 import com.collibra.dgc.core.api.dto.meta.assettype.AddAssetTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AddAttributeTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AttributeKind
+import com.collibra.dgc.core.api.dto.meta.relationtype.AddRelationTypeRequest
 import com.collibra.dgc.core.api.dto.assignment.AddAssignmentRequest
+import com.collibra.dgc.core.api.dto.assignment.ChangeAssignmentRequest
 import com.collibra.dgc.core.api.dto.assignment.CharacteristicTypeAssignmentReference
+import com.collibra.dgc.core.api.model.assignment.RelationTypeDirection
 import com.collibra.dgc.core.api.model.meta.type.AssetTypeSymbolType
 import com.collibra.dgc.core.api.model.meta.type.attribute.StringType
 import com.collibra.dgc.core.api.dto.role.AddRoleRequest
 import com.collibra.dgc.core.api.dto.role.ChangeRoleRequest
 import com.collibra.dgc.core.api.model.security.Permission
 import com.collibra.dgc.core.api.dto.workflow.ChangeWorkflowDefinitionRequest
+import com.collibra.dgc.core.api.model.workflow.WorkflowExclusivity
 
 // --- Canonical identifiers (fixed across instances) -------------------------
 
 def COMMUNITY_ID   = '019c9fbf-0ab2-7258-b118-e68d3e814fe1'
-def COMMUNITY_NAME = 'Collibra to Data xRay Integration'
+def COMMUNITY_NAME = 'Collibra to Data X-Ray Integration'
 
 // System "Data Asset Domain" domain type — present on every instance.
 def DOMAIN_TYPE_ID = '00000000-0000-0000-0000-000000030001'
@@ -89,6 +100,32 @@ def SEARCH_LINK_ATTR_ID = '019c9fc5-8ff5-77a7-962d-4b6b05c69254'
 def SUBTYPE_ATTR_ID     = '019c9fc5-ecc8-759b-9c0b-78547fa315ad'
 def DXID_ATTR_ID        = '019e73ae-1aa8-700c-8086-626326822c22'
 def FILES_ATTR_ID       = '019e2736-8bd0-727a-b4ab-6899517a3e73'
+
+// File-import model (gated asset import + rerun + nightly file sync). Same
+// canonical-UUID scheme as everything above; the search/rerun scripts hardcode
+// these as constants.
+def FILES_DOMAIN_ID       = '019e9210-52a4-7c31-9b5e-3d8f0a6c1e42'
+def FILE_TYPE_ID          = '019e9210-6e77-7b02-8c4a-92d15b7f30a9'
+def FILE_PATH_ATTR_ID     = '019e9210-8a3c-70d5-b1e8-604f9c2d7a53'
+def FILE_SIZE_ATTR_ID     = '019e9210-9bd0-7e46-a927-15c8e03b6f84'
+def LAST_MODIFIED_ATTR_ID = '019e9210-ad15-73f8-bc06-7e94a1d52c37'
+def DATASOURCE_ATTR_ID    = '019e9210-be62-7a89-90d3-48b6f57e0c21'
+def QUERY_ATTR_ID         = '019e9210-cf9b-751a-85f2-d30c7a48b9e6'
+def FILTER_ATTR_ID        = '019e9210-e04d-7c6b-a481-5f29d8036c7a'
+
+// "returns / returned by" — links an Unstructured Data Query asset (source) to
+// each Data X-Ray File asset (target) it currently returns. Deliberately NOT
+// the system "groups" relation type (7017), which the query already uses for
+// its classification criteria: a dedicated type makes "which files does this
+// query return" a clean findRelations(typeId, sourceId) and lets the rerun
+// workflow retire a file only once NO query returns it any more.
+def RETURNS_RELTYPE_ID    = '019e9210-f180-79dc-b5a0-6c31e94f82d5'
+
+// System "groups / is grouped by" relation type — present on every instance.
+// query→classification and file→classification links use it.
+def GROUPS_RELTYPE_ID     = '00000000-0000-0000-0000-000000007017'
+
+def QUERY_TYPE_ID         = '019dcf97-3bac-72c3-8b59-b6ddbe8a8396'
 
 // System parent asset types — present on every instance.
 def DATA_CONCEPT_TYPE_ID = '00000000-0000-0000-0000-000000031113'
@@ -113,13 +150,28 @@ def starterRoleDefs = [
      roleIds: [ROLE_USER_ID, ROLE_ADMIN_ID]],
     [processId: 'syncDataXrayClassificationsNightly', name: 'Sync Data X-Ray Classifications (Nightly)',
      roleIds: [ROLE_ADMIN_ID]],
+    // UNCONSTRAINED exclusivity: by default Collibra allows one running
+    // instance per resource, which HIDES the workflow from the asset's action
+    // menu while its rerun-summary task sits in someone's inbox (and would
+    // make the nightly driver's start calls fail for queries with an open
+    // summary). NOTE: the start action cannot be scoped to the query asset
+    // type — asset-type assignment rules are rejected (workflowWrongRoles)
+    // for workflows whose start roles are GLOBAL roles, and our access model
+    // is global roles by design. rerun_collector.groovy therefore hard-guards
+    // the asset type at runtime instead.
+    [processId: 'rerunDataXraySearch',                name: 'Rerun Data X-Ray Search',
+     roleIds: [ROLE_USER_ID, ROLE_ADMIN_ID],
+     exclusivity: 'UNCONSTRAINED'],
+    [processId: 'syncDataXrayFilesNightly',           name: 'Sync Data X-Ray Files (Nightly)',
+     roleIds: [ROLE_ADMIN_ID]],
     [processId: 'configureDataXrayWorkflows',         name: 'Configure Data X-Ray Workflows',
      roleIds: [ROLE_ADMIN_ID]],
 ]
 
 def domainDefs = [
-    [id: '019c9fbf-622c-76f4-9dd6-2a9730a11515', name: 'Data xRay Classifications'],
-    [id: '019dcf96-233a-72e1-bf25-8398b8c9146e', name: 'Data xRay Custom Queries'],
+    [id: '019c9fbf-622c-76f4-9dd6-2a9730a11515', name: 'Data X-Ray Classifications'],
+    [id: '019dcf96-233a-72e1-bf25-8398b8c9146e', name: 'Data X-Ray Custom Queries'],
+    [id: FILES_DOMAIN_ID,                        name: 'Data X-Ray Files'],
 ]
 
 def assetTypeDefs = [
@@ -138,14 +190,26 @@ def assetTypeDefs = [
     [id: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'Unstructured Data Query',
      parent: DATA_ASSET_TYPE_ID, symbol: 'ICON_CODE', color: '#1fb07f',
      icon: 'uf-additional-icon-tool_wrench', acronym: null],
+    // displayName enabled: imported file assets carry a uniqueness suffix in
+    // their full name (Collibra names are unique per domain and 10k files WILL
+    // contain duplicate filenames), so the UI shows the clean display name.
+    [id: FILE_TYPE_ID, name: 'Data X-Ray File',
+     parent: DATA_ASSET_TYPE_ID, symbol: 'ACRONYM_CODE', color: '#d97e3e',
+     icon: null, acronym: 'FILE', displayName: true],
 ]
 
 def attrTypeDefs = [
-    [id: LINK_ATTR_ID,        name: 'Link',          stringType: 'PLAIN_TEXT'],
-    [id: SEARCH_LINK_ATTR_ID, name: 'Search Link',   stringType: 'PLAIN_TEXT'],
-    [id: SUBTYPE_ATTR_ID,     name: 'Sub Type',      stringType: 'PLAIN_TEXT'],
-    [id: DXID_ATTR_ID,        name: 'Data X-Ray ID', stringType: 'PLAIN_TEXT'],
-    [id: FILES_ATTR_ID,       name: 'Files',         stringType: 'RICH_TEXT'],
+    [id: LINK_ATTR_ID,          name: 'Link',                  stringType: 'PLAIN_TEXT'],
+    [id: SEARCH_LINK_ATTR_ID,   name: 'Search Link',           stringType: 'PLAIN_TEXT'],
+    [id: SUBTYPE_ATTR_ID,       name: 'Sub Type',              stringType: 'PLAIN_TEXT'],
+    [id: DXID_ATTR_ID,          name: 'Data X-Ray ID',         stringType: 'PLAIN_TEXT'],
+    [id: FILES_ATTR_ID,         name: 'Files',                 stringType: 'RICH_TEXT'],
+    [id: FILE_PATH_ATTR_ID,     name: 'File Path',             stringType: 'PLAIN_TEXT'],
+    [id: FILE_SIZE_ATTR_ID,     name: 'File Size',             stringType: 'PLAIN_TEXT'],
+    [id: LAST_MODIFIED_ATTR_ID, name: 'Last Modified',         stringType: 'PLAIN_TEXT'],
+    [id: DATASOURCE_ATTR_ID,    name: 'Datasource Name',       stringType: 'PLAIN_TEXT'],
+    [id: QUERY_ATTR_ID,         name: 'Data X-Ray Query',      stringType: 'PLAIN_TEXT'],
+    [id: FILTER_ATTR_ID,        name: 'Annotated Text Filter', stringType: 'PLAIN_TEXT'],
 ]
 
 // Which custom attribute types each asset type should surface on its page.
@@ -158,8 +222,23 @@ def assignmentDefs = [
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID]],
     [assetTypeId: '019c9fbe-25c3-71b7-90ac-057dd582fa1e', name: 'Label',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID]],
+    // relations: relation types surfaced on the asset page (the page only
+    // renders characteristics that are IN the assignment — relations written
+    // via the API exist regardless, but stay invisible without this).
+    // TO_TARGET = this type is the relation's source (page shows the role);
+    // TO_SOURCE = this type is the target (page shows the co-role).
     [assetTypeId: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'Unstructured Data Query',
-     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, FILES_ATTR_ID, DXID_ATTR_ID]],
+     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, FILES_ATTR_ID, DXID_ATTR_ID,
+                   QUERY_ATTR_ID, FILTER_ATTR_ID],
+     relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups classifications
+                 [id: RETURNS_RELTYPE_ID, direction: 'TO_TARGET']]], // returns files
+    // descriptionMin 0: imported file assets carry no Description, so a
+    // mandatory Description would flag every one of them as incomplete.
+    [assetTypeId: FILE_TYPE_ID, name: 'Data X-Ray File', descriptionMin: 0,
+     customAttrs: [FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
+                   DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID],
+     relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
+                 [id: RETURNS_RELTYPE_ID, direction: 'TO_SOURCE']]], // returned by queries
 ]
 
 // Standard out-of-the-box statuses, Candidate first (it becomes the default).
@@ -238,7 +317,7 @@ assetTypeDefs.each { t ->
                 .parentId(string2Uuid(t.parent))
                 .symbolType(AssetTypeSymbolType.valueOf(t.symbol))
                 .color(t.color)
-                .displayNameEnabled(false)
+                .displayNameEnabled(t.displayName == true)
                 .ratingEnabled(false)
             if (t.icon)    { b.iconCode(t.icon) }
             if (t.acronym) { b.acronymCode(t.acronym) }
@@ -275,6 +354,31 @@ attrTypeDefs.each { a ->
     }
 }
 
+// --- Phase 4b: relation type -------------------------------------------------
+
+// "Unstructured Data Query returns Data X-Ray File". Created with a fixed
+// canonical UUID like everything else; the search/rerun scripts reference it
+// as a constant.
+try {
+    def rtid = string2Uuid(RETURNS_RELTYPE_ID)
+    if (relationTypeApi.exists(rtid)) {
+        skipped << "Relation type 'returns / returned by'"
+    } else {
+        relationTypeApi.addRelationType(AddRelationTypeRequest.builder()
+            .id(rtid)
+            .sourceTypeId(string2Uuid(QUERY_TYPE_ID))
+            .role('returns')
+            .targetTypeId(string2Uuid(FILE_TYPE_ID))
+            .coRole('returned by')
+            .build())
+        created << "Relation type 'returns / returned by'"
+        loggerApi.info("Created relation type returns/returned by [${RETURNS_RELTYPE_ID}]")
+    }
+} catch (Exception e) {
+    failed << "Relation type 'returns / returned by': ${e.message}"
+    loggerApi.error("ensure relation type failed: ${e.message}")
+}
+
 // --- Phase 5: assignments (best-effort, never disturb existing) -------------
 
 // Resolve the standard statuses once; only keep those that exist here.
@@ -282,17 +386,91 @@ def statusUuids = STANDARD_STATUS_IDS
     .findAll { statusApi.exists(string2Uuid(it)) }
     .collect { string2Uuid(it) }
 
+// Augment an assignment the asset type already owns with any of the spec's
+// custom attribute types it doesn't yet surface. The characteristic list is
+// rebuilt faithfully from the assignment's own typed reference lists
+// (attributes, relations, complex relations — with min/max and relation
+// direction/restriction preserved) and the missing attributes appended.
+// Assignments carrying articulation or validation rules are left alone:
+// changeAssignment replaces those lists too, and wiping hand-tuned rules is
+// worse than an attribute not showing on the asset page (the workflows write
+// attributes via the API regardless of assignment).
+def augmentOwnedAssignment = { own, spec, List missingAttrUuids, List missingRelSpecs ->
+    if (!(own.getArticulationRules() ?: []).isEmpty() || !(own.getValidationRules() ?: []).isEmpty()) {
+        skipped << "Assignment for '${spec.name}' (has hand-tuned rules — add the new characteristic(s) in the UI)"
+        loggerApi.warn("Assignment for ${spec.name} carries articulation/validation rules; not auto-augmenting")
+        return
+    }
+    def refs = []
+    def copyRefs = { list, String discriminator ->
+        (list ?: []).each { r ->
+            def b = CharacteristicTypeAssignmentReference.builder()
+                .id(r.getAssignedResourceReference().getId())
+                .resourceDiscriminator(discriminator)
+                .min(r.getMinimumOccurrences())
+                .max(r.getMaximumOccurrences())
+            if (r.getRelationTypeDirection() != null) {
+                b.relationTypeDirection(r.getRelationTypeDirection())
+                if (r.getRelationTypeRestriction() != null) {
+                    b.relationTypeRestriction(r.getRelationTypeRestriction().getId())
+                }
+            }
+            refs << b.build()
+        }
+    }
+    copyRefs(own.getAssignedAttributeTypeReferences(),       'AttributeType')
+    copyRefs(own.getAssignedRelationTypeReferences(),        'RelationType')
+    copyRefs(own.getAssignedComplexRelationTypeReferences(), 'ComplexRelationType')
+    missingAttrUuids.each { attrId ->
+        refs << CharacteristicTypeAssignmentReference.builder()
+            .id(attrId)
+            .resourceDiscriminator('AttributeType')
+            .min(0)
+            .build()
+    }
+    missingRelSpecs.each { rel ->
+        refs << CharacteristicTypeAssignmentReference.builder()
+            .id(string2Uuid(rel.id))
+            .resourceDiscriminator('RelationType')
+            .relationTypeDirection(RelationTypeDirection.valueOf(rel.direction))
+            .min(0)
+            .build()
+    }
+    def changeReq = ChangeAssignmentRequest.builder()
+        .assignmentId(own.getId())
+        .statusIds(own.getStatuses().collect { it.getId() })
+        .characteristicTypes(refs)
+    def domainTypeIds = (own.getDomainTypes() ?: []).collect { it.getId() }
+    if (!domainTypeIds.isEmpty()) { changeReq.domainTypeIds(domainTypeIds) }
+    assignmentApi.changeAssignment(changeReq.build())
+    created << "Assignment for '${spec.name}' — surfaced ${missingAttrUuids.size()} attribute / ${missingRelSpecs.size()} relation type(s)"
+    loggerApi.info("Augmented assignment for ${spec.name}: +${missingAttrUuids.size()} attribute, +${missingRelSpecs.size()} relation type(s)")
+}
+
 assignmentDefs.each { spec ->
     try {
         def tid = string2Uuid(spec.assetTypeId)
         def applicable = assignmentApi.getAssignmentsForAssetType(tid)
 
-        // If this asset type already owns an assignment, leave it untouched —
-        // augmenting a hand-tuned assignment is risky and unnecessary (the
-        // workflows write attributes via the API regardless of assignment).
-        def ownsOwn = applicable.any { it.getAssetType().getId() == tid }
-        if (ownsOwn) {
-            skipped << "Assignment for '${spec.name}' (already has its own)"
+        // If this asset type already owns an assignment, augment it with any
+        // custom attributes it doesn't yet surface (no-op when complete).
+        def own = applicable.find { it.getAssetType().getId() == tid }
+        if (own != null) {
+            def ownAttrIds = [] as Set
+            own.getAssignedAttributeTypeReferences().each { ref ->
+                ownAttrIds << ref.getAssignedResourceReference().getId()
+            }
+            def ownRelIds = [] as Set
+            own.getAssignedRelationTypeReferences().each { ref ->
+                ownRelIds << ref.getAssignedResourceReference().getId()
+            }
+            def missingOnOwn = spec.customAttrs.collect { string2Uuid(it) }.findAll { !ownAttrIds.contains(it) }
+            def missingRels = (spec.relations ?: []).findAll { !ownRelIds.contains(string2Uuid(it.id)) }
+            if (missingOnOwn.isEmpty() && missingRels.isEmpty()) {
+                skipped << "Assignment for '${spec.name}' (already has its own)"
+            } else {
+                augmentOwnedAssignment(own, spec, missingOnOwn, missingRels)
+            }
             return
         }
 
@@ -315,17 +493,28 @@ assignmentDefs.each { spec ->
             return
         }
 
-        // Create an own assignment: Description (mandatory) + custom attributes.
+        // Create an own assignment: Description + custom attributes. Description
+        // is mandatory (min 1) unless the spec relaxes it — file assets carry no
+        // description, so theirs is optional.
+        def descriptionMin = spec.containsKey('descriptionMin') ? spec.descriptionMin : 1
         def refs = []
         refs << CharacteristicTypeAssignmentReference.builder()
             .id(string2Uuid(DESCRIPTION_ATTR_ID))
             .resourceDiscriminator('AttributeType')
-            .min(1)
+            .min(descriptionMin)
             .build()
         spec.customAttrs.each { attrId ->
             refs << CharacteristicTypeAssignmentReference.builder()
                 .id(string2Uuid(attrId))
                 .resourceDiscriminator('AttributeType')
+                .min(0)
+                .build()
+        }
+        (spec.relations ?: []).each { rel ->
+            refs << CharacteristicTypeAssignmentReference.builder()
+                .id(string2Uuid(rel.id))
+                .resourceDiscriminator('RelationType')
+                .relationTypeDirection(RelationTypeDirection.valueOf(rel.direction))
                 .min(0)
                 .build()
         }
@@ -396,13 +585,14 @@ starterRoleDefs.each { s ->
             return
         }
         def roleUuids = s.roleIds.collect { string2Uuid(it) }
-        workflowDefinitionApi.changeWorkflowDefinition(ChangeWorkflowDefinitionRequest.builder()
+        def change = ChangeWorkflowDefinitionRequest.builder()
             .id(wd.getId())
             .startRoleIds(roleUuids)
-            .build())
+        if (s.exclusivity) { change.exclusivity(WorkflowExclusivity.valueOf(s.exclusivity)) }
+        workflowDefinitionApi.changeWorkflowDefinition(change.build())
         def who = s.roleIds.contains(ROLE_USER_ID) ? 'User + Admin' : 'Admin only'
-        configured << "Run-access for '${s.name}' → ${who}"
-        loggerApi.info("Set start roles for ${s.processId}: ${roleUuids}")
+        configured << "Run-access for '${s.name}' → ${who}${s.exclusivity ? " (${s.exclusivity})" : ''}"
+        loggerApi.info("Set start roles for ${s.processId}: ${roleUuids}${s.exclusivity ? ", exclusivity ${s.exclusivity}" : ''}")
     } catch (Exception e) {
         // getWorkflowDefinitionByProcessId throws if the definition is absent.
         skipped << "Run-access for '${s.name}' (not deployed yet)"

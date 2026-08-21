@@ -1,0 +1,8 @@
+{
+  "key": "syncDataXrayFilesNightly",
+  "name": "Sync Data X-Ray Files (Nightly)",
+  "description": "Rerun every Data X-Ray search flagged 'keep in sync' each night, re-syncing its imported file assets automatically.",
+  "theme": "theme-1",
+  "icon": "glyphicon-refresh",
+  "businessItemResourceType": "GLOBAL"
+}

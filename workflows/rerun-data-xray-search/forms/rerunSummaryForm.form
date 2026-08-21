@@ -1,0 +1,30 @@
+{
+  "rows": [
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Rerun complete",
+          "value": "<p>The saved search <b>{{conditionName}}</b> was rerun and its file assets re-synced.</p><ul><li><b>Created:</b> {{importCreatedCount}} new file asset(s)</li><li><b>Updated:</b> {{importUpdatedCount}} existing file asset(s)</li><li><b>Unlinked:</b> {{rerunUnlinkedCount}} file(s) no longer returned by this search</li><li><b>Retired:</b> {{rerunRetiredCount}} file asset(s) no query returns any more (status Obsolete — kept as records, never deleted)</li><li><b>Stale classification links removed:</b> {{importRelationsRemovedCount}}</li><li><b>Failed:</b> {{importFailedCount}}</li><li><b>Unresolved classification links:</b> {{importSkippedClassifications}}</li></ul><p>The file assets live in the <b>Data X-Ray Files</b> domain. Full detail is in <code>dgc.log</code>. Click <b>Send</b> to close this task.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "rerunSummary",
+          "type": "htmlComponent"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "key": "rerunSummaryForm",
+    "name": "Rerun Summary",
+    "description": "Shows what the Data X-Ray search rerun created, updated, retired and failed.",
+    "version": "1",
+    "modelType": "form",
+    "flowableDesignVersion": 3110,
+    "palette": "flowable-core-form-palette"
+  }
+}

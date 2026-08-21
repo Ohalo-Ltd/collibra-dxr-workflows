@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  rerunDataXraySearch workflow
+  ============================
+  Rerun a saved Data X-Ray search from its Unstructured Data Query asset and
+  re-sync the imported file assets:
+    startEvent (no form — started from the query asset's page, or headlessly
+                by the nightly file sync driver)
+      → rerunCollectorTask (script, sync: rebuilds the query from the asset's
+           classification relations + stored filter, re-runs it, builds the
+           batched work list, snapshots the previously returned file ids)
+      → syncBatchTask (script, ASYNC: one batch of 50 upserts per
+           execution/transaction — twin of the search workflow's import batch)
+      → moreWorkGateway ─ ${hasMoreWork} ─→ back to syncBatchTask
+      → retireTask (script, sync: unlink files no longer returned; retire the
+           ones no query returns any more — never delete)
+      → headlessGateway
+          ├─ headless run → endEvent (no user task to complete)
+          └─ interactive  → rerunSummaryTask (user form) → endEvent
+
+  businessItemResourceType is ASSET (see app.json), so Collibra offers this
+  workflow on asset pages; configure-data-xray-workflows restricts who can run
+  it via start roles. The nightly driver starts it per flagged query with the
+  hidden 'headless' form property set to 'true'.
+
+  All connection configuration lives on the start event as non-readable
+  formProperty entries (hidden admin settings edited on the workflow settings
+  page), same as the other Data X-Ray workflows. Each carries a non-empty
+  default because Collibra rejects empty defaults on non-readable properties.
+
+  Script placeholders of the form {script:filename.groovy} are resolved by
+  deploy.py before the BPMN is packaged.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+
+  <process id="rerunDataXraySearch"
+           name="Rerun Data X-Ray Search"
+           isExecutable="true"
+           flowable:candidateStarterGroups="flowableUser">
+    <documentation>Rerun a saved Data X-Ray search and re-sync its imported file assets (retiring files that no longer match).</documentation>
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
+      <extensionElements>
+        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
+        <!-- Set to 'true' by the nightly driver via startWorkflowInstances
+             formProperties; a headless run never throws and skips the summary
+             user task. Admins should leave this at 'false'. -->
+        <flowable:formProperty id="headless" name="Headless (set by the nightly sync — leave at false)" type="string" variable="headless" default="false" readable="false" required="false"/>
+
+        <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </startEvent>
+
+    <scriptTask id="rerunCollectorTask"
+                name="Rebuild &amp; Rerun Query"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:rerun_collector.groovy}}</script>
+    </scriptTask>
+
+    <!-- ASYNC: each execution is one transaction handling one batch of 50 —
+         the exclusive gateway below loops it until the work list is drained. -->
+    <scriptTask id="syncBatchTask"
+                name="Sync File Assets (batch)"
+                scriptFormat="groovy"
+                flowable:async="true"
+                flowable:exclusive="true"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:sync_files_batch.groovy}}</script>
+    </scriptTask>
+
+    <exclusiveGateway id="moreWorkGateway" name="More batches?" default="flowSyncDone">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+
+    <scriptTask id="retireTask"
+                name="Retire Orphaned Files"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:retire_orphans.groovy}}</script>
+    </scriptTask>
+
+    <exclusiveGateway id="headlessGateway" name="Headless?" default="flowInteractive">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+
+    <userTask id="rerunSummaryTask"
+              name="Rerun Summary"
+              flowable:candidateUsers="user(${initiator})"
+              flowable:formKey="rerunSummaryForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="rerunCollectorTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow2" sourceRef="rerunCollectorTask" targetRef="syncBatchTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow3" sourceRef="syncBatchTask" targetRef="moreWorkGateway">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowMoreWork" sourceRef="moreWorkGateway" targetRef="syncBatchTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowSyncDone" sourceRef="moreWorkGateway" targetRef="retireTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow4" sourceRef="retireTask" targetRef="headlessGateway">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowHeadless" sourceRef="headlessGateway" targetRef="endEvent">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${headless == 'true'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowInteractive" sourceRef="headlessGateway" targetRef="rerunSummaryTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow5" sourceRef="rerunSummaryTask" targetRef="endEvent">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_rerunDataXraySearch">
+    <bpmndi:BPMNPlane bpmnElement="rerunDataXraySearch" id="BPMNPlane_rerunDataXraySearch">
+
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
+        <omgdc:Bounds x="120" y="255" width="30" height="30"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="115" y="290" width="40" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="rerunCollectorTask" id="BPMNShape_rerunCollectorTask">
+        <omgdc:Bounds x="210" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="syncBatchTask" id="BPMNShape_syncBatchTask">
+        <omgdc:Bounds x="410" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="moreWorkGateway" id="BPMNShape_moreWorkGateway">
+        <omgdc:Bounds x="610" y="250" width="40" height="40"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="585" y="300" width="90" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="retireTask" id="BPMNShape_retireTask">
+        <omgdc:Bounds x="710" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="headlessGateway" id="BPMNShape_headlessGateway">
+        <omgdc:Bounds x="910" y="250" width="40" height="40"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="885" y="300" width="90" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="rerunSummaryTask" id="BPMNShape_rerunSummaryTask">
+        <omgdc:Bounds x="1010" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
+        <omgdc:Bounds x="1190" y="256" width="28" height="28"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="1187" y="290" width="34" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="150" y="270"/>
+        <omgdi:waypoint x="210" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="350" y="270"/>
+        <omgdi:waypoint x="410" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
+        <omgdi:waypoint x="550" y="270"/>
+        <omgdi:waypoint x="610" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowMoreWork" id="BPMNEdge_flowMoreWork">
+        <omgdi:waypoint x="630" y="250"/>
+        <omgdi:waypoint x="630" y="170"/>
+        <omgdi:waypoint x="480" y="170"/>
+        <omgdi:waypoint x="480" y="230"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSyncDone" id="BPMNEdge_flowSyncDone">
+        <omgdi:waypoint x="650" y="270"/>
+        <omgdi:waypoint x="710" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="BPMNEdge_flow4">
+        <omgdi:waypoint x="850" y="270"/>
+        <omgdi:waypoint x="910" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowHeadless" id="BPMNEdge_flowHeadless">
+        <omgdi:waypoint x="930" y="250"/>
+        <omgdi:waypoint x="930" y="180"/>
+        <omgdi:waypoint x="1204" y="180"/>
+        <omgdi:waypoint x="1204" y="256"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowInteractive" id="BPMNEdge_flowInteractive">
+        <omgdi:waypoint x="950" y="270"/>
+        <omgdi:waypoint x="1010" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="BPMNEdge_flow5">
+        <omgdi:waypoint x="1130" y="270"/>
+        <omgdi:waypoint x="1190" y="270"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>

@@ -35,6 +35,17 @@
 //   shownCount         (Integer) – rows shown in the inline preview table (≤ maxResults)
 //   attachmentName     (String)  – filename of the attached results ZIP, or "" if none
 //   zipCapped          (Boolean) – true if the ZIP was truncated at the 25 MB size cap
+//   queryAssetId       (String)  – UUID of the created search-query asset
+//   importAllowed      (Boolean) – results may be imported as file assets (> 0 results
+//                                  and the projected Data X-Ray Files domain population
+//                                  stays within the instance-wide 25k cap)
+//   importWarn         (Boolean) – import allowed but large (> 10k files): the results
+//                                  form shows a duration warning
+//   importBlocked      (Boolean) – results exist but importing would exceed the cap
+//   importBlockedMessage (String) – human-readable refusal, '' unless importBlocked
+//   filesDomainCount   (Integer) – current Data X-Ray Files domain population
+//   importDecision / keepInSync (Boolean) – defaults (false) for the results form's
+//                                  decision fields; the form overwrites them
 //
 // Every matching file is streamed straight into a CSV that is compressed on the
 // fly into a ZIP (only compressed bytes are ever held in memory), which is then
@@ -108,9 +119,20 @@ def queryAssetTypeId      = string2Uuid('019dcf97-3bac-72c3-8b59-b6ddbe8a8396')
 def groupsRelationTypeId  = string2Uuid('00000000-0000-0000-0000-000000007017')
 def descriptionAttrTypeId = string2Uuid('00000000-0000-0000-0000-000000003114')
 def filesAttrTypeId       = string2Uuid('019e2736-8bd0-727a-b4ab-6899517a3e73')
+def queryAttrTypeId       = string2Uuid('019e9210-cf9b-751a-85f2-d30c7a48b9e6')  // Data X-Ray Query
+def filterAttrTypeId      = string2Uuid('019e9210-e04d-7c6b-a481-5f29d8036c7a')  // Annotated Text Filter
+def filesDomainId         = string2Uuid('019e9210-52a4-7c31-9b5e-3d8f0a6c1e42')  // Data X-Ray Files
 
 // Max files to preview on the query asset (fixed; previously a config variable).
 def maxResults            = 50
+
+// Import capacity is INSTANCE-WIDE: the Data X-Ray Files domain must never hold
+// more than MAX_TOTAL_FILE_ASSETS assets in total — not per import. Imports
+// projected to exceed it are refused; above WARN_IMPORT_FILES the form shows a
+// "this will take a while" warning. The import collector re-checks this guard
+// (forms can be bypassed via the task-completion REST API).
+def MAX_TOTAL_FILE_ASSETS = 25_000
+def WARN_IMPORT_FILES     = 10_000
 
 // --- Read user inputs from the start form -----------------------------------
 
@@ -161,7 +183,10 @@ def extractorNames = resolveAndRelate(extractorIds, queryId, groupsRelationTypeI
 
 // Each category becomes one clause; multiple selections within a category are
 // OR-ed together, and the categories are AND-ed. Mirrors the field names the
-// Data X-Ray files API expects: labels.name, annotators.name, extractors.name.
+// Data X-Ray files API expects: labels.name, annotators.name, and
+// extractedMetadata.name (extractor results are exposed on file rows as
+// extractedMetadata entries — verified against a live instance; a query on
+// extractors.name matches nothing).
 //
 // The phrase filter, if given, is a "contains" match scoped to the picked
 // annotators via the nested object syntax — annotators: { name:… AND
@@ -169,7 +194,7 @@ def extractorNames = resolveAndRelate(extractorIds, queryId, groupsRelationTypeI
 // belong to the same annotator (see buildAnnotatorPhraseClause).
 def clauses = []
 appendNameClause(clauses, 'labels.name', labelNames)
-appendNameClause(clauses, 'extractors.name', extractorNames)
+appendNameClause(clauses, 'extractedMetadata.name', extractorNames)
 
 if (filter.isEmpty()) {
     // No phrase: annotator selection is an independent name filter, as before.
@@ -194,6 +219,17 @@ if (!description.isEmpty()) descParts << description
 descParts << "The query is: ${queryString ?: '(all files)'}".toString()
 addAttribute(queryId, descriptionAttrTypeId, descParts.join('\n\n'))
 
+// Structured criteria for the rerun workflow. The classification criteria are
+// already recoverable from the query asset's "groups" relations (rebuilt from
+// CURRENT names at rerun time, so Data X-Ray renames don't break saved
+// queries); the free-text phrase has no relation, so it gets its own
+// attribute. The composed query string is stored too — as a human-readable
+// record of what ran, not as rerun input.
+addAttribute(queryId, queryAttrTypeId, queryString ?: '(all files)')
+if (!filter.isEmpty()) {
+    addAttribute(queryId, filterAttrTypeId, filter)
+}
+
 // --- Call the Data X-Ray files API ------------------------------------------
 
 def encodedQuery = URLEncoder.encode(queryString, StandardCharsets.UTF_8.toString())
@@ -207,15 +243,30 @@ def searchUrl = "${dataxrayUrl}/api/v1/files?q=${encodedQuery}"
 // accurate total.
 def MAX_ZIP_BYTES = 25 * 1024 * 1024  // 25 MB cap on the attached results ZIP
 
+// Data X-Ray can transiently stall an NDJSON stream mid-response (observed
+// live: a query that normally streams in seconds hung after a fraction of its
+// rows, then the connection died with "Premature EOF"). A fresh attempt
+// usually succeeds, so retry before giving up.
+def FETCH_ATTEMPTS = 3
 def result
-try {
-    result = fetchAndArchive(searchUrl, dataxrayAuthToken, maxResults, MAX_ZIP_BYTES)
-} catch (Exception fetchEx) {
-    loggerApi.error("Failed to fetch files from Data X-Ray: ${fetchEx.message}")
-    def wf = new WorkflowException("Data X-Ray file search failed: ${fetchEx.message}", fetchEx)
-    wf.setTitleMessage('Search Data X-Ray failed')
-    wf.setUserMessage("The search-query asset was created, but fetching matching files from Data X-Ray failed: ${fetchEx.message}")
-    throw wf
+for (int attempt = 1; attempt <= FETCH_ATTEMPTS; attempt++) {
+    try {
+        result = fetchAndArchive(searchUrl, dataxrayAuthToken, maxResults, MAX_ZIP_BYTES)
+        break
+    } catch (Exception fetchEx) {
+        if (attempt < FETCH_ATTEMPTS) {
+            loggerApi.warn("Data X-Ray fetch attempt ${attempt}/${FETCH_ATTEMPTS} failed (${fetchEx.message}) — retrying")
+            sleep(5000)
+        } else {
+            loggerApi.error("Failed to fetch files from Data X-Ray after ${FETCH_ATTEMPTS} attempts: ${fetchEx.message}")
+            def wf = new WorkflowException("Data X-Ray file search failed: ${fetchEx.message}", fetchEx)
+            wf.setTitleMessage('Search Data X-Ray failed')
+            // NOTE: this exception rolls the whole task back — the query asset
+            // created above does NOT survive, so tell the user the truth.
+            wf.setUserMessage("Fetching matching files from Data X-Ray failed after ${FETCH_ATTEMPTS} attempts (${fetchEx.message}). Nothing was saved — this is usually a transient Data X-Ray stall; start the search again.")
+            throw wf
+        }
+    }
 }
 
 def shown = result.shown
@@ -275,6 +326,28 @@ if (shown.isEmpty()) {
     addAttribute(queryId, filesAttrTypeId, writer.toString())
 }
 
+// --- Import feasibility (instance-wide cap) ----------------------------------
+
+// The cap applies to the TOTAL population of the Data X-Ray Files domain, not
+// to this result set alone. This is a fresh query asset with no imported files
+// yet, so the projection is simply current domain population + result count —
+// conservative when results overlap files another query already imported
+// (those would be updates, not new assets).
+int filesDomainCount = 0
+try {
+    filesDomainCount = countAssetsInDomain(filesDomainId)
+} catch (Exception countEx) {
+    loggerApi.warn("Could not count assets in the Data X-Ray Files domain: ${countEx.message}")
+}
+int projectedTotal = filesDomainCount + total
+
+boolean importAllowed = total > 0 && projectedTotal <= MAX_TOTAL_FILE_ASSETS
+boolean importWarn    = importAllowed && total > WARN_IMPORT_FILES
+boolean importBlocked = total > 0 && !importAllowed
+def importBlockedMessage = importBlocked
+    ? "Importing is disabled for this search: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this search matched ${totalDisplay} file(s) — the projected ${projectedTotal} would exceed the ${MAX_TOTAL_FILE_ASSETS} instance-wide limit. Narrow the query, or retire imported searches you no longer need."
+    : ''
+
 // --- Publish process variables for the results form -------------------------
 
 execution.setVariable('conditionName', conditionName)
@@ -285,8 +358,18 @@ execution.setVariable('resultCountDisplay', totalDisplay)
 execution.setVariable('shownCount', shown.size())
 execution.setVariable('attachmentName', attachmentName)
 execution.setVariable('zipCapped', zipCapped)
+execution.setVariable('queryAssetId', queryId.toString())
+execution.setVariable('importAllowed', importAllowed)
+execution.setVariable('importWarn', importWarn)
+execution.setVariable('importBlocked', importBlocked)
+execution.setVariable('importBlockedMessage', importBlockedMessage)
+execution.setVariable('filesDomainCount', filesDomainCount)
+// Defaults for the results form's decision fields; completing the form
+// overwrites them.
+execution.setVariable('importDecision', false)
+execution.setVariable('keepInSync', false)
 
-loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, attachment=${attachmentName ?: '(none)'}")
+loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, attachment=${attachmentName ?: '(none)'}, importAllowed=${importAllowed} (files domain holds ${filesDomainCount})")
 
 // --- Helpers ----------------------------------------------------------------
 
@@ -362,6 +445,25 @@ def addAttribute(UUID assetId, UUID typeId, String value) {
 def dataSourceName(f) { (f?.datasource?.name ?: '').toString() }
 def filePath(f) { (f?.path ?: f?.filePath ?: '').toString() }
 
+// Exact population of a domain, counted by cursor-paging. findAssets' total
+// field is unreliable on cursor pages, so counting the pages is the safe way;
+// at the 25k cap this is ~25 fast calls.
+def countAssetsInDomain(UUID domainId) {
+    int count = 0
+    def cursor = ''
+    while (true) {
+        def page = assetApi.findAssets(com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest.builder()
+            .domainId(domainId)
+            .limit(1000)
+            .cursor(cursor)
+            .build())
+        count += page.getResults().size()
+        cursor = page.getNextCursor()
+        if (!cursor) break
+    }
+    return count
+}
+
 // Escape one CSV field per RFC 4180: quote it when it contains a comma, quote,
 // CR or LF, doubling any embedded quotes.
 def csvEscape(value) {
@@ -390,8 +492,11 @@ def fetchAndArchive(String url, String authToken, int keepLimit, int maxZipBytes
     conn.setRequestMethod('GET')
     conn.setRequestProperty('Authorization', "Bearer ${authToken}")
     conn.setRequestProperty('Content-Type', 'application/json')
+    // Read timeout is BETWEEN bytes, not total: a healthy stream can run for
+    // minutes, but a 2-minute silence means the server has stalled — fail fast
+    // so the retry loop gets its chance instead of hanging the task.
     conn.setConnectTimeout(30_000)
-    conn.setReadTimeout(300_000)  // reading every matching row can take minutes
+    conn.setReadTimeout(120_000)
 
     def code = conn.getResponseCode()
     if (code != 200) {

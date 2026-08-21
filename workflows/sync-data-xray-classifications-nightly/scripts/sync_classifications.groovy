@@ -41,15 +41,20 @@
 //     asset name we rename the Collibra asset to match.
 //   – Every synced asset is tagged with 'dataxray-classification-sync'. Assets
 //     in the domain that carry this tag but are no longer in the current Data
-//     X-Ray response are deleted. Untagged assets in the domain are never
-//     touched, so anything added by hand is safe.
-//   – If Data X-Ray returns zero classifications, the deletion step is skipped
-//     to avoid a transient/broken response wiping all assets.
+//     X-Ray response are RETIRED (status Obsolete) — never deleted. Saved
+//     search queries and imported file assets hold relations to these
+//     classifications, and a rerun must be able to say "this criterion was
+//     deleted in Data X-Ray" rather than find a dangling reference. If the
+//     classification reappears in Data X-Ray, the asset is reactivated
+//     (status Candidate). Untagged assets in the domain are never touched,
+//     so anything added by hand is safe.
+//   – If Data X-Ray returns zero classifications, the retirement step is
+//     skipped to avoid a transient/broken response retiring all assets.
 //
 // Process variables produced (for downstream tasks or audit):
 //   syncCreatedCount (Integer) – assets newly created
 //   syncUpdatedCount (Integer) – existing assets reused (attributes resynced)
-//   syncDeletedCount (Integer) – tagged assets removed because they were no longer in Data X-Ray
+//   syncRetiredCount (Integer) – tagged assets retired because they were no longer in Data X-Ray
 //   syncSkippedCount (Integer) – classifications skipped (missing name, unknown type, etc.)
 //   syncFailedCount  (Integer) – per-classification errors during upsert
 //   syncFailures     (String)  – semicolon-joined "<name>: <error>" list, may be empty
@@ -126,6 +131,11 @@ def linkAttrTypeId        = string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba')
 def searchLinkAttrTypeId  = string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254')
 def subtypeAttrTypeId     = string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad')
 def dataxrayIdAttrTypeId  = string2Uuid('019e73ae-1aa8-700c-8086-626326822c22')
+
+// Standard statuses (same UUIDs on every instance): orphans are retired to
+// Obsolete, reappearing classifications reactivated to Candidate.
+def OBSOLETE_STATUS_ID  = string2Uuid('00000000-0000-0000-0000-000000005011')
+def CANDIDATE_STATUS_ID = string2Uuid('00000000-0000-0000-0000-000000005008')
 
 // --- Fetch classifications from Data X-Ray ----------------------------------
 
@@ -246,12 +256,14 @@ classifications.eachWithIndex { classification, idx ->
         UUID assetId = null
         boolean isUpdate = false
         String previousName = null
+        boolean wasRetired = false
 
         def idMatch = assetIdByDataxrayId[dataxrayId]
         if (idMatch) {
             assetId = idMatch
             isUpdate = true
             previousName = existingById[idMatch]?.getName()
+            wasRetired = existingById[idMatch]?.getStatus()?.getId() == OBSOLETE_STATUS_ID
         }
 
         // Fallback: a same-named asset already exists in the domain but has no
@@ -269,6 +281,7 @@ classifications.eachWithIndex { classification, idx ->
                 assetId = nameMatch.getId()
                 isUpdate = true
                 previousName = nameMatch.getName()
+                wasRetired = nameMatch.getStatus()?.getId() == OBSOLETE_STATUS_ID
             }
         }
 
@@ -285,17 +298,20 @@ classifications.eachWithIndex { classification, idx ->
 
         // Rename if the desired (possibly type-suffixed) name has diverged from
         // what's in Collibra — covers both Data X-Ray-side renames and an asset
-        // newly becoming/ceasing to be a cross-type collision.
-        if (isUpdate && previousName != null && previousName != assetName) {
+        // newly becoming/ceasing to be a cross-type collision. Reactivate in
+        // the same change if a previous sync had retired this classification
+        // and it has now reappeared in Data X-Ray.
+        def needsRename = isUpdate && previousName != null && previousName != assetName
+        if (needsRename || wasRetired) {
             try {
-                assetApi.changeAsset(ChangeAssetRequest.builder()
-                    .id(assetId)
-                    .name(assetName)
-                    .displayName(assetName)
-                    .build())
-                loggerApi.info("Renamed asset [${assetId}]: '${previousName}' → '${assetName}'")
+                def change = ChangeAssetRequest.builder().id(assetId)
+                if (needsRename) { change.name(assetName).displayName(assetName) }
+                if (wasRetired)  { change.statusId(CANDIDATE_STATUS_ID) }
+                assetApi.changeAsset(change.build())
+                if (needsRename) { loggerApi.info("Renamed asset [${assetId}]: '${previousName}' → '${assetName}'") }
+                if (wasRetired)  { loggerApi.info("Reactivated previously retired asset '${assetName}' [${assetId}]") }
             } catch (Exception renameEx) {
-                loggerApi.warn("Failed to rename '${previousName}' → '${assetName}' on ${assetId}: ${renameEx.message}")
+                loggerApi.warn("Failed to rename/reactivate '${previousName}' → '${assetName}' on ${assetId}: ${renameEx.message}")
             }
         }
 
@@ -339,23 +355,32 @@ classifications.eachWithIndex { classification, idx ->
     }
 }
 
-// --- Delete tagged assets no longer in Data X-Ray ---------------------------
+// --- Retire tagged assets no longer in Data X-Ray ---------------------------
 
-int deleted = 0
+// Retired, never deleted: saved queries and imported file assets hold
+// relations to these classifications, and history (comments, workflow tasks)
+// must survive. A reappearing classification is reactivated by the upsert
+// pass above.
+int retired = 0
 if (classifications.isEmpty()) {
-    loggerApi.warn("Data X-Ray returned 0 classifications — skipping deletion step to avoid wiping the domain")
+    loggerApi.warn("Data X-Ray returned 0 classifications — skipping retirement step to avoid retiring the whole domain")
 } else {
     def taggedInDomain = fetchTaggedAssetsInDomain(classificationsDomainId, SYNC_TAG)
-    def toDelete = taggedInDomain.findAll { !touchedAssetIds.contains(it.getId()) }
-    if (!toDelete.isEmpty()) {
-        loggerApi.info("Removing ${toDelete.size()} asset(s) no longer present in Data X-Ray")
-        toDelete.each { asset ->
+    def toRetire = taggedInDomain.findAll {
+        !touchedAssetIds.contains(it.getId()) && it.getStatus()?.getId() != OBSOLETE_STATUS_ID
+    }
+    if (!toRetire.isEmpty()) {
+        loggerApi.info("Retiring ${toRetire.size()} asset(s) no longer present in Data X-Ray")
+        toRetire.each { asset ->
             try {
-                assetApi.removeAsset(asset.getId())
-                deleted++
-                loggerApi.info("Deleted orphan asset '${asset.getName()}' [${asset.getId()}]")
-            } catch (Exception delEx) {
-                loggerApi.error("Failed to delete orphan '${asset.getName()}' [${asset.getId()}]: ${delEx.message}")
+                assetApi.changeAsset(ChangeAssetRequest.builder()
+                    .id(asset.getId())
+                    .statusId(OBSOLETE_STATUS_ID)
+                    .build())
+                retired++
+                loggerApi.info("Retired orphan asset '${asset.getName()}' [${asset.getId()}]")
+            } catch (Exception retireEx) {
+                loggerApi.error("Failed to retire orphan '${asset.getName()}' [${asset.getId()}]: ${retireEx.message}")
             }
         }
     }
@@ -363,9 +388,9 @@ if (classifications.isEmpty()) {
 
 // --- Report -----------------------------------------------------------------
 
-recordRunSummary(created, updated, deleted, skipped, failed, failures.join('; '))
+recordRunSummary(created, updated, retired, skipped, failed, failures.join('; '))
 
-loggerApi.info("Data X-Ray sync complete: created=${created}, updated=${updated}, deleted=${deleted}, skipped=${skipped}, failed=${failed}")
+loggerApi.info("Data X-Ray sync complete: created=${created}, updated=${updated}, retired=${retired}, skipped=${skipped}, failed=${failed}")
 
 // If nothing was created or updated and at least one item failed, log it as an
 // error for dgc.log. Timer-triggered: don't throw — a thrown WorkflowException
@@ -377,10 +402,10 @@ if (created == 0 && updated == 0 && failed > 0) {
 // --- Helpers ---------------------------------------------------------------
 
 // Persist the run outcome to process variables for audit / downstream tasks.
-def recordRunSummary(int created, int updated, int deleted, int skipped, int failed, String failuresJoined) {
+def recordRunSummary(int created, int updated, int retired, int skipped, int failed, String failuresJoined) {
     execution.setVariable('syncCreatedCount', created)
     execution.setVariable('syncUpdatedCount', updated)
-    execution.setVariable('syncDeletedCount', deleted)
+    execution.setVariable('syncRetiredCount', retired)
     execution.setVariable('syncSkippedCount', skipped)
     execution.setVariable('syncFailedCount',  failed)
     execution.setVariable('syncFailures',     failuresJoined)
