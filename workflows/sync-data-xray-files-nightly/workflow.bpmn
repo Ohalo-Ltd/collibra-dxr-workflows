@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  syncDataXrayFilesNightly workflow
+  =================================
+  Finds every Unstructured Data Query asset tagged 'dataxray-keep-in-sync' and
+  starts one HEADLESS Rerun Data X-Ray Search instance per query, so flagged
+  searches rerun and re-sync their imported file assets automatically.
+
+  Triggered by a timer start event (cron "0 30 2 * * ?" — daily at 02:30 in
+  the Collibra server timezone, half an hour AFTER the 02:00 classification
+  sync so renamed/retired classifications are current before queries are
+  rebuilt). No user initiates it, so the script must not depend on
+  `users`/`item`/`initiator`, and it ends cleanly on any failure rather than
+  throwing: a timer workflow that fails before its first async task is retried
+  3× by Collibra and then permanently disabled until redeployment.
+
+  This workflow has NO configuration variables: it never calls Data X-Ray
+  itself. Each rerun instance it starts reads the Base URL / Bearer token
+  configured on the Rerun Data X-Ray Search workflow.
+
+  Script placeholders of the form {script:filename.groovy} are resolved by
+  deploy.py before the BPMN is packaged.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+
+  <process id="syncDataXrayFilesNightly"
+           name="Sync Data X-Ray Files (Nightly)"
+           isExecutable="true">
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+
+    <startEvent id="startEvent" name="Start">
+      <extensionElements>
+        <design:stencilid><![CDATA[StartTimerEvent]]></design:stencilid>
+      </extensionElements>
+      <timerEventDefinition>
+        <timeCycle flowable:type="cron">0 30 2 * * ?</timeCycle>
+      </timerEventDefinition>
+    </startEvent>
+
+    <scriptTask id="fanOutRerunsTask"
+                name="Start Reruns for Flagged Queries"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:nightly_files_driver.groovy}}</script>
+    </scriptTask>
+
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="fanOutRerunsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow2" sourceRef="fanOutRerunsTask" targetRef="endEvent">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+
+  </process>
+
+  <bpmndi:BPMNDiagram id="BPMNDiagram_syncDataXrayFilesNightly">
+    <bpmndi:BPMNPlane bpmnElement="syncDataXrayFilesNightly" id="BPMNPlane_syncDataXrayFilesNightly">
+
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="BPMNShape_startEvent">
+        <omgdc:Bounds x="120" y="255" width="30" height="30"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="115" y="290" width="40" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="fanOutRerunsTask" id="BPMNShape_fanOutRerunsTask">
+        <omgdc:Bounds x="210" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
+        <omgdc:Bounds x="415" y="256" width="28" height="28"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="412" y="290" width="34" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="BPMNEdge_flow1">
+        <omgdi:waypoint x="150" y="270"/>
+        <omgdi:waypoint x="210" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="350" y="270"/>
+        <omgdi:waypoint x="415" y="270"/>
+      </bpmndi:BPMNEdge>
+
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+
+</definitions>

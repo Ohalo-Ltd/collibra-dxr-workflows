@@ -1,0 +1,8 @@
+{
+  "key": "rerunDataXraySearch",
+  "name": "Rerun Data X-Ray Search",
+  "description": "Rerun a saved Data X-Ray search from its query asset and re-sync the imported file assets: new files are imported, changed files updated, and files that no longer match are retired (never deleted).",
+  "theme": "theme-3",
+  "icon": "glyphicon-repeat",
+  "businessItemResourceType": "ASSET"
+}

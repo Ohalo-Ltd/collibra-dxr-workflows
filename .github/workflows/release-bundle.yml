@@ -21,22 +21,24 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Export all four workflow ZIPs
+      - name: Export all six workflow ZIPs
         run: |
           set -euo pipefail
           for wf in \
             configure-data-xray-workflows \
             search-data-xray \
+            rerun-data-xray-search \
             sync-data-xray-classifications \
-            sync-data-xray-classifications-nightly; do
+            sync-data-xray-classifications-nightly \
+            sync-data-xray-files-nightly; do
             python deploy.py "$wf" --export-zip dist
           done
 
       - name: Assemble combined bundle
         run: |
           set -euo pipefail
-          cp workflows/deployment-guide.md dist/
-          (cd dist && zip -j ../collibra-data-xray-workflows.zip *.zip deployment-guide.md)
+          cp workflows/deployment-guide.md workflows/acceptance-criteria.md dist/
+          (cd dist && zip -j ../collibra-data-xray-workflows.zip *.zip deployment-guide.md acceptance-criteria.md)
 
       - name: Attach bundle to the release
         if: github.event_name == 'release'

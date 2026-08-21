@@ -2,11 +2,20 @@
 <!--
   searchDataXray workflow
   =======================
-  Create a Data X-Ray search query from Collibra classifications:
+  Create a Data X-Ray search query from Collibra classifications, then
+  optionally import every matching file as a Collibra asset:
     startEvent (form: searchDataXrayForm — rendered as the + Create dialog)
       → searchDataXrayTask (script)
-      → resultsTask (user form: searchResultsForm — appears as an inbox task)
-      → endEvent
+      → resultsTask (user form: searchResultsForm — results + "import?" decision)
+      → decideImportGateway
+          ├─ importDecision unticked → endEvent
+          └─ importDecision ticked   → importCollectorTask (script, sync:
+                 re-runs the query, builds the batched work list)
+              → importBatchTask (script, ASYNC: one batch of 50 assets per
+                 execution/transaction — Collibra's bulk-operations pattern)
+              → moreWorkGateway ─ ${hasMoreWork} ─→ back to importBatchTask
+              → importSummaryTask (user form: importSummaryForm)
+              → endEventImported
 
   The input form is attached to the start event so Collibra renders it as the
   modal dialog when the workflow is launched from the global + Create button.
@@ -75,7 +84,60 @@
       </extensionElements>
     </userTask>
 
+    <!-- Import path: user ticked "import" on the results form. -->
+    <exclusiveGateway id="decideImportGateway" name="Import assets?" default="flowSkipImport">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+
+    <scriptTask id="importCollectorTask"
+                name="Collect Import Work List"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:import_collector.groovy}}</script>
+    </scriptTask>
+
+    <!-- ASYNC: each execution is one transaction handling one batch of 50 —
+         the exclusive gateway below loops it until the work list is drained
+         (Collibra's prescribed bulk-operations shape). -->
+    <scriptTask id="importBatchTask"
+                name="Import File Assets (batch)"
+                scriptFormat="groovy"
+                flowable:async="true"
+                flowable:exclusive="true"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:import_batch.groovy}}</script>
+    </scriptTask>
+
+    <exclusiveGateway id="moreWorkGateway" name="More batches?" default="flowImportDone">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+
+    <userTask id="importSummaryTask"
+              name="Import Summary"
+              flowable:candidateUsers="user(${initiator})"
+              flowable:formKey="importSummaryForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+
     <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+
+    <endEvent id="endEventImported" name="End (imported)">
       <extensionElements>
         <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
       </extensionElements>
@@ -91,7 +153,44 @@
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow3" sourceRef="resultsTask" targetRef="endEvent">
+    <sequenceFlow id="flow3" sourceRef="resultsTask" targetRef="decideImportGateway">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowSkipImport" sourceRef="decideImportGateway" targetRef="endEvent">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowImportYes" sourceRef="decideImportGateway" targetRef="importCollectorTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${importDecision == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow4" sourceRef="importCollectorTask" targetRef="importBatchTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow5" sourceRef="importBatchTask" targetRef="moreWorkGateway">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowMoreWork" sourceRef="moreWorkGateway" targetRef="importBatchTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowImportDone" sourceRef="moreWorkGateway" targetRef="importSummaryTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow6" sourceRef="importSummaryTask" targetRef="endEventImported">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
@@ -117,10 +216,43 @@
         <omgdc:Bounds x="400" y="230" width="120" height="80"/>
       </bpmndi:BPMNShape>
 
-      <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
-        <omgdc:Bounds x="570" y="256" width="28" height="28"/>
+      <bpmndi:BPMNShape bpmnElement="decideImportGateway" id="BPMNShape_decideImportGateway">
+        <omgdc:Bounds x="570" y="250" width="40" height="40"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="567" y="290" width="34" height="14"/>
+          <omgdc:Bounds x="545" y="215" width="90" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
+        <omgdc:Bounds x="576" y="380" width="28" height="28"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="573" y="414" width="34" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="importCollectorTask" id="BPMNShape_importCollectorTask">
+        <omgdc:Bounds x="670" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="importBatchTask" id="BPMNShape_importBatchTask">
+        <omgdc:Bounds x="870" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="moreWorkGateway" id="BPMNShape_moreWorkGateway">
+        <omgdc:Bounds x="1070" y="250" width="40" height="40"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="1045" y="300" width="90" height="14"/>
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="importSummaryTask" id="BPMNShape_importSummaryTask">
+        <omgdc:Bounds x="1170" y="230" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="endEventImported" id="BPMNShape_endEventImported">
+        <omgdc:Bounds x="1350" y="256" width="28" height="28"/>
+        <bpmndi:BPMNLabel>
+          <omgdc:Bounds x="1330" y="290" width="70" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
@@ -135,6 +267,36 @@
       <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
         <omgdi:waypoint x="520" y="270"/>
         <omgdi:waypoint x="570" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSkipImport" id="BPMNEdge_flowSkipImport">
+        <omgdi:waypoint x="590" y="290"/>
+        <omgdi:waypoint x="590" y="380"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowImportYes" id="BPMNEdge_flowImportYes">
+        <omgdi:waypoint x="610" y="270"/>
+        <omgdi:waypoint x="670" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="BPMNEdge_flow4">
+        <omgdi:waypoint x="810" y="270"/>
+        <omgdi:waypoint x="870" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="BPMNEdge_flow5">
+        <omgdi:waypoint x="1010" y="270"/>
+        <omgdi:waypoint x="1070" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowMoreWork" id="BPMNEdge_flowMoreWork">
+        <omgdi:waypoint x="1090" y="250"/>
+        <omgdi:waypoint x="1090" y="170"/>
+        <omgdi:waypoint x="940" y="170"/>
+        <omgdi:waypoint x="940" y="230"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowImportDone" id="BPMNEdge_flowImportDone">
+        <omgdi:waypoint x="1110" y="270"/>
+        <omgdi:waypoint x="1170" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow6" id="BPMNEdge_flow6">
+        <omgdi:waypoint x="1290" y="270"/>
+        <omgdi:waypoint x="1350" y="270"/>
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>

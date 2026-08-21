@@ -1,0 +1,30 @@
+{
+  "rows": [
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Import complete",
+          "value": "<p>The import for <b>{{conditionName}}</b> has finished.</p><ul><li><b>Created:</b> {{importCreatedCount}} new file asset(s)</li><li><b>Updated:</b> {{importUpdatedCount}} existing file asset(s)</li><li><b>Failed:</b> {{importFailedCount}}</li><li><b>Relations added:</b> {{importRelationCount}} (query → file and file → classification)</li><li><b>Stale classification links removed:</b> {{importRelationsRemovedCount}}</li><li><b>Unresolved classification links:</b> {{importSkippedClassifications}} (run Sync Data X-Ray Classifications, then rerun this search's sync, to link them)</li></ul><p>The file assets live in the <b>Data X-Ray Files</b> domain and are related to the <b>{{conditionName}}</b> query asset. Failures, if any, are detailed in <code>dgc.log</code>.</p><p>Click <b>Send</b> to close this task.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "importSummary",
+          "type": "htmlComponent"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "key": "importSummaryForm",
+    "name": "Import Summary",
+    "description": "Shows what the Data X-Ray file import created, updated and failed.",
+    "version": "1",
+    "modelType": "form",
+    "flowableDesignVersion": 3110,
+    "palette": "flowable-core-form-palette"
+  }
+}

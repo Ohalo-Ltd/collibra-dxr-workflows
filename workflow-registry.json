@@ -5,6 +5,9 @@
   "create-asset": {
     "default": "019e0389-8a15-756a-9523-fa15d35f22cc"
   },
+  "rerun-data-xray-search": {
+    "default": "019ff06e-5efa-71f1-8aab-8d156e06af23"
+  },
   "search-data-xray": {
     "default": "019e7460-0767-701d-8ec2-08cd341249c1"
   },
@@ -13,5 +16,8 @@
   },
   "sync-data-xray-classifications-nightly": {
     "default": "019e7460-0bc2-75dd-8f0d-5c17ac8a272c"
+  },
+  "sync-data-xray-files-nightly": {
+    "default": "019ff06e-6831-7635-928c-691ebae4c9e7"
   }
 }
