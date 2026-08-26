@@ -1,0 +1,13 @@
+{
+  "name": "collibra-data-xray-workflows",
+  "harnessRef": "v2.0.0",
+  "workflows": [
+    "configure-data-xray-workflows",
+    "search-data-xray",
+    "rerun-data-xray-search",
+    "sync-data-xray-classifications",
+    "sync-data-xray-classifications-nightly",
+    "sync-data-xray-files-nightly"
+  ],
+  "bundle": { "extra": ["docs"] }
+}

@@ -2,9 +2,6 @@
   "configure-data-xray-workflows": {
     "default": "019e7460-051e-71f4-bda1-bbea2ac282e6"
   },
-  "create-asset": {
-    "default": "019e0389-8a15-756a-9523-fa15d35f22cc"
-  },
   "rerun-data-xray-search": {
     "default": "019ff06e-5efa-71f1-8aab-8d156e06af23"
   },
