@@ -36,7 +36,7 @@
 // that was checked but produced no hits — that is NOT a match and must not
 // become a relation. extractClassifications() therefore requires positive
 // evidence per entry kind. Row shape verified against a live Data X-Ray
-// /api/v1/files NDJSON response (demo.dataxray.io, 2026-08):
+// /api/v1/files NDJSON response (Data X-Ray demo instance, 2026-08):
 //   { datasource: {id, name, connector}, fileName, fileId, path, size,
 //     mimeType, createdAt, lastModifiedAt, contentSha256, scanDepth,
 //     labels: [{id, name}],

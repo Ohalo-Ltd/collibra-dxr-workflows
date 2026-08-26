@@ -60,7 +60,7 @@ acceptance-criteria.md
 
 ## Developing
 
-This repo is a *workflow pack*: it holds only workflow sources and their docs. The build/deploy tooling, Groovy IDE stubs and Collibra reference docs live in the harness, which mounts this repo as a git submodule at `packs/dxr-workflows`. Work from there:
+This repo is a *workflow pack*: it holds only workflow sources and their docs. The build/deploy tooling, Groovy IDE stubs and Collibra reference docs live in the `collibra-workflower` harness, which is currently **Ohalo-internal** and mounts this repo as a git submodule at `packs/dxr-workflows`. External contributors: see [CONTRIBUTING.md](CONTRIBUTING.md). Ohalo developers work from the harness:
 
 ```bash
 git clone --recurse-submodules git@github.com:Ohalo-Ltd/collibra-workflower.git
@@ -76,3 +76,7 @@ python deploy.py bundle --pack packs/dxr-workflows       # build the release bun
 Commit and push pack changes from inside `packs/dxr-workflows` (it is its own git repo), then commit the updated submodule pointer in the harness. Deployed definition UUIDs are recorded per environment in [`workflow-registry.json`](workflow-registry.json).
 
 Adding a workflow to the bundle = add its directory under `workflows/` **and** its name to `pack.json`'s `workflows` list. See the harness README for the workflow directory layout and Collibra gotchas, and [CLAUDE.md](CLAUDE.md) here for the Data X-Ray specifics (access control, file import model, DXR API facts).
+
+## License
+
+Source-available under the [Ohalo Source-Available License](LICENSE) — free to inspect and to deploy for organisations licensed for Data X-Ray; not open source.

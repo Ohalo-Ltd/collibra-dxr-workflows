@@ -55,7 +55,7 @@ Search results can be imported as **Data X-Ray File** assets in the **Data X-Ray
 - **DXR row-shape assumptions** (field names for file id/size/modified, per-classification hit counts, deep-link path) live in `extractFileTuple`/`extractClassifications` in `import_collector.groovy` + `rerun_collector.groovy` (kept in sync, like the `import_batch.groovy`/`sync_files_batch.groovy` twins) — verify against a live `/api/v1/files` NDJSON response when DXR versions change. Hit-evidence rule: a classification listed as *checked with 0 hits* must NOT get a relation.
 
 
-## Data X-Ray API facts (verified against demo.dataxray.io, 2026-08)
+## Data X-Ray API facts (verified against a Data X-Ray demo instance, 2026-08)
 
 - `/api/v1/files` NDJSON row: `fileId` (not `id`), `fileName`, `path`, `size`, `lastModifiedAt`, `datasource: {id, name}`, `labels: [{id, name}]`, `extractedMetadata: [{id, name, value, type}]`, `annotators: [{id, name, uniquePhrases, annotations: [...]}]`. **No UI link field** on file rows — don't fabricate deep links.
 - Extractor results are queried via **`extractedMetadata.name:"X"`** — `extractors.name:"X"` matches nothing.
