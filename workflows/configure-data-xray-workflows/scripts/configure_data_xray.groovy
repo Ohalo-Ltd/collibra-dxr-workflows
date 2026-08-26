@@ -121,6 +121,14 @@ def FILTER_ATTR_ID        = '019e9210-e04d-7c6b-a481-5f29d8036c7a'
 // workflow retire a file only once NO query returns it any more.
 def RETURNS_RELTYPE_ID    = '019e9210-f180-79dc-b5a0-6c31e94f82d5'
 
+// "searches text in / text searched by" — links an Unstructured Data Query
+// asset (source) to each Annotator asset (target) whose annotations its
+// annotated-text filter is searched in. Distinct from the query's "groups"
+// criteria relations: those annotators are AND-ed requirements, these only
+// scope the phrase (OR-ed among themselves). The rerun rebuilds the phrase
+// clause from these relations, so annotator renames flow through.
+def TEXT_FILTER_RELTYPE_ID = '019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'
+
 // System "groups / is grouped by" relation type — present on every instance.
 // query→classification and file→classification links use it.
 def GROUPS_RELTYPE_ID     = '00000000-0000-0000-0000-000000007017'
@@ -217,7 +225,8 @@ def assignmentDefs = [
     [assetTypeId: '01965d43-235d-796b-be49-078f91d7472a', name: 'Classification',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID]],
     [assetTypeId: '01922a69-e7a0-7ac7-a581-c9ba9286ccf1', name: 'Annotator',
-     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID]],
+     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID],
+     relations: [[id: TEXT_FILTER_RELTYPE_ID, direction: 'TO_SOURCE']]], // text searched by queries
     [assetTypeId: '019c9fbd-a91b-7242-9451-79ab632163a3', name: 'Extractor',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID]],
     [assetTypeId: '019c9fbe-25c3-71b7-90ac-057dd582fa1e', name: 'Label',
@@ -230,8 +239,9 @@ def assignmentDefs = [
     [assetTypeId: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'Unstructured Data Query',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, FILES_ATTR_ID, DXID_ATTR_ID,
                    QUERY_ATTR_ID, FILTER_ATTR_ID],
-     relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups classifications
-                 [id: RETURNS_RELTYPE_ID, direction: 'TO_TARGET']]], // returns files
+     relations: [[id: GROUPS_RELTYPE_ID,      direction: 'TO_TARGET'],   // groups classifications
+                 [id: RETURNS_RELTYPE_ID,     direction: 'TO_TARGET'],   // returns files
+                 [id: TEXT_FILTER_RELTYPE_ID, direction: 'TO_TARGET']]], // searches text in annotators
     // descriptionMin 0: imported file assets carry no Description, so a
     // mandatory Description would flag every one of them as incomplete.
     [assetTypeId: FILE_TYPE_ID, name: 'Data X-Ray File', descriptionMin: 0,
@@ -377,6 +387,28 @@ try {
 } catch (Exception e) {
     failed << "Relation type 'returns / returned by': ${e.message}"
     loggerApi.error("ensure relation type failed: ${e.message}")
+}
+
+// "Unstructured Data Query searches text in Annotator" — scopes the query's
+// annotated-text filter to specific annotators (see TEXT_FILTER_RELTYPE_ID).
+try {
+    def rtid = string2Uuid(TEXT_FILTER_RELTYPE_ID)
+    if (relationTypeApi.exists(rtid)) {
+        skipped << "Relation type 'searches text in / text searched by'"
+    } else {
+        relationTypeApi.addRelationType(AddRelationTypeRequest.builder()
+            .id(rtid)
+            .sourceTypeId(string2Uuid(QUERY_TYPE_ID))
+            .role('searches text in')
+            .targetTypeId(string2Uuid('01922a69-e7a0-7ac7-a581-c9ba9286ccf1'))
+            .coRole('text searched by')
+            .build())
+        created << "Relation type 'searches text in / text searched by'"
+        loggerApi.info("Created relation type searches text in/text searched by [${TEXT_FILTER_RELTYPE_ID}]")
+    }
+} catch (Exception e) {
+    failed << "Relation type 'searches text in / text searched by': ${e.message}"
+    loggerApi.error("ensure text-filter relation type failed: ${e.message}")
 }
 
 // --- Phase 5: assignments (best-effort, never disturb existing) -------------

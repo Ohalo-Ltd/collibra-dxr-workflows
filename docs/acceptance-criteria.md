@@ -77,7 +77,7 @@ via the nightly).
 | ID | Given | When | Then | Status |
 |---|---|---|---|---|
 | FILE-1 | A saved query's criteria were renamed in Data X-Ray since it was created | The query is rerun | The query is rebuilt from the criteria's **current** names + the stored annotated-text filter; the Data X-Ray Query attribute records what actually ran | ✅ |
-| FILE-2 | A criterion's classification was deleted in Data X-Ray (its asset is retired) | An **interactive** rerun starts | The rerun fails immediately with a message **naming the criterion** — it never silently drops an AND criterion and broadens the search | ✅ |
+| FILE-2 | A criterion's classification was deleted in Data X-Ray (its asset is retired) | An **interactive** rerun starts | The rerun fails immediately with a message **naming the criterion** — it never silently drops an AND criterion and broadens the search (all criteria — including multiple values of the same kind — are AND-ed; the only OR is between the annotators the annotated text is searched in) | ✅ |
 | FILE-3 | Same as FILE-2 | The **nightly** reruns that query | The run logs the reason, touches nothing, ends cleanly; other queries are unaffected | ✅ |
 | FILE-4 | A query asset has no criteria left (relations removed) and no filter | A rerun starts | It fails/skips with "criteria cannot be reconstructed" — it never falls back to an all-files search | 🔹 |
 | FILE-5 | A user starts Rerun on a **non-query** asset (e.g. a file asset) | The rerun starts | It refuses immediately, naming the asset's actual type (Collibra cannot hide the action on other asset pages when start roles are global roles) | ✅ |

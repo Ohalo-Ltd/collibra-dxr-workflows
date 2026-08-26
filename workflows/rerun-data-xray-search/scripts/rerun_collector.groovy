@@ -8,7 +8,8 @@
 //   – the query asset's "groups" relations to classification assets, using
 //     their CURRENT names (so a Data X-Ray-side rename never breaks a saved
 //     search — the classification sync keeps those names up to date), and
-//   – the "Annotated Text Filter" attribute stored at search time.
+//   – the "Annotated Text Filter" attribute stored at search time, scoped to the
+//     annotators linked by the query's "searches text in" relations.
 // The composed string is written back to the "Data X-Ray Query" attribute as a
 // record of what actually ran.
 //
@@ -62,6 +63,7 @@ def returnsRelationTypeId   = string2Uuid('019e9210-f180-79dc-b5a0-6c31e94f82d5'
 def dataxrayIdAttrTypeId    = string2Uuid('019e73ae-1aa8-700c-8086-626326822c22')
 def queryAttrTypeId         = string2Uuid('019e9210-cf9b-751a-85f2-d30c7a48b9e6')
 def filterAttrTypeId        = string2Uuid('019e9210-e04d-7c6b-a481-5f29d8036c7a')
+def textFilterRelTypeId     = string2Uuid('019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01')  // searches text in (query -> Annotator)
 
 def LABEL_TYPE_ID     = string2Uuid('019c9fbe-25c3-71b7-90ac-057dd582fa1e')
 def EXTRACTOR_TYPE_ID = string2Uuid('019c9fbd-a91b-7242-9451-79ab632163a3')
@@ -195,6 +197,44 @@ if (!deadCriteria.isEmpty()) {
 
 def filter = readSingleAttribute(queryId, filterAttrTypeId)
 
+// Annotators the annotated-text filter is scoped to ("searches text in" relations).
+// Same liveness rule as the criteria: a retired/missing one aborts the rerun.
+// Only consulted when a phrase is actually stored — without one the relations
+// are inert (the search never wrote them, and the phrase clause isn't emitted),
+// so a stale relation must not be able to block a rerun.
+def filterAnnotatorNames = []
+def filterCursor = ''
+while (!filter.isEmpty()) {
+    def page = relationApi.findRelations(FindRelationsRequest.builder()
+        .relationTypeId(textFilterRelTypeId)
+        .sourceId(queryId)
+        .limit(1000)
+        .cursor(filterCursor)
+        .build())
+    page.getResults().each { rel ->
+        def targetId = rel.getTarget().getId()
+        def target
+        try {
+            target = assetApi.getAsset(targetId)
+        } catch (Exception goneEx) {
+            deadCriteria << "annotated-text annotator ${targetId} no longer exists"
+            return
+        }
+        if (target.getStatus()?.getId() == OBSOLETE_STATUS_ID) {
+            deadCriteria << "annotated-text annotator '${target.getName()}' was deleted in Data X-Ray (its Collibra asset is retired)"
+            return
+        }
+        filterAnnotatorNames << target.getName()
+    }
+    filterCursor = page.getNextCursor()
+    if (!filterCursor || !deadCriteria.isEmpty()) break
+}
+if (!deadCriteria.isEmpty()) {
+    abort('Rerun Data X-Ray Search — criterion no longer exists',
+        "Cannot rerun '${conditionName}': ${deadCriteria.join('; ')}. Rerunning without it would broaden the search and import files you never asked for. Recreate the classification in Data X-Ray (and run Sync Data X-Ray Classifications), or create a new search.")
+    return
+}
+
 if (labelNames.isEmpty() && extractorNames.isEmpty() && annotatorNames.isEmpty() && filter.isEmpty()) {
     abort('Rerun Data X-Ray Search — no saved criteria',
         "Cannot rerun '${conditionName}': it has no linked classifications and no annotated-text filter, so its criteria cannot be reconstructed. Create a new search instead.")
@@ -206,10 +246,9 @@ if (labelNames.isEmpty() && extractorNames.isEmpty() && annotatorNames.isEmpty()
 def clauses = []
 appendNameClause(clauses, 'labels.name', labelNames)
 appendNameClause(clauses, 'extractedMetadata.name', extractorNames)
-if (filter.isEmpty()) {
-    appendNameClause(clauses, 'annotators.name', annotatorNames)
-} else {
-    clauses << buildAnnotatorPhraseClause(annotatorNames, filter)
+appendNameClause(clauses, 'annotators.name', annotatorNames)
+if (!filter.isEmpty()) {
+    clauses << buildAnnotatorPhraseClause(filterAnnotatorNames, filter)
 }
 def queryString = clauses.join(' AND ')
 loggerApi.info("Rerun of '${conditionName}' — rebuilt Data X-Ray query: ${queryString ?: '(all files)'}")
@@ -361,21 +400,36 @@ loggerApi.info("Rerun of '${conditionName}' ready: ${workItems.size()} file(s) i
 
 // --- Helpers (keep in sync with search-data-xray's scripts) -----------------------------
 
-def appendNameClause(List clauses, String field, List names) {
-    def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
-    if (present.isEmpty()) return
-    def terms = present.collect { "${field}:\"${it}\"".toString() }
-    clauses << (terms.size() == 1 ? terms[0] : "(${terms.join(' OR ')})".toString())
+// Escape a value for use inside a double-quoted query term: backslashes and
+// double quotes would otherwise terminate the term (Data X-Ray answers HTTP 400
+// for an unbalanced quote; "\"" and "\\" are accepted — verified live).
+def quoteTerm(String field, Object value) {
+    def escaped = value.toString().replace('\\', '\\\\').replace('"', '\\"')
+    return "${field}:\"${escaped}\"".toString()
 }
 
+// Append one "field:\"value\"" term per selected value. Every term is a separate
+// top-level clause, so the final `clauses.join(' AND ')` requires ALL of them.
+def appendNameClause(List clauses, String field, List names) {
+    def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
+    present.each { clauses << quoteTerm(field, it) }
+}
+
+// Build the nested annotator clause that ties a "contains" phrase match to the
+// annotators picked for the annotated-text filter. These are deliberately OR-ed:
+// the phrase must appear in ANY one of them —
+//   annotators: { (name:"A" OR name:"C") AND annotations.phrase:"*text*" }
+// The nested block keeps phrase and annotator identity on the SAME annotator.
+// With no names, scopes to all annotators: annotators: { annotations.phrase:"*text*" }
+// (The Annotators criterion itself is AND-ed via appendNameClause, independently.)
 def buildAnnotatorPhraseClause(List names, String phrase) {
     def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
-    def phraseTerm = "annotations.phrase:\"*${phrase}*\""
+    def phraseTerm = quoteTerm('annotations.phrase', "*${phrase}*")
     def inner
     if (present.isEmpty()) {
         inner = phraseTerm
     } else {
-        def nameTerms = present.collect { "name:\"${it}\"".toString() }
+        def nameTerms = present.collect { quoteTerm('name', it) }
         def nameClause = nameTerms.size() == 1 ? nameTerms[0] : "(${nameTerms.join(' OR ')})"
         inner = "${nameClause} AND ${phraseTerm}"
     }
