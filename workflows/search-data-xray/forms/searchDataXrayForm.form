@@ -41,7 +41,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Search query",
-          "value": "<p>Create a query that satisfies all selected criteria (AND query).</p>",
+          "value": "<p>Create a query that satisfies <b>all</b> selected criteria: every label, extractor and annotator you pick must match (AND query — there is no OR).</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -133,7 +133,7 @@
         {
           "designInfo": { "stencilSuperIds": ["cloud-text"], "stencilId": "cloud-text" },
           "label": "Annotated text",
-          "description": "Contains search: your text is matched anywhere inside an annotation (case-insensitive). Scoped to the Annotators selected above — a file matches when one of those annotators has an annotation containing this text. If no annotators are selected, all annotators are searched.",
+          "description": "Contains search: your text is matched anywhere inside an annotation (case-insensitive). Scoped to the Annotators selected above — a file matches when each of those annotators has an annotation containing this text. If no annotators are selected, all annotators are searched.",
           "value": "{{filter}}",
           "placeholder": "Enter text to search",
           "size": 12,

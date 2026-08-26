@@ -209,7 +209,7 @@ appendNameClause(clauses, 'extractedMetadata.name', extractorNames)
 if (filter.isEmpty()) {
     appendNameClause(clauses, 'annotators.name', annotatorNames)
 } else {
-    clauses << buildAnnotatorPhraseClause(annotatorNames, filter)
+    appendAnnotatorPhraseClauses(clauses, annotatorNames, filter)
 }
 def queryString = clauses.join(' AND ')
 loggerApi.info("Rerun of '${conditionName}' — rebuilt Data X-Ray query: ${queryString ?: '(all files)'}")
@@ -361,25 +361,27 @@ loggerApi.info("Rerun of '${conditionName}' ready: ${workItems.size()} file(s) i
 
 // --- Helpers (keep in sync with search-data-xray's scripts) -----------------------------
 
+// Append one "field:\"value\"" term per selected value. Every term is a separate
+// top-level clause, so the final `clauses.join(' AND ')` requires ALL of them.
 def appendNameClause(List clauses, String field, List names) {
     def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
-    if (present.isEmpty()) return
-    def terms = present.collect { "${field}:\"${it}\"".toString() }
-    clauses << (terms.size() == 1 ? terms[0] : "(${terms.join(' OR ')})".toString())
+    present.each { clauses << "${field}:\"${it}\"".toString() }
 }
 
-def buildAnnotatorPhraseClause(List names, String phrase) {
+// Append nested annotator clauses that tie a "contains" phrase match to EACH picked
+// annotator. A nested `annotators: { … }` block describes a single annotator object,
+// so two names can never match inside one block — instead one block per annotator is
+// emitted and the top-level AND requires every one of them:
+//   annotators: { name:"A" AND annotations.phrase:"*text*" } AND annotators: { name:"B" AND annotations.phrase:"*text*" }
+// With no names, scopes to all annotators: annotators: { annotations.phrase:"*text*" }
+def appendAnnotatorPhraseClauses(List clauses, List names, String phrase) {
     def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
     def phraseTerm = "annotations.phrase:\"*${phrase}*\""
-    def inner
     if (present.isEmpty()) {
-        inner = phraseTerm
-    } else {
-        def nameTerms = present.collect { "name:\"${it}\"".toString() }
-        def nameClause = nameTerms.size() == 1 ? nameTerms[0] : "(${nameTerms.join(' OR ')})"
-        inner = "${nameClause} AND ${phraseTerm}"
+        clauses << "annotators: { ${phraseTerm} }".toString()
+        return
     }
-    return "annotators: { ${inner} }".toString()
+    present.each { clauses << "annotators: { name:\"${it}\" AND ${phraseTerm} }".toString() }
 }
 
 def readSingleAttribute(UUID assetId, UUID typeId) {
