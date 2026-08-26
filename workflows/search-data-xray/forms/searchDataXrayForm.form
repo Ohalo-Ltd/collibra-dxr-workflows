@@ -41,7 +41,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Search query",
-          "value": "<p>Create a query that satisfies <b>all</b> selected criteria: every label, extractor and annotator you pick must match (AND query — there is no OR).</p>",
+          "value": "<p>Create a query that satisfies <b>all</b> selected criteria: every label, extractor and annotator you pick must match (AND query). The only OR is the optional annotated text, which matches if it appears in <i>any</i> of the annotators chosen for it.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -133,7 +133,7 @@
         {
           "designInfo": { "stencilSuperIds": ["cloud-text"], "stencilId": "cloud-text" },
           "label": "Annotated text",
-          "description": "Contains search: your text is matched anywhere inside an annotation (case-insensitive). Scoped to the Annotators selected above — a file matches when each of those annotators has an annotation containing this text. If no annotators are selected, all annotators are searched.",
+          "description": "Contains search: your text is matched anywhere inside an annotation (case-insensitive). Searched in the annotators picked in the next field — a file matches when any one of those annotators has an annotation containing this text. If none are picked, all annotators are searched.",
           "value": "{{filter}}",
           "placeholder": "Enter text to search",
           "size": 12,
@@ -147,12 +147,38 @@
           "type": "text"
         }
       ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
+          "label": "Annotated text annotators",
+          "description": "Which annotators the annotated text is searched in (OR: the text may appear in any of them). Independent of the Annotators criterion above. Ignored when no annotated text is entered; leave empty to search all annotators.",
+          "value": "{{filterAnnotator}}",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "extraSettings": {
+            "storage": "Id",
+            "multiValue": true,
+            "assetTypeIds": ["01922a69-e7a0-7ac7-a581-c9ba9286ccf1"],
+            "assetTypeInheritance": true,
+            "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
+            "excludeMeta": true,
+            "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
+          },
+          "id": "filterAnnotator",
+          "type": "asset"
+        }
+      ]
     }
   ],
   "metadata": {
     "key": "searchDataXrayForm",
     "name": "Search Data X-Ray",
-    "description": "Pick the labels, extractors and annotators (plus optional annotated text) to build a Data X-Ray search query.",
+    "description": "Pick the labels, extractors and annotators (plus optional annotated text and the annotators to search it in) to build a Data X-Ray search query.",
     "version": "1",
     "modelType": "form",
     "flowableDesignVersion": 3110,

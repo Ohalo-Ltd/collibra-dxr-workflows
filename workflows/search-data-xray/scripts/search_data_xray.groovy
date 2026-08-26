@@ -7,7 +7,8 @@
 //   1. Read & validate workflow configuration variables (hidden admin settings).
 //   2. Read the user's picks from the start form: a name, any combination of
 //      annotators / extractors / labels (Collibra asset pickers, multi-value),
-//      an optional free-text phrase filter, and a description.
+//      an optional free-text phrase filter (+ the annotators it is searched in),
+//      and a description.
 //   3. Create a search-query asset in the configured domain.
 //   4. Link that asset to each chosen classification via the configured
 //      relation type, resolving each classification's name along the way.
@@ -121,6 +122,7 @@ def descriptionAttrTypeId = string2Uuid('00000000-0000-0000-0000-000000003114')
 def filesAttrTypeId       = string2Uuid('019e2736-8bd0-727a-b4ab-6899517a3e73')
 def queryAttrTypeId       = string2Uuid('019e9210-cf9b-751a-85f2-d30c7a48b9e6')  // Data X-Ray Query
 def filterAttrTypeId      = string2Uuid('019e9210-e04d-7c6b-a481-5f29d8036c7a')  // Annotated Text Filter
+def textFilterRelTypeId   = string2Uuid('019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01')  // searches text in (query -> Annotator)
 def filesDomainId         = string2Uuid('019e9210-52a4-7c31-9b5e-3d8f0a6c1e42')  // Data X-Ray Files
 
 // Max files to preview on the query asset (fixed; previously a config variable).
@@ -149,6 +151,7 @@ def annotatorIds = toIdList(execution.getVariable('annotator'))
 def extractorIds = toIdList(execution.getVariable('extractor'))
 def labelIds     = toIdList(execution.getVariable('label'))
 def filter       = (execution.getVariable('filter') ?: '').toString().trim()
+def filterAnnotatorIds = toIdList(execution.getVariable('filterAnnotator'))
 def description  = (execution.getVariable('description') ?: '').toString().trim()
 
 // --- Create the search-query asset ------------------------------------------
@@ -178,34 +181,36 @@ try {
 def labelNames     = resolveAndRelate(labelIds,     queryId, groupsRelationTypeId)
 def annotatorNames = resolveAndRelate(annotatorIds, queryId, groupsRelationTypeId)
 def extractorNames = resolveAndRelate(extractorIds, queryId, groupsRelationTypeId)
+// Annotators the annotated-text filter is scoped to. Only meaningful with a
+// phrase; without one they would silently do nothing, so they are dropped.
+def filterAnnotatorNames = filter.isEmpty() ? [] : resolveAndRelate(filterAnnotatorIds, queryId, textFilterRelTypeId)
+if (filter.isEmpty() && !filterAnnotatorIds.isEmpty()) {
+    loggerApi.warn("Ignoring ${filterAnnotatorIds.size()} annotated-text annotator(s): no annotated text was entered")
+}
 
 // --- Compose the Data X-Ray query string ------------------------------------
 
-// Every selected value becomes its own clause and ALL clauses are AND-ed — there
-// is no OR anywhere: a file must carry every picked label, every picked extractor
-// and every picked annotator. Mirrors the field names the
+// Every selected label / extractor / annotator becomes its own clause and ALL
+// clauses are AND-ed: a file must carry every one of them. The only OR is inside
+// the annotated-text clause, between the annotators explicitly picked for the
+// phrase (see buildAnnotatorPhraseClause). Mirrors the field names the
 // Data X-Ray files API expects: labels.name, annotators.name, and
 // extractedMetadata.name (extractor results are exposed on file rows as
 // extractedMetadata entries — verified against a live instance; a query on
 // extractors.name matches nothing).
 //
-// The phrase filter, if given, is a "contains" match scoped to each picked
-// annotator via the nested object syntax — annotators: { name:… AND
-// annotations.phrase:"*text*" } — so the phrase and the annotator identity must
-// belong to the same annotator (see appendAnnotatorPhraseClauses).
+// The phrase filter, if given, is a "contains" match (wildcards; case-insensitive
+// in the API) scoped via the nested object syntax to the annotators picked in
+// the separate "Annotated text annotators" field — or to all annotators when
+// that field is empty. It is one more AND clause alongside the criteria, e.g.
+//   extractedMetadata.name:"E" AND annotators.name:"A" AND annotators.name:"B"
+//   AND annotators: { (name:"A" OR name:"C") AND annotations.phrase:"*text*" }
 def clauses = []
 appendNameClause(clauses, 'labels.name', labelNames)
 appendNameClause(clauses, 'extractedMetadata.name', extractorNames)
-
-if (filter.isEmpty()) {
-    // No phrase: annotator selection is an independent name filter, as before.
-    appendNameClause(clauses, 'annotators.name', annotatorNames)
-} else {
-    // Phrase present: scope it to each picked annotator using the nested object
-    // syntax so the phrase and annotator identity belong to the SAME annotator.
-    // Wildcards make it a "contains" match (anchored, case-insensitive in the API).
-    // No annotators picked => search the phrase across all annotators.
-    appendAnnotatorPhraseClauses(clauses, annotatorNames, filter)
+appendNameClause(clauses, 'annotators.name', annotatorNames)
+if (!filter.isEmpty()) {
+    clauses << buildAnnotatorPhraseClause(filterAnnotatorNames, filter)
 }
 def queryString = clauses.join(' AND ')
 if (queryString.isEmpty()) {
@@ -223,9 +228,10 @@ addAttribute(queryId, descriptionAttrTypeId, descParts.join('\n\n'))
 // Structured criteria for the rerun workflow. The classification criteria are
 // already recoverable from the query asset's "groups" relations (rebuilt from
 // CURRENT names at rerun time, so Data X-Ray renames don't break saved
-// queries); the free-text phrase has no relation, so it gets its own
-// attribute. The composed query string is stored too — as a human-readable
-// record of what ran, not as rerun input.
+// queries) and the phrase's annotators from its "searches text in" relations;
+// the free-text phrase has no relation, so it gets its own attribute. The
+// composed query string is stored too — as a human-readable record of what
+// ran, not as rerun input.
 addAttribute(queryId, queryAttrTypeId, queryString ?: '(all files)')
 if (!filter.isEmpty()) {
     addAttribute(queryId, filterAttrTypeId, filter)
@@ -412,20 +418,25 @@ def appendNameClause(List clauses, String field, List names) {
     present.each { clauses << "${field}:\"${it}\"".toString() }
 }
 
-// Append nested annotator clauses that tie a "contains" phrase match to EACH picked
-// annotator. A nested `annotators: { … }` block describes a single annotator object,
-// so two names can never match inside one block — instead one block per annotator is
-// emitted and the top-level AND requires every one of them:
-//   annotators: { name:"A" AND annotations.phrase:"*text*" } AND annotators: { name:"B" AND annotations.phrase:"*text*" }
+// Build the nested annotator clause that ties a "contains" phrase match to the
+// annotators picked for the annotated-text filter. These are deliberately OR-ed:
+// the phrase must appear in ANY one of them —
+//   annotators: { (name:"A" OR name:"C") AND annotations.phrase:"*text*" }
+// The nested block keeps phrase and annotator identity on the SAME annotator.
 // With no names, scopes to all annotators: annotators: { annotations.phrase:"*text*" }
-def appendAnnotatorPhraseClauses(List clauses, List names, String phrase) {
+// (The Annotators criterion itself is AND-ed via appendNameClause, independently.)
+def buildAnnotatorPhraseClause(List names, String phrase) {
     def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
     def phraseTerm = "annotations.phrase:\"*${phrase}*\""
+    def inner
     if (present.isEmpty()) {
-        clauses << "annotators: { ${phraseTerm} }".toString()
-        return
+        inner = phraseTerm
+    } else {
+        def nameTerms = present.collect { "name:\"${it}\"".toString() }
+        def nameClause = nameTerms.size() == 1 ? nameTerms[0] : "(${nameTerms.join(' OR ')})"
+        inner = "${nameClause} AND ${phraseTerm}"
     }
-    present.each { clauses << "annotators: { name:\"${it}\" AND ${phraseTerm} }".toString() }
+    return "annotators: { ${inner} }".toString()
 }
 
 def addAttribute(UUID assetId, UUID typeId, String value) {
