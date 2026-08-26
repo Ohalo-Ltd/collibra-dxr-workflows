@@ -199,9 +199,12 @@ def filter = readSingleAttribute(queryId, filterAttrTypeId)
 
 // Annotators the annotated-text filter is scoped to ("searches text in" relations).
 // Same liveness rule as the criteria: a retired/missing one aborts the rerun.
+// Only consulted when a phrase is actually stored — without one the relations
+// are inert (the search never wrote them, and the phrase clause isn't emitted),
+// so a stale relation must not be able to block a rerun.
 def filterAnnotatorNames = []
 def filterCursor = ''
-while (true) {
+while (!filter.isEmpty()) {
     def page = relationApi.findRelations(FindRelationsRequest.builder()
         .relationTypeId(textFilterRelTypeId)
         .sourceId(queryId)
@@ -224,7 +227,7 @@ while (true) {
         filterAnnotatorNames << target.getName()
     }
     filterCursor = page.getNextCursor()
-    if (!filterCursor) break
+    if (!filterCursor || !deadCriteria.isEmpty()) break
 }
 if (!deadCriteria.isEmpty()) {
     abort('Rerun Data X-Ray Search — criterion no longer exists',
@@ -397,11 +400,19 @@ loggerApi.info("Rerun of '${conditionName}' ready: ${workItems.size()} file(s) i
 
 // --- Helpers (keep in sync with search-data-xray's scripts) -----------------------------
 
+// Escape a value for use inside a double-quoted query term: backslashes and
+// double quotes would otherwise terminate the term (Data X-Ray answers HTTP 400
+// for an unbalanced quote; "\"" and "\\" are accepted — verified live).
+def quoteTerm(String field, Object value) {
+    def escaped = value.toString().replace('\\', '\\\\').replace('"', '\\"')
+    return "${field}:\"${escaped}\"".toString()
+}
+
 // Append one "field:\"value\"" term per selected value. Every term is a separate
 // top-level clause, so the final `clauses.join(' AND ')` requires ALL of them.
 def appendNameClause(List clauses, String field, List names) {
     def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
-    present.each { clauses << "${field}:\"${it}\"".toString() }
+    present.each { clauses << quoteTerm(field, it) }
 }
 
 // Build the nested annotator clause that ties a "contains" phrase match to the
@@ -413,12 +424,12 @@ def appendNameClause(List clauses, String field, List names) {
 // (The Annotators criterion itself is AND-ed via appendNameClause, independently.)
 def buildAnnotatorPhraseClause(List names, String phrase) {
     def present = names.findAll { it != null && !it.toString().trim().isEmpty() }
-    def phraseTerm = "annotations.phrase:\"*${phrase}*\""
+    def phraseTerm = quoteTerm('annotations.phrase', "*${phrase}*")
     def inner
     if (present.isEmpty()) {
         inner = phraseTerm
     } else {
-        def nameTerms = present.collect { "name:\"${it}\"".toString() }
+        def nameTerms = present.collect { quoteTerm('name', it) }
         def nameClause = nameTerms.size() == 1 ? nameTerms[0] : "(${nameTerms.join(' OR ')})"
         inner = "${nameClause} AND ${phraseTerm}"
     }
