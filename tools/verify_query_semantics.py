@@ -27,7 +27,7 @@ import sys
 
 import requests
 
-MAX_ROWS = 20_000        # safety cap per query; results are flagged if hit
+MAX_ROWS = 20_000        # safety cap per query; the run aborts if any query hits it
 SAMPLE_ROWS = 400        # rows scanned to discover test classifications
 
 
@@ -70,8 +70,11 @@ class Dxr:
 
     def ids(self, q):
         rows, trunc = self.files(q)
+        if trunc:
+            # A partial set makes every equality below meaningless — refuse to judge.
+            sys.exit(f'ABORT: {q!r} returned more than {MAX_ROWS} rows; raise MAX_ROWS or pick narrower test classifications')
         s = {row['fileId'] for row in rows}
-        print(f'  {len(s):>6}{"+" if trunc else " "}  {q}')
+        print(f'  {len(s):>6}  {q}')
         return s, rows
 
 
@@ -154,10 +157,12 @@ def main():
     print(f'  annotators A={A!r} B={B!r} C={C!r}\n  extractor E={E!r}\n  phrase    T={T!r}\n')
 
     def nm(field, v):
+        # Same escaping as quoteTerm() in the Groovy scripts: \ and " inside a term.
+        v = str(v).replace('\\', '\\\\').replace('"', '\\"')
         return f'{field}:"{v}"'
 
     def nested(names, phrase):
-        term = f'annotations.phrase:"*{phrase}*"'
+        term = nm('annotations.phrase', f'*{phrase}*')
         if not names:
             return f'annotators: {{ {term} }}'
         nc = nm('name', names[0]) if len(names) == 1 else '(' + ' OR '.join(nm('name', n) for n in names) + ')'
