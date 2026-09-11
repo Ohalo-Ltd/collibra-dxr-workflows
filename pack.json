@@ -1,6 +1,6 @@
 {
   "name": "collibra-data-xray-workflows",
-  "harnessRef": "v2.0.0",
+  "harnessRef": "v2.1.0",
   "workflows": [
     "configure-data-xray-workflows",
     "search-data-xray",

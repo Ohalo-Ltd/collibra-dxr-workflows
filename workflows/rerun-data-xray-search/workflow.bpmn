@@ -50,7 +50,6 @@
            name="Rerun Data X-Ray Search"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
-    <documentation>Rerun a saved Data X-Ray search and re-sync its imported file assets (retiring files that no longer match).</documentation>
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
     </extensionElements>

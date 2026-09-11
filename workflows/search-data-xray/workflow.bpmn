@@ -51,7 +51,6 @@
            name="Search Data X-Ray"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
-    <documentation>Create a Data X-Ray search query from Collibra classifications and preview the matching files.</documentation>
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
     </extensionElements>
