@@ -80,3 +80,7 @@ Adding a workflow to the bundle = add its directory under `workflows/` **and** i
 ## License
 
 Source-available under the [Ohalo Source-Available License](LICENSE) — free to inspect and to deploy for organisations licensed for Data X-Ray; not open source.
+
+## Attribution
+
+These workflows were built by [Ohalo](https://ohalo.co/) in partnership with [Collibra](https://www.collibra.com/). The classification sync, and the approach of populating search queries as Collibra assets, are concepts developed by Vasiliki Nikolopoulou.
