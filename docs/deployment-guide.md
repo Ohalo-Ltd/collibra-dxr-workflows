@@ -153,7 +153,9 @@ everything without being added to these roles.
   disappear from Data X-Ray are set to status **Obsolete**, keeping their
   comments, attachments and workflow history. A file asset is only retired once
   **no** saved search returns it any more, and is reactivated automatically if
-  it reappears.
+  it reappears. The full file-asset lifecycle — creation, the 25,000 cap,
+  sync, orphaning, deletion and what to do at the limit — is explained in
+  [file-asset-lifecycle.md](file-asset-lifecycle.md).
 - **Deleting a saved query** — deleting an Unstructured Data Query asset does
   **not** delete its imported file assets. Files that only that query returned
   are picked up by the nightly file sync's orphan sweep and **retired** the

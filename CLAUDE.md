@@ -8,6 +8,8 @@ The **Data X-Ray ↔ Collibra integration**: six Collibra workflows (Groovy + BP
 pack.json                  Pack manifest: bundle name, pinned harnessRef, workflow list, extra bundle files
 workflows/<name>/          One directory per workflow (app.json, workflow.bpmn, scripts/, forms/)
 docs/deployment-guide.md   Customer-facing UI deployment guide (shipped in the bundle)
+docs/file-asset-lifecycle.md  Customer-facing explainer: file asset creation, 25k cap, sync, orphaning/retirement, deletion (shipped)
+docs/images/               Screenshots referenced by the docs (bundle.extra ships the docs dir, so relative links survive)
 docs/acceptance-criteria.md  Lifecycle acceptance criteria / UAT checklist (shipped in the bundle)
 workflow-registry.json     Workflow name → Collibra definition UUID, per environment (dev instances)
 .github/workflows/release-bundle.yml  Builds the release bundle with the pinned harness on `release: published`

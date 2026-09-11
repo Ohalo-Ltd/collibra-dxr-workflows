@@ -6,7 +6,7 @@ Collibra workflows are written in Groovy and run on a [Flowable](https://www.flo
 
 There are two audiences:
 
-- **Deploying to a Collibra instance?** You only need the release bundle and [`docs/deployment-guide.md`](docs/deployment-guide.md) — everything is done through the Collibra UI, no command line required.
+- **Deploying to a Collibra instance?** You only need the release bundle and [`docs/deployment-guide.md`](docs/deployment-guide.md) — everything is done through the Collibra UI, no command line required. [`docs/file-asset-lifecycle.md`](docs/file-asset-lifecycle.md) explains how imported file assets are created, capped, kept in sync, retired and (never) deleted.
 - **Changing the workflows?** See [Developing](#developing) below.
 
 ## The workflows
@@ -53,7 +53,9 @@ sync-data-xray-classifications.zip
 sync-data-xray-classifications-nightly.zip
 sync-data-xray-files-nightly.zip
 deployment-guide.md
+file-asset-lifecycle.md
 acceptance-criteria.md
+images/…
 ```
 
 > To build the bundle without cutting a release, run the Action manually from the **Actions** tab (`workflow_dispatch`) — the bundle is uploaded as a run artifact instead. The Action needs the `HARNESS_READ_TOKEN` repository secret (read access to the internal harness repo).
