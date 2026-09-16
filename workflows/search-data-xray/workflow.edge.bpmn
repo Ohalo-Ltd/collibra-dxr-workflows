@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  searchDataXray workflow — Collibra Cloud + Edge variant
+  =======================================================
+  Same process id, forms and outcome as workflow.bpmn, but Data X-Ray is reached
+  through a Collibra External API task bound to an Edge HTTP connection (which
+  holds the credentials), never from Groovy. Every External API task is
+  asynchronous and its response is capped in size, so the search runs as a loop:
+    startEvent (form: searchDataXrayForm)
+      → searchPrepareTask (script, sync: validate, resolve the picked
+           classifications to names + Data X-Ray ids, arm the first request)
+      → searchFetchTask (External API task) → searchPageTask (script, async:
+           catalogue stages, then the first results page) → searchLoopGateway
+      → searchFinalizeTask (script: create the query asset, relations, preview)
+      → searchOutcomeGateway
+          ├─ failed → searchFailedTask (user form) → endEvent
+          └─ ok     → resultsTask (user form: searchResultsForm)
+      → decideImportGateway
+          ├─ import unticked → endEvent
+          └─ import ticked   → importCollectorTask (script, sync: cap check,
+                 classification index, arm page 0)
+              → importFetchTask (External API task) → importPageTask (script,
+                 async: one page = one batch of upserts) → importLoopGateway
+              → importSummaryTask (user form) → endEventImported
+  Configuration variables (start event, hidden): the Edge HTTP connection name,
+  the results page size and — for deep links only — the Data X-Ray base URL.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+  <process id="searchDataXray"
+           name="Search Data X-Ray"
+           isExecutable="true"
+           flowable:candidateStarterGroups="flowableUser">
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="searchDataXrayForm">
+      <extensionElements>
+        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (Data X-Ray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayPageSize" name="Data X-Ray results per request (1-200)" type="string" variable="dataxrayPageSize" default="50" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL (deep links only)" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="false"/>
+        <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </startEvent>
+    <scriptTask id="searchPrepareTask" name="Prepare Search" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:search_prepare_edge.groovy}}</script>
+    </scriptTask>
+    <serviceTask id="searchFetchTask" name="Call Data X-Ray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
+      <extensionElements>
+        <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestUrl"><flowable:expression><![CDATA[${dxrRequestPath}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestHeaders"><flowable:expression><![CDATA[${dxrRequestHeaders}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestBody"><flowable:expression><![CDATA[${dxrRequestBody}]]></flowable:expression></flowable:field>
+        <flowable:field name="disallowRedirects"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="responseVariableName"><flowable:string><![CDATA[dxrResponseBody]]></flowable:string></flowable:field>
+        <flowable:field name="resultVariablePrefix"><flowable:string><![CDATA[dxr]]></flowable:string></flowable:field>
+        <flowable:field name="ignoreException"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveRequestVariables"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParameters"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParametersTransient"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseVariableAsJson"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <design:stencilid><![CDATA[HttpTask]]></design:stencilid>
+        <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
+      </extensionElements>
+    </serviceTask>
+    <scriptTask id="searchPageTask" name="Handle Data X-Ray Response" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:search_page_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="searchLoopGateway" name="More requests?" default="flowSearchFetched">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <scriptTask id="searchFinalizeTask" name="Record Search Results" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:search_finalize_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="searchOutcomeGateway" name="Search succeeded?" default="flowSearchOk">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <userTask id="searchFailedTask" name="Search Failed" flowable:candidateUsers="user(${initiator})" flowable:formKey="searchFailedForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+    <userTask id="resultsTask" name="Search Results" flowable:candidateUsers="user(${initiator})" flowable:formKey="searchResultsForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+    <exclusiveGateway id="decideImportGateway" name="Import assets?" default="flowSkipImport">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <scriptTask id="importCollectorTask" name="Prepare Import" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:import_collector_edge.groovy}}</script>
+    </scriptTask>
+    <serviceTask id="importFetchTask" name="Fetch Results Page (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
+      <extensionElements>
+        <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestUrl"><flowable:expression><![CDATA[${dxrRequestPath}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestHeaders"><flowable:expression><![CDATA[${dxrRequestHeaders}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestBody"><flowable:expression><![CDATA[${dxrRequestBody}]]></flowable:expression></flowable:field>
+        <flowable:field name="disallowRedirects"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="responseVariableName"><flowable:string><![CDATA[dxrResponseBody]]></flowable:string></flowable:field>
+        <flowable:field name="resultVariablePrefix"><flowable:string><![CDATA[dxr]]></flowable:string></flowable:field>
+        <flowable:field name="ignoreException"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveRequestVariables"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParameters"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParametersTransient"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseVariableAsJson"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <design:stencilid><![CDATA[HttpTask]]></design:stencilid>
+        <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
+      </extensionElements>
+    </serviceTask>
+    <scriptTask id="importPageTask" name="Import File Assets (page)" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:import_page_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="importLoopGateway" name="More pages?" default="flowImportDone">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <userTask id="importSummaryTask" name="Import Summary" flowable:candidateUsers="user(${initiator})" flowable:formKey="importSummaryForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+    <endEvent id="endEventImported" name="End (imported)">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="searchPrepareTask"/>
+    <sequenceFlow id="flow2" sourceRef="searchPrepareTask" targetRef="searchFetchTask"/>
+    <sequenceFlow id="flow3" sourceRef="searchFetchTask" targetRef="searchPageTask"/>
+    <sequenceFlow id="flow4" sourceRef="searchPageTask" targetRef="searchLoopGateway"/>
+    <sequenceFlow id="flowSearchMore" sourceRef="searchLoopGateway" targetRef="searchFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowSearchFetched" sourceRef="searchLoopGateway" targetRef="searchFinalizeTask"/>
+    <sequenceFlow id="flow5" sourceRef="searchFinalizeTask" targetRef="searchOutcomeGateway"/>
+    <sequenceFlow id="flowSearchFailed" sourceRef="searchOutcomeGateway" targetRef="searchFailedTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${searchFailed == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowSearchOk" sourceRef="searchOutcomeGateway" targetRef="resultsTask"/>
+    <sequenceFlow id="flowFailedAck" sourceRef="searchFailedTask" targetRef="endEvent"/>
+    <sequenceFlow id="flow6" sourceRef="resultsTask" targetRef="decideImportGateway"/>
+    <sequenceFlow id="flowSkipImport" sourceRef="decideImportGateway" targetRef="endEvent"/>
+    <sequenceFlow id="flowImportYes" sourceRef="decideImportGateway" targetRef="importCollectorTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${importDecision == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flow7" sourceRef="importCollectorTask" targetRef="importFetchTask"/>
+    <sequenceFlow id="flow8" sourceRef="importFetchTask" targetRef="importPageTask"/>
+    <sequenceFlow id="flow9" sourceRef="importPageTask" targetRef="importLoopGateway"/>
+    <sequenceFlow id="flowImportMore" sourceRef="importLoopGateway" targetRef="importFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowImportDone" sourceRef="importLoopGateway" targetRef="importSummaryTask"/>
+    <sequenceFlow id="flow10" sourceRef="importSummaryTask" targetRef="endEventImported"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_searchDataXray">
+    <bpmndi:BPMNPlane bpmnElement="searchDataXray" id="BPMNPlane_searchDataXray">
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="S_startEvent"><omgdc:Bounds height="30.0" width="30.0" x="60.0" y="165.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="searchPrepareTask" id="S_searchPrepareTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="searchFetchTask" id="S_searchFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="searchPageTask" id="S_searchPageTask"><omgdc:Bounds height="80.0" width="100.0" x="410.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="searchLoopGateway" id="S_searchLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="550.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="searchFinalizeTask" id="S_searchFinalizeTask"><omgdc:Bounds height="80.0" width="100.0" x="630.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="searchOutcomeGateway" id="S_searchOutcomeGateway"><omgdc:Bounds height="40.0" width="40.0" x="770.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="searchFailedTask" id="S_searchFailedTask"><omgdc:Bounds height="80.0" width="100.0" x="740.0" y="20.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="resultsTask" id="S_resultsTask"><omgdc:Bounds height="80.0" width="100.0" x="850.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="decideImportGateway" id="S_decideImportGateway"><omgdc:Bounds height="40.0" width="40.0" x="990.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="996.0" y="46.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="importCollectorTask" id="S_importCollectorTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="320.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="importFetchTask" id="S_importFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="320.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="importPageTask" id="S_importPageTask"><omgdc:Bounds height="80.0" width="100.0" x="410.0" y="320.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="importLoopGateway" id="S_importLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="550.0" y="340.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="importSummaryTask" id="S_importSummaryTask"><omgdc:Bounds height="80.0" width="100.0" x="630.0" y="320.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endEventImported" id="S_endEventImported"><omgdc:Bounds height="28.0" width="28.0" x="776.0" y="346.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="90.0" y="180.0"/><omgdi:waypoint x="130.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="230.0" y="180.0"/><omgdi:waypoint x="270.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="370.0" y="180.0"/><omgdi:waypoint x="410.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="E_flow4"><omgdi:waypoint x="510.0" y="180.0"/><omgdi:waypoint x="550.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSearchMore" id="E_flowSearchMore"><omgdi:waypoint x="570.0" y="160.0"/><omgdi:waypoint x="570.0" y="110.0"/><omgdi:waypoint x="320.0" y="110.0"/><omgdi:waypoint x="320.0" y="140.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSearchFetched" id="E_flowSearchFetched"><omgdi:waypoint x="590.0" y="180.0"/><omgdi:waypoint x="630.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="E_flow5"><omgdi:waypoint x="730.0" y="180.0"/><omgdi:waypoint x="770.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSearchFailed" id="E_flowSearchFailed"><omgdi:waypoint x="790.0" y="160.0"/><omgdi:waypoint x="790.0" y="100.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSearchOk" id="E_flowSearchOk"><omgdi:waypoint x="810.0" y="180.0"/><omgdi:waypoint x="850.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowFailedAck" id="E_flowFailedAck"><omgdi:waypoint x="840.0" y="60.0"/><omgdi:waypoint x="996.0" y="60.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow6" id="E_flow6"><omgdi:waypoint x="950.0" y="180.0"/><omgdi:waypoint x="990.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSkipImport" id="E_flowSkipImport"><omgdi:waypoint x="1010.0" y="160.0"/><omgdi:waypoint x="1010.0" y="74.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowImportYes" id="E_flowImportYes"><omgdi:waypoint x="1010.0" y="200.0"/><omgdi:waypoint x="1010.0" y="280.0"/><omgdi:waypoint x="180.0" y="280.0"/><omgdi:waypoint x="180.0" y="320.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow7" id="E_flow7"><omgdi:waypoint x="230.0" y="360.0"/><omgdi:waypoint x="270.0" y="360.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow8" id="E_flow8"><omgdi:waypoint x="370.0" y="360.0"/><omgdi:waypoint x="410.0" y="360.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow9" id="E_flow9"><omgdi:waypoint x="510.0" y="360.0"/><omgdi:waypoint x="550.0" y="360.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowImportMore" id="E_flowImportMore"><omgdi:waypoint x="570.0" y="380.0"/><omgdi:waypoint x="570.0" y="430.0"/><omgdi:waypoint x="320.0" y="430.0"/><omgdi:waypoint x="320.0" y="400.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowImportDone" id="E_flowImportDone"><omgdi:waypoint x="590.0" y="360.0"/><omgdi:waypoint x="630.0" y="360.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow10" id="E_flow10"><omgdi:waypoint x="730.0" y="360.0"/><omgdi:waypoint x="776.0" y="360.0"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

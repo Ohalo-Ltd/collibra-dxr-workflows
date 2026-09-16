@@ -1,0 +1,30 @@
+{
+  "rows": [
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Sync failed",
+          "value": "<p>The Data X-Ray classifications sync could not complete.</p><p><b>Reason:</b> {{dxrErrorMessage}}</p><p>Data X-Ray is reached through the Edge HTTP connection configured on this workflow. If the connection name, its host or its credentials are wrong, an administrator can fix them on the Edge site (Settings → Edge) or on the workflow's settings page. Full detail is in <code>dgc.log</code>. Click <b>Send</b> to close this task.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "syncFailedSummary",
+          "type": "htmlComponent"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "key": "syncFailedForm",
+    "name": "Sync Failed",
+    "description": "Shown when the Data X-Ray classification catalogue could not be fetched or synced through the Edge connection.",
+    "version": "1",
+    "modelType": "form",
+    "flowableDesignVersion": 3110,
+    "palette": "flowable-core-form-palette"
+  }
+}

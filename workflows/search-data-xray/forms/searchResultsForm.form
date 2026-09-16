@@ -5,7 +5,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Search complete",
-          "value": "<p>The search query <b>{{conditionName}}</b> was created and linked to your selected classifications.</p><p><b>Data X-Ray query:</b> <code>{{queryString}}</code></p><p><b>Matching files:</b> {{resultCountDisplay}}</p><p>A <b>preview</b> of the first {{shownCount}} match(es) is stored as a table on the search-query asset, and the full result set is attached to the asset as a ZIP'd CSV (<code>{{attachmentName}}</code>). Open the asset to review the preview and download the attachment. Full detail is also in <code>dgc.log</code>.</p>",
+          "value": "<p>The search query <b>{{conditionName}}</b> was created and linked to your selected classifications.</p><p><b>Data X-Ray query:</b> <code>{{queryString}}</code></p><p><b>Matching files:</b> {{resultCountDisplay}}</p><p>A <b>preview</b> of the first {{shownCount}} match(es) is stored as a table on the search-query asset. {{attachmentDescription}} Full detail is also in <code>dgc.log</code>.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,

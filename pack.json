@@ -1,6 +1,6 @@
 {
   "name": "collibra-data-xray-workflows",
-  "harnessRef": "v2.1.0",
+  "harnessRef": "v2.2.0",
   "workflows": [
     "configure-data-xray-workflows",
     "search-data-xray",
@@ -9,5 +9,17 @@
     "sync-data-xray-classifications-nightly",
     "sync-data-xray-files-nightly"
   ],
-  "bundle": { "extra": ["docs"] }
+  "bundle": {
+    "extra": [
+      "docs"
+    ]
+  },
+  "variants": {
+    "onprem": {
+      "suffix": "onprem"
+    },
+    "edge": {
+      "suffix": "cloud-edge"
+    }
+  }
 }

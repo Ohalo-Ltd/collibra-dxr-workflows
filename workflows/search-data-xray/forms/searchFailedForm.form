@@ -1,0 +1,30 @@
+{
+  "rows": [
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "Search failed",
+          "value": "<p>The search <b>{{conditionName}}</b> could not be run against Data X-Ray, so nothing was saved.</p><p><b>Reason:</b> {{dxrErrorMessage}}</p><p>Data X-Ray is reached through the Edge HTTP connection configured on this workflow. If the connection name, its host or its credentials are wrong, an administrator can fix them on the Edge site (Settings → Edge) or on the workflow's settings page. Full detail is in <code>dgc.log</code>. Click <b>Send</b> to close this task.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "searchFailedSummary",
+          "type": "htmlComponent"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "key": "searchFailedForm",
+    "name": "Search Failed",
+    "description": "Shown when the Data X-Ray search could not be executed through the Edge connection.",
+    "version": "1",
+    "modelType": "form",
+    "flowableDesignVersion": 3110,
+    "palette": "flowable-core-form-palette"
+  }
+}
