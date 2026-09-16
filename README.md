@@ -1,12 +1,12 @@
 # collibra-dxr-workflows
 
-The **Data X-Ray** [Collibra](https://www.collibra.com/) workflows — six Groovy/BPMN workflows released together as one customer bundle.
+The **Data X-Ray** [Collibra](https://www.collibra.com/) workflows — six Groovy/BPMN workflows released together, in **two editions**: an **on-prem** bundle whose scripts call Data X-Ray directly over HTTPS, and a **Collibra Cloud + Edge** bundle that reaches an on-premises Data X-Ray through a Collibra Edge site's HTTP connection.
 
 Collibra workflows are written in Groovy and run on a [Flowable](https://www.flowable.com/) BPMN engine embedded in the platform. This repo keeps each workflow's BPMN, Groovy scripts, and JSON forms under version control; the [collibra-workflower](https://github.com/Ohalo-Ltd/collibra-workflower) harness builds them into Workflow Designer ZIPs (identical to what the Collibra UI exports) and this repo's release Action ships them as a single bundle attached to each GitHub release.
 
 There are two audiences:
 
-- **Deploying to a Collibra instance?** You only need the release bundle and [`docs/deployment-guide.md`](docs/deployment-guide.md) — everything is done through the Collibra UI, no command line required. [`docs/file-asset-lifecycle.md`](docs/file-asset-lifecycle.md) explains how imported file assets are created, capped, kept in sync, retired and (never) deleted.
+- **Deploying to a Collibra instance?** You only need the release bundle and [`docs/deployment-guide.md`](docs/deployment-guide.md) (on-prem edition) or [`docs/deployment-guide-edge.md`](docs/deployment-guide-edge.md) (Collibra Cloud + Edge edition) — everything is done through the Collibra UI, no command line required. [`docs/file-asset-lifecycle.md`](docs/file-asset-lifecycle.md) explains how imported file assets are created, capped, kept in sync, retired and (never) deleted.
 - **Changing the workflows?** See [Developing](#developing) below.
 
 ## The workflows
@@ -37,7 +37,14 @@ Who may run each workflow is set at runtime by **Configure Data X-Ray Workflows*
 
 ## Releasing
 
-Publishing a GitHub release produces the customer-ready deliverable automatically. The [`Bundle Data X-Ray Workflow ZIPs`](.github/workflows/release-bundle.yml) Action checks out the harness at the version pinned in [`pack.json`](pack.json) (`harnessRef`), runs `deploy.py bundle`, and attaches **`collibra-data-xray-workflows-<tag>.zip`** to the release. No Collibra credentials are involved — the build is entirely offline.
+Publishing a GitHub release produces the customer-ready deliverables automatically. The [`Bundle Data X-Ray Workflow ZIPs`](.github/workflows/release-bundle.yml) Action checks out the harness at the version pinned in [`pack.json`](pack.json) (`harnessRef`), runs `deploy.py bundle`, and attaches **two bundles** to the release — one per variant declared in `pack.json`:
+
+| Bundle | Edition |
+|---|---|
+| `collibra-data-xray-workflows-onprem-<tag>.zip` | Direct HTTPS from Collibra to Data X-Ray (Bearer token on the workflows). |
+| `collibra-data-xray-workflows-cloud-edge-<tag>.zip` | Collibra Cloud → Edge site → Data X-Ray (credentials on the Edge HTTP connection; Data X-Ray is paged through its internal search API). |
+
+Both hold the same six workflows under the same process ids; a customer installs one of them. No Collibra credentials are involved — the build is entirely offline.
 
 ```bash
 gh release create v1.2.0 --generate-notes
@@ -69,11 +76,15 @@ git clone --recurse-submodules git@github.com:Ohalo-Ltd/collibra-workflower.git
 cd collibra-workflower
 pip install -r requirements.txt && cp .env.example .env   # fill in Collibra credentials
 
-python deploy.py list                                    # packs and workflows
-python deploy.py search-data-xray --dry-run              # preview a ZIP
-python deploy.py search-data-xray --enable               # deploy to your dev instance
-python deploy.py bundle --pack packs/dxr-workflows       # build the release bundle locally
+python deploy.py list                                    # packs, variants and workflows
+python deploy.py search-data-xray --dry-run              # preview a ZIP (default variant: onprem)
+python deploy.py search-data-xray --enable               # deploy the on-prem edition to your dev instance
+python deploy.py search-data-xray --variant edge         # deploy the Cloud + Edge edition instead (same process id)
+python deploy.py bundle --pack packs/dxr-workflows       # build both release bundles locally
+python tools/groovy_syntax_check.py packs/dxr-workflows  # compile every script of every variant (needs groovyc)
 ```
+
+Shared Groovy lives in [`shared/`](shared/) and is pulled into scripts with `// {{include:name.groovy}}` at build time; the Edge edition adds `workflow.edge.bpmn` and `scripts/edge/` per workflow. See [CLAUDE.md](CLAUDE.md) for the two-edition design and the Data X-Ray API contract each one relies on.
 
 Commit and push pack changes from inside `packs/dxr-workflows` (it is its own git repo), then commit the updated submodule pointer in the harness. Deployed definition UUIDs are recorded per environment in [`workflow-registry.json`](workflow-registry.json).
 

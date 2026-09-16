@@ -5,5 +5,10 @@
   "theme": "theme-3",
   "icon": "glyphicon-inbox",
   "businessItemResourceType": "GLOBAL",
-  "globalCreate": true
+  "globalCreate": true,
+  "variants": {
+    "edge": {
+      "description": "Search Data X-Ray for files matching the labels, extractors and annotators you choose. Collibra Cloud + Edge edition: Data X-Ray is reached through an Edge HTTP connection."
+    }
+  }
 }

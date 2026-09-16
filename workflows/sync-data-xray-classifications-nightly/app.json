@@ -4,5 +4,10 @@
   "description": "Sync the Data X-Ray classification catalog into Collibra automatically every night.",
   "theme": "theme-1",
   "icon": "glyphicon-refresh",
-  "businessItemResourceType": "GLOBAL"
+  "businessItemResourceType": "GLOBAL",
+  "variants": {
+    "edge": {
+      "description": "Sync the Data X-Ray classification catalog into Collibra automatically every night. Collibra Cloud + Edge edition: Data X-Ray is reached through an Edge HTTP connection."
+    }
+  }
 }

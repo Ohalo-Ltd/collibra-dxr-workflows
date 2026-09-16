@@ -5,6 +5,17 @@ Collibra entirely through the Collibra user interface. You will be provided with
 **six Workflow Designer ZIP files**, one per workflow. No command-line tools or
 scripts are required — everything below is done from within Collibra.
 
+## Which edition do I have?
+
+Each release ships **two bundles** with the same six workflows:
+
+| Bundle | Use it when | Guide |
+|---|---|---|
+| `collibra-data-xray-workflows-onprem-<version>.zip` | Collibra (self-hosted **or** Cloud) can reach your Data X-Ray directly over HTTPS. The workflows call Data X-Ray themselves with a Bearer token. | **This guide.** |
+| `collibra-data-xray-workflows-cloud-edge-<version>.zip` | Collibra **Cloud** and a Data X-Ray that is only reachable from inside your network. Calls go through a **Collibra Edge site** and an HTTP connection that holds the credentials. | [deployment-guide-edge.md](deployment-guide-edge.md) — Steps 1–3 and 5 below still apply; Step 4 differs. |
+
+Both editions use the same process ids, so you can switch from one to the other later by importing the other bundle over the installed workflows.
+
 ## The six workflows
 
 | Workflow | What it does | How it runs |
@@ -76,6 +87,10 @@ After this step you will have two new global roles:
 - **Data X-Ray User**
 
 ## Step 4 — Set the Data X-Ray connection (Base URL + Bearer token)
+
+> **Cloud + Edge edition?** This step is different: there is no Bearer token,
+> and the workflows need the name of an Edge HTTP connection instead. Follow
+> Steps 1 and 4 of [deployment-guide-edge.md](deployment-guide-edge.md).
 
 Four of the workflows — **Search Data X-Ray**, **Rerun Data X-Ray Search**,
 **Sync Data X-Ray Classifications**, and **Sync Data X-Ray Classification

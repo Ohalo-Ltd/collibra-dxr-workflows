@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  rerunDataXraySearch workflow — Collibra Cloud + Edge variant
+  ============================================================
+  Same process id, form and outcome as workflow.bpmn; Data X-Ray is reached
+  through a Collibra External API task bound to an Edge HTTP connection:
+    startEvent (no form — started from the query asset's page, or headlessly
+                by the nightly file sync driver)
+      → rerunCollectorTask (script, sync: rebuild the criteria from the asset,
+           snapshot the previously returned files, arm the first request)
+      → rerunFetchTask (External API task) → rerunPageTask (script, async:
+           catalogue stages, then one results page = one batch of upserts)
+      → rerunLoopGateway ─ ${hasMoreWork} ─→ back to rerunFetchTask
+      → retireTask (script: unlink/retire files no longer returned — only when
+           every page was fetched)
+      → headlessGateway → endEvent | rerunSummaryTask (user form) → endEvent
+  Headless runs never throw; every abort path records rerunAborted/rerunAbortReason.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+  <process id="rerunDataXraySearch"
+           name="Rerun Data X-Ray Search"
+           isExecutable="true"
+           flowable:candidateStarterGroups="flowableUser">
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
+      <extensionElements>
+        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (Data X-Ray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayPageSize" name="Data X-Ray results per request (1-200)" type="string" variable="dataxrayPageSize" default="50" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL (deep links only)" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="false"/>
+        <!-- Set to 'true' by the nightly driver via startWorkflowInstances
+             formProperties; a headless run never throws and skips the summary
+             user task. Admins should leave this at 'false'. -->
+        <flowable:formProperty id="headless" name="Headless (set by the nightly sync — leave at false)" type="string" variable="headless" default="false" readable="false" required="false"/>
+        <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </startEvent>
+    <scriptTask id="rerunCollectorTask" name="Rebuild Query" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:rerun_collector_edge.groovy}}</script>
+    </scriptTask>
+    <serviceTask id="rerunFetchTask" name="Call Data X-Ray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
+      <extensionElements>
+        <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestUrl"><flowable:expression><![CDATA[${dxrRequestPath}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestHeaders"><flowable:expression><![CDATA[${dxrRequestHeaders}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestBody"><flowable:expression><![CDATA[${dxrRequestBody}]]></flowable:expression></flowable:field>
+        <flowable:field name="disallowRedirects"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="responseVariableName"><flowable:string><![CDATA[dxrResponseBody]]></flowable:string></flowable:field>
+        <flowable:field name="resultVariablePrefix"><flowable:string><![CDATA[dxr]]></flowable:string></flowable:field>
+        <flowable:field name="ignoreException"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveRequestVariables"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParameters"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParametersTransient"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseVariableAsJson"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <design:stencilid><![CDATA[HttpTask]]></design:stencilid>
+        <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
+      </extensionElements>
+    </serviceTask>
+    <scriptTask id="rerunPageTask" name="Sync File Assets (page)" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:rerun_page_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="rerunLoopGateway" name="More requests?" default="flowSyncDone">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <scriptTask id="retireTask" name="Retire Orphaned Files" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:retire_orphans_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="headlessGateway" name="Headless?" default="flowInteractive">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <userTask id="rerunSummaryTask" name="Rerun Summary" flowable:candidateUsers="user(${initiator})" flowable:formKey="rerunSummaryForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="rerunCollectorTask"/>
+    <sequenceFlow id="flow2" sourceRef="rerunCollectorTask" targetRef="rerunFetchTask"/>
+    <sequenceFlow id="flow3" sourceRef="rerunFetchTask" targetRef="rerunPageTask"/>
+    <sequenceFlow id="flow4" sourceRef="rerunPageTask" targetRef="rerunLoopGateway"/>
+    <sequenceFlow id="flowMoreWork" sourceRef="rerunLoopGateway" targetRef="rerunFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowSyncDone" sourceRef="rerunLoopGateway" targetRef="retireTask"/>
+    <sequenceFlow id="flow5" sourceRef="retireTask" targetRef="headlessGateway"/>
+    <sequenceFlow id="flowHeadless" sourceRef="headlessGateway" targetRef="endEvent">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${headless == 'true'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowInteractive" sourceRef="headlessGateway" targetRef="rerunSummaryTask"/>
+    <sequenceFlow id="flow6" sourceRef="rerunSummaryTask" targetRef="endEvent"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_rerunDataXraySearch">
+    <bpmndi:BPMNPlane bpmnElement="rerunDataXraySearch" id="BPMNPlane_rerunDataXraySearch">
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="S_startEvent"><omgdc:Bounds height="30.0" width="30.0" x="60.0" y="165.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunCollectorTask" id="S_rerunCollectorTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunFetchTask" id="S_rerunFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunPageTask" id="S_rerunPageTask"><omgdc:Bounds height="80.0" width="100.0" x="410.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunLoopGateway" id="S_rerunLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="550.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="retireTask" id="S_retireTask"><omgdc:Bounds height="80.0" width="100.0" x="630.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="headlessGateway" id="S_headlessGateway"><omgdc:Bounds height="40.0" width="40.0" x="770.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunSummaryTask" id="S_rerunSummaryTask"><omgdc:Bounds height="80.0" width="100.0" x="850.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="990.0" y="166.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="90.0" y="180.0"/><omgdi:waypoint x="130.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="230.0" y="180.0"/><omgdi:waypoint x="270.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="370.0" y="180.0"/><omgdi:waypoint x="410.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="E_flow4"><omgdi:waypoint x="510.0" y="180.0"/><omgdi:waypoint x="550.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowMoreWork" id="E_flowMoreWork"><omgdi:waypoint x="570.0" y="160.0"/><omgdi:waypoint x="570.0" y="100.0"/><omgdi:waypoint x="320.0" y="100.0"/><omgdi:waypoint x="320.0" y="140.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSyncDone" id="E_flowSyncDone"><omgdi:waypoint x="590.0" y="180.0"/><omgdi:waypoint x="630.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="E_flow5"><omgdi:waypoint x="730.0" y="180.0"/><omgdi:waypoint x="770.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowHeadless" id="E_flowHeadless"><omgdi:waypoint x="790.0" y="200.0"/><omgdi:waypoint x="790.0" y="260.0"/><omgdi:waypoint x="1004.0" y="260.0"/><omgdi:waypoint x="1004.0" y="194.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowInteractive" id="E_flowInteractive"><omgdi:waypoint x="810.0" y="180.0"/><omgdi:waypoint x="850.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow6" id="E_flow6"><omgdi:waypoint x="950.0" y="180.0"/><omgdi:waypoint x="990.0" y="180.0"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

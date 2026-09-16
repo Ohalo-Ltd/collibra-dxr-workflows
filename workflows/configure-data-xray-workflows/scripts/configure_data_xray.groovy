@@ -17,7 +17,8 @@
 //   3. Ensures the two access-control roles exist with FIXED canonical UUIDs:
 //        - 'Data X-Ray Admin' — granted the WORKFLOW_ADMINISTRATION global
 //          permission, so holders (alongside Sysadmins) can open each Data
-//          X-Ray workflow's settings page and set the Base URL + Bearer token.
+//          X-Ray workflow's settings page and set its Data X-Ray connection settings
+//          (Base URL + Bearer token; Edge edition: the Edge HTTP connection name).
 //          NOTE: WORKFLOW_ADMINISTRATION is a *global* permission — it confers
 //          admin over ALL workflows on the instance, not only the Data X-Ray
 //          ones; Collibra has no per-workflow administration permission.
@@ -42,7 +43,7 @@
 //      Any target not yet deployed is skipped — re-run this workflow after
 //      deploying the rest, and re-run it after any delete-then-reimport.
 //
-// The configuration variables (Base URL + Bearer token) themselves carry NO
+// The configuration variables (Base URL + Bearer token, or the Edge connection name) themselves carry NO
 // per-role visibility — readable="false" already hides them from everyone who
 // starts a workflow, and only Sysadmin / WORKFLOW_ADMINISTRATION holders can
 // edit them on the settings page. Granting the Admin role that permission (3)
@@ -50,7 +51,7 @@
 //
 // The Data X-Ray workflows reference these elements by fixed UUID directly, so
 // there are NO configuration variables to write — the admin only sets each
-// workflow's Base URL and Bearer token by hand.
+// workflow's Data X-Ray connection settings by hand.
 //
 // Idempotent: anything that already exists is left untouched. Safe to re-run.
 //
@@ -141,7 +142,7 @@ def DATA_ASSET_TYPE_ID   = '00000000-0000-0000-0000-000000031002'
 
 // --- Access-control roles (fixed canonical UUIDs) ---------------------------
 // Created here if missing. 'Data X-Ray Admin' gets WORKFLOW_ADMINISTRATION so
-// it can edit the Base URL + Bearer token; 'Data X-Ray User' is a bare
+// it can edit the Data X-Ray connection settings; 'Data X-Ray User' is a bare
 // membership role used only to gate who can run the search/sync workflows.
 def ROLE_ADMIN_ID   = '019e9000-abcd-7000-a115-74a17d050000'
 def ROLE_ADMIN_NAME = 'Data X-Ray Admin'
@@ -607,7 +608,7 @@ ensureRole(ROLE_USER_ID,  ROLE_USER_NAME,  [])
 
 // Set each Data X-Ray workflow definition's start roles by UUID. This is a
 // partial update: only startRoleIds is sent, so configuration variables (the
-// admin-set Base URL + Bearer token) are left untouched. A workflow that isn't
+// admin-set Data X-Ray connection settings) are left untouched. A workflow that isn't
 // deployed yet is skipped — re-run this once everything is deployed.
 starterRoleDefs.each { s ->
     try {

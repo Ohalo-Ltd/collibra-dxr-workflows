@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  syncDataXrayClassifications workflow — Collibra Cloud + Edge variant
+  ====================================================================
+  Interactive classification sync; the catalogue is fetched through a Collibra
+  External API task bound to an Edge HTTP connection:
+    startEvent (form: startSyncForm)
+      → syncPrepareTask (script, sync: validate config, arm the request)
+      → syncFetchTask (External API task: GET /api/v1/classifications)
+      → syncApplyTask (script, async: parse + sync into Collibra)
+      → syncOutcomeGateway
+          ├─ failed → syncFailedTask (user form) → endEvent
+          └─ ok     → resultsTask (user form: syncResultsForm) → endEvent
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+  <process id="syncDataXrayClassifications"
+           name="Sync Data X-Ray Classifications"
+           isExecutable="true"
+           flowable:candidateStarterGroups="flowableUser">
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+    <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="startSyncForm">
+      <extensionElements>
+        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (Data X-Ray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL (deep links only)" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="false"/>
+        <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </startEvent>
+    <scriptTask id="syncPrepareTask" name="Prepare Sync" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:sync_prepare_edge.groovy}}</script>
+    </scriptTask>
+    <serviceTask id="syncFetchTask" name="Fetch Classifications (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
+      <extensionElements>
+        <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestUrl"><flowable:expression><![CDATA[${dxrRequestPath}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestHeaders"><flowable:expression><![CDATA[${dxrRequestHeaders}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestBody"><flowable:expression><![CDATA[${dxrRequestBody}]]></flowable:expression></flowable:field>
+        <flowable:field name="disallowRedirects"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="responseVariableName"><flowable:string><![CDATA[dxrResponseBody]]></flowable:string></flowable:field>
+        <flowable:field name="resultVariablePrefix"><flowable:string><![CDATA[dxr]]></flowable:string></flowable:field>
+        <flowable:field name="ignoreException"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveRequestVariables"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParameters"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParametersTransient"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseVariableAsJson"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <design:stencilid><![CDATA[HttpTask]]></design:stencilid>
+        <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
+      </extensionElements>
+    </serviceTask>
+    <scriptTask id="syncApplyTask" name="Sync Classifications" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:sync_apply_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="syncOutcomeGateway" name="Sync succeeded?" default="flowSyncOk">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <userTask id="syncFailedTask" name="Sync Failed" flowable:candidateUsers="user(${initiator})" flowable:formKey="syncFailedForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+    <userTask id="resultsTask" name="Sync Results" flowable:candidateUsers="user(${initiator})" flowable:formKey="syncResultsForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="syncPrepareTask"/>
+    <sequenceFlow id="flow2" sourceRef="syncPrepareTask" targetRef="syncFetchTask"/>
+    <sequenceFlow id="flow3" sourceRef="syncFetchTask" targetRef="syncApplyTask"/>
+    <sequenceFlow id="flow4" sourceRef="syncApplyTask" targetRef="syncOutcomeGateway"/>
+    <sequenceFlow id="flowSyncFailed" sourceRef="syncOutcomeGateway" targetRef="syncFailedTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${syncFailed == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowSyncOk" sourceRef="syncOutcomeGateway" targetRef="resultsTask"/>
+    <sequenceFlow id="flow5" sourceRef="syncFailedTask" targetRef="endEvent"/>
+    <sequenceFlow id="flow6" sourceRef="resultsTask" targetRef="endEvent"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_syncDataXrayClassifications">
+    <bpmndi:BPMNPlane bpmnElement="syncDataXrayClassifications" id="BPMNPlane_syncDataXrayClassifications">
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="S_startEvent"><omgdc:Bounds height="30.0" width="30.0" x="60.0" y="165.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="syncPrepareTask" id="S_syncPrepareTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="syncFetchTask" id="S_syncFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="syncApplyTask" id="S_syncApplyTask"><omgdc:Bounds height="80.0" width="100.0" x="410.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="syncOutcomeGateway" id="S_syncOutcomeGateway"><omgdc:Bounds height="40.0" width="40.0" x="550.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="syncFailedTask" id="S_syncFailedTask"><omgdc:Bounds height="80.0" width="100.0" x="630.0" y="30.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="resultsTask" id="S_resultsTask"><omgdc:Bounds height="80.0" width="100.0" x="630.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="770.0" y="166.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="90.0" y="180.0"/><omgdi:waypoint x="130.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="230.0" y="180.0"/><omgdi:waypoint x="270.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="370.0" y="180.0"/><omgdi:waypoint x="410.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="E_flow4"><omgdi:waypoint x="510.0" y="180.0"/><omgdi:waypoint x="550.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSyncFailed" id="E_flowSyncFailed"><omgdi:waypoint x="570.0" y="160.0"/><omgdi:waypoint x="570.0" y="70.0"/><omgdi:waypoint x="630.0" y="70.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSyncOk" id="E_flowSyncOk"><omgdi:waypoint x="590.0" y="180.0"/><omgdi:waypoint x="630.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="E_flow5"><omgdi:waypoint x="730.0" y="70.0"/><omgdi:waypoint x="784.0" y="70.0"/><omgdi:waypoint x="784.0" y="166.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow6" id="E_flow6"><omgdi:waypoint x="730.0" y="180.0"/><omgdi:waypoint x="770.0" y="180.0"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

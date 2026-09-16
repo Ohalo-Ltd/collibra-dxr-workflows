@@ -3,7 +3,34 @@
     {
       "cols": [
         {
-          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "Rerun aborted",
+          "value": "<p>The rerun of <b>{{conditionName}}</b> could not complete, so its file assets were left as they were.</p><p><b>Reason:</b> {{rerunAbortReason}}</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{rerunAborted}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "rerunAbortedNote",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
           "label": "Rerun complete",
           "value": "<p>The saved search <b>{{conditionName}}</b> was rerun and its file assets re-synced.</p><ul><li><b>Created:</b> {{importCreatedCount}} new file asset(s)</li><li><b>Updated:</b> {{importUpdatedCount}} existing file asset(s)</li><li><b>Unlinked:</b> {{rerunUnlinkedCount}} file(s) no longer returned by this search</li><li><b>Retired:</b> {{rerunRetiredCount}} file asset(s) no query returns any more (status Obsolete — kept as records, never deleted)</li><li><b>Stale classification links removed:</b> {{importRelationsRemovedCount}}</li><li><b>Failed:</b> {{importFailedCount}}</li><li><b>Unresolved classification links:</b> {{importSkippedClassifications}}</li></ul><p>The file assets live in the <b>Data X-Ray Files</b> domain. Full detail is in <code>dgc.log</code>. Click <b>Send</b> to close this task.</p>",
           "defaultValue": false,

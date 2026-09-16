@@ -5,5 +5,10 @@
   "theme": "theme-1",
   "icon": "glyphicon-refresh",
   "businessItemResourceType": "GLOBAL",
-  "globalCreate": true
+  "globalCreate": true,
+  "variants": {
+    "edge": {
+      "description": "Sync the Data X-Ray classification catalog into Collibra and show what changed. Collibra Cloud + Edge edition: Data X-Ray is reached through an Edge HTTP connection."
+    }
+  }
 }

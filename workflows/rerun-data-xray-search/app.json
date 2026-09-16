@@ -4,5 +4,10 @@
   "description": "Rerun a saved Data X-Ray search from its query asset and re-sync the imported file assets: new files are imported, changed files updated, and files that no longer match are retired (never deleted).",
   "theme": "theme-3",
   "icon": "glyphicon-repeat",
-  "businessItemResourceType": "ASSET"
+  "businessItemResourceType": "ASSET",
+  "variants": {
+    "edge": {
+      "description": "Rerun a saved Data X-Ray search from its query asset and re-sync the imported file assets: new files are imported, changed files updated, and files that no longer match are retired (never deleted). Collibra Cloud + Edge edition: Data X-Ray is reached through an Edge HTTP connection."
+    }
+  }
 }
