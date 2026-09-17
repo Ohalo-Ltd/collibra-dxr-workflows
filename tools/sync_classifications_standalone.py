@@ -27,13 +27,35 @@ Nothing below this docstring needs editing for a normal deployment. Settings
 are supplied as environment variables (or a `.env` file next to the script):
 
   COLLIBRA_URL        https://<tenant>.collibra.com
-  COLLIBRA_USER       Collibra user allowed to create/edit assets in the
-                      "Data X-Ray Classifications" domain
-  COLLIBRA_PASSWORD   its password
   DXR_BASE_URL        https://<data-x-ray-host>   (also the prefix of the Link
                       / Search Link attributes unless --link-base is given)
   DXR_API_KEY         Data X-Ray Bearer token (same kind of token the on-prem
                       workflow edition uses)
+
+  Collibra authentication — pick ONE of the three (COLLIBRA_AUTH selects it
+  explicitly: basic | jwt | oauth2; otherwise the first one whose variables
+  are set wins, in this order):
+
+  basic   COLLIBRA_USER + COLLIBRA_PASSWORD
+          a Collibra user with a LOCAL password, allowed to create/edit/tag
+          assets in the "Data X-Ray Classifications" domain
+  jwt     COLLIBRA_JWT
+          a JSON Web Token issued by the identity provider the Collibra admin
+          registered under Settings > Security > JWT; sent as
+          "Authorization: Bearer". For SSO-only tenants when the token is
+          obtained by other means (a vault, a CI secret, a manual login).
+  oauth2  COLLIBRA_OAUTH_TOKEN_URL + COLLIBRA_OAUTH_CLIENT_ID + COLLIBRA_OAUTH_CLIENT_SECRET
+          [+ COLLIBRA_OAUTH_SCOPE, COLLIBRA_OAUTH_AUDIENCE]
+          OAuth2 client-credentials grant against the identity provider's token
+          endpoint; the script fetches the JWT itself and refreshes it when it
+          expires. The recommended mode for SSO-only tenants: the client is a
+          service principal whose token carries the username claim Collibra is
+          configured to map to a Collibra user, and THAT user holds the
+          permissions.
+
+  Whatever the mode, the script first calls GET /rest/2.0/users/current and
+  prints the Collibra user it resolved to, so a wrongly mapped token is
+  caught before anything is written.
 
 Command-line switches: --dry-run, --stamp-index-ids, --link-base URL, and
 --collibra-url / --collibra-user / --dxr-url to override the variables above.
@@ -100,13 +122,92 @@ PAGE = 1000
 
 
 # ---------------------------------------------------------------- clients
+class BearerAuth(requests.auth.AuthBase):
+    """Authorization: Bearer <jwt>. `token_source()` returns a fresh token when the current one is about to expire."""
+
+    def __init__(self, token_source):
+        self._token_source = token_source
+
+    def __call__(self, r):
+        r.headers["Authorization"] = f"Bearer {self._token_source()}"
+        return r
+
+
+class OAuth2ClientCredentials:
+    """Fetches a JWT from the identity provider's token endpoint (client_credentials) and caches it until ~60 s before expiry."""
+
+    def __init__(self, token_url: str, client_id: str, client_secret: str, scope: str | None, audience: str | None):
+        self.token_url, self.client_id, self.client_secret = token_url, client_id, client_secret
+        self.scope, self.audience = scope, audience
+        self._token, self._expires_at = None, 0.0
+
+    def __call__(self) -> str:
+        import time
+        if self._token and time.time() < self._expires_at - 60:
+            return self._token
+        form = {"grant_type": "client_credentials", "client_id": self.client_id, "client_secret": self.client_secret}
+        if self.scope:
+            form["scope"] = self.scope
+        if self.audience:
+            form["audience"] = self.audience
+        r = requests.post(self.token_url, data=form, headers={"Accept": "application/json"}, timeout=60)
+        if not r.ok:
+            raise RuntimeError(f"OAuth2 token request to {self.token_url} failed: HTTP {r.status_code} {r.text[:300]}")
+        body = r.json()
+        if "access_token" not in body:
+            raise RuntimeError(f"OAuth2 token response has no access_token: {str(body)[:300]}")
+        self._token = body["access_token"]
+        self._expires_at = time.time() + float(body.get("expires_in", 300))
+        return self._token
+
+
+def build_collibra_auth(env: dict) -> tuple[str, object]:
+    """Pick the Collibra authentication from the environment. Returns (mode, requests auth object)."""
+    mode = (env.get("COLLIBRA_AUTH") or "").strip().lower()
+    if not mode:
+        if env.get("COLLIBRA_USER") and env.get("COLLIBRA_PASSWORD"):
+            mode = "basic"
+        elif env.get("COLLIBRA_JWT"):
+            mode = "jwt"
+        elif env.get("COLLIBRA_OAUTH_TOKEN_URL"):
+            mode = "oauth2"
+        else:
+            raise RuntimeError("No Collibra credentials: set COLLIBRA_USER/COLLIBRA_PASSWORD, or COLLIBRA_JWT, or COLLIBRA_OAUTH_TOKEN_URL/CLIENT_ID/CLIENT_SECRET")
+    if mode == "basic":
+        missing = [k for k in ("COLLIBRA_USER", "COLLIBRA_PASSWORD") if not env.get(k)]
+        if missing:
+            raise RuntimeError(f"COLLIBRA_AUTH=basic needs {', '.join(missing)}")
+        return mode, requests.auth.HTTPBasicAuth(env["COLLIBRA_USER"], env["COLLIBRA_PASSWORD"])
+    if mode == "jwt":
+        if not env.get("COLLIBRA_JWT"):
+            raise RuntimeError("COLLIBRA_AUTH=jwt needs COLLIBRA_JWT")
+        token = env["COLLIBRA_JWT"].strip()
+        return mode, BearerAuth(lambda: token)
+    if mode == "oauth2":
+        missing = [k for k in ("COLLIBRA_OAUTH_TOKEN_URL", "COLLIBRA_OAUTH_CLIENT_ID", "COLLIBRA_OAUTH_CLIENT_SECRET") if not env.get(k)]
+        if missing:
+            raise RuntimeError(f"COLLIBRA_AUTH=oauth2 needs {', '.join(missing)}")
+        source = OAuth2ClientCredentials(env["COLLIBRA_OAUTH_TOKEN_URL"], env["COLLIBRA_OAUTH_CLIENT_ID"], env["COLLIBRA_OAUTH_CLIENT_SECRET"],
+                                         env.get("COLLIBRA_OAUTH_SCOPE"), env.get("COLLIBRA_OAUTH_AUDIENCE"))
+        return mode, BearerAuth(source)
+    raise RuntimeError(f"Unknown COLLIBRA_AUTH '{mode}' (expected basic, jwt or oauth2)")
+
+
 class Collibra:
-    def __init__(self, base_url: str, user: str, password: str, dry_run: bool):
+    def __init__(self, base_url: str, auth, dry_run: bool):
         self.base = base_url.rstrip("/") + "/rest/2.0"
         self.s = requests.Session()
-        self.s.auth = (user, password)
+        self.s.auth = auth
         self.s.headers["Accept"] = "application/json"
         self.dry_run = dry_run
+
+    def whoami(self) -> str:
+        """The Collibra user the credentials resolve to — proves a JWT is mapped to the intended account before writing."""
+        r = self.s.get(self.base + "/users/current")
+        if r.status_code == 401:
+            raise RuntimeError(f"Collibra rejected the credentials: {r.text[:200]}")
+        j = self._check(r, "GET /users/current")
+        return j.get("userName") or j.get("id") or "?"
 
     def _check(self, r: requests.Response, what: str) -> dict | list | None:
         if not r.ok:
@@ -311,19 +412,25 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--collibra-url", default=os.environ.get("COLLIBRA_URL"))
-    ap.add_argument("--collibra-user", default=os.environ.get("COLLIBRA_USER"))
+    ap.add_argument("--collibra-user", default=os.environ.get("COLLIBRA_USER"), help="Basic-auth user (see the docstring for jwt / oauth2 modes)")
     ap.add_argument("--dxr-url", default=os.environ.get("DXR_BASE_URL"), help="Data X-Ray base URL (also the prefix for links unless --link-base is given)")
     ap.add_argument("--link-base", help="Base URL to prefix Link / Search Link with (default: --dxr-url)")
     ap.add_argument("--stamp-index-ids", action="store_true", help="Also write the numeric Data X-Ray Index ID (needed by the Cloud + Edge edition of search/rerun)")
     ap.add_argument("--dry-run", action="store_true", help="Read everything, write nothing")
     args = ap.parse_args()
 
-    password = os.environ.get("COLLIBRA_PASSWORD")
     token = os.environ.get("DXR_API_KEY")
-    missing = [n for n, v in {"COLLIBRA_URL": args.collibra_url, "COLLIBRA_USER": args.collibra_user, "COLLIBRA_PASSWORD": password,
-                              "DXR_BASE_URL": args.dxr_url, "DXR_API_KEY": token}.items() if not v]
+    missing = [n for n, v in {"COLLIBRA_URL": args.collibra_url, "DXR_BASE_URL": args.dxr_url, "DXR_API_KEY": token}.items() if not v]
     if missing:
         print(f"Missing configuration: {', '.join(missing)}", file=sys.stderr)
+        return 2
+    env = dict(os.environ)
+    if args.collibra_user:
+        env["COLLIBRA_USER"] = args.collibra_user
+    try:
+        auth_mode, auth = build_collibra_auth(env)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
     dxr_url = args.dxr_url if args.dxr_url.startswith("http") else "https://" + args.dxr_url
     link_base = (args.link_base or dxr_url).rstrip("/")
@@ -332,7 +439,12 @@ def main() -> int:
     print(f"Data X-Ray catalogue: {len(items)} item(s) {dict(Counter(i.get('type') for i in items))}{' [DRY RUN]' if args.dry_run else ''}")
     index_ids = fetch_index_ids(dxr_url, token) if args.stamp_index_ids else None
 
-    collibra = Collibra(args.collibra_url, args.collibra_user, password, args.dry_run)
+    collibra = Collibra(args.collibra_url, auth, args.dry_run)
+    try:
+        print(f"Collibra: authenticated with {auth_mode} as '{collibra.whoami()}'")
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     result = sync(collibra, items, link_base, index_ids)
     c = result["counts"]
     print(f"\nSync complete: created={c['created']} updated={c['updated']} retired={c['retired']} skipped={c['skipped']} failed={c['failed']}")
