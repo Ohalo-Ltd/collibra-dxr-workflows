@@ -6,7 +6,7 @@ Collibra workflows are written in Groovy and run on a [Flowable](https://www.flo
 
 There are two audiences:
 
-- **Deploying to a Collibra instance?** You only need the release bundle and [`docs/deployment-guide.md`](docs/deployment-guide.md) (on-prem edition) or [`docs/deployment-guide-edge.md`](docs/deployment-guide-edge.md) (Collibra Cloud + Edge edition) — everything is done through the Collibra UI, no command line required. [`docs/file-asset-lifecycle.md`](docs/file-asset-lifecycle.md) explains how imported file assets are created, capped, kept in sync, retired and (never) deleted.
+- **Deploying to a Collibra instance?** You only need the release bundle and [`docs/deployment-guide.md`](docs/deployment-guide.md) (on-prem edition) or [`docs/deployment-guide-edge.md`](docs/deployment-guide-edge.md) (Collibra Cloud + Edge edition) — everything is done through the Collibra UI, no command line required. [`docs/file-asset-lifecycle.md`](docs/file-asset-lifecycle.md) explains how imported file assets are created, capped, kept in sync, retired and (never) deleted. [`docs/standalone-classification-sync.md`](docs/standalone-classification-sync.md) covers the optional Python script that runs the classification sync outside Collibra.
 - **Changing the workflows?** See [Developing](#developing) below.
 
 ## The workflows
