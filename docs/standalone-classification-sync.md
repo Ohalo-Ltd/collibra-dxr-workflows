@@ -8,7 +8,7 @@ Use it when the sync must run **outside Collibra**, for example on a machine ins
 
 1. **Import the workflow bundle and run `Configure Data X-Ray Workflows` once**, exactly as in the [deployment guide](deployment-guide.md). Configure creates the *Data X-Ray Classifications* domain, the Classification / Annotator / Extractor / Label asset types and the *Data X-Ray ID*, *Link*, *Search Link* and *Sub Type* attribute types, all with fixed ids. The script writes to those ids and does nothing useful on an instance where configure has not run.
 2. A machine with **Python 3.10 or newer** and the `requests` package (`pip install requests`; `python-dotenv` is optional and lets you keep settings in a `.env` file).
-3. A **Collibra user** allowed to create and edit assets in the *Data X-Ray Classifications* domain and to tag them.
+3. A **Collibra identity** allowed to create and edit assets in the *Data X-Ray Classifications* domain and to tag them: a local user and password, or, on an SSO-only tenant, a JWT-based service identity (see *Authentication* below).
 4. A **Data X-Ray Bearer token** for a user who can see the classifications you want in Collibra, the same kind of token the on-prem workflow edition uses.
 
 ## Configure the script
@@ -17,7 +17,7 @@ Do **not** edit the Python file. Everything the technician provides is a setting
 
 ```
 COLLIBRA_URL=https://<tenant>.collibra.com
-COLLIBRA_USER=<collibra user>
+COLLIBRA_USER=<collibra user>          # Basic auth (local password) — or see Authentication
 COLLIBRA_PASSWORD=<password>
 DXR_BASE_URL=https://<data-x-ray-host>
 DXR_API_KEY=<Data X-Ray Bearer token>
@@ -26,6 +26,26 @@ DXR_API_KEY=<Data X-Ray Bearer token>
 `DXR_BASE_URL` is also the prefix of the *Link* and *Search Link* attributes; pass `--link-base https://...` if users should open Data X-Ray through a different address than the script uses.
 
 The block marked **CANONICAL IDS, DO NOT EDIT** at the top of the script lists the domain, asset type, attribute type and status ids. They are the same on every Collibra instance because configure creates them, and each constant names the matching constant in the configure workflow's script. If an instance appears to have different ids, run the configure workflow; do not change the script.
+
+## Authentication
+
+The script supports three ways of authenticating to Collibra. Set `COLLIBRA_AUTH` to `basic`, `jwt` or `oauth2` to choose one explicitly; otherwise the first mode whose variables are present is used, in that order. Whatever the mode, the script starts by asking Collibra who it is (`GET /rest/2.0/users/current`) and prints the resolved user name, so a wrongly mapped identity is caught before anything is written.
+
+| Mode | Variables | When |
+|---|---|---|
+| `basic` | `COLLIBRA_USER`, `COLLIBRA_PASSWORD` | A Collibra user with a **local** password. Simplest; not available on SSO-only tenants. |
+| `jwt` | `COLLIBRA_JWT` | You already have a JSON Web Token for Collibra (from a vault, a CI secret store, or a manual login) and want the script to use it as `Authorization: Bearer`. |
+| `oauth2` | `COLLIBRA_OAUTH_TOKEN_URL`, `COLLIBRA_OAUTH_CLIENT_ID`, `COLLIBRA_OAUTH_CLIENT_SECRET`, optional `COLLIBRA_OAUTH_SCOPE`, `COLLIBRA_OAUTH_AUDIENCE` | **Recommended for SSO-only tenants.** The script obtains the token itself with the OAuth2 client-credentials grant and refreshes it before it expires, so it can run unattended. |
+
+### SSO-only tenants: what has to be in place
+
+Collibra accepts JWTs from an external identity provider once the Collibra administrator has registered that provider under **Settings → Security → JWT** (issuer, public keys or JWKS endpoint, and the claim that carries the Collibra user name). With that in place:
+
+1. **Identity provider (Entra ID, Okta, Keycloak, …):** create an application / service principal for the sync with the client-credentials grant enabled. Make sure the access token it issues carries the user-name claim Collibra is configured to read (for example `preferred_username` or `sub`), and that the value matches an existing Collibra user.
+2. **Collibra:** that user must exist (SSO-provisioned is fine) and hold the permissions to create, edit, tag and change the status of assets in the *Data X-Ray Classifications* domain. The script acts as that user; Collibra's audit trail shows that name.
+3. **Script:** set `COLLIBRA_AUTH=oauth2` and the token endpoint, client id and secret. Run `--dry-run` first and check the line `Collibra: authenticated with oauth2 as '<user>'` names the intended user.
+
+Collibra's own documentation for the JWT settings is authoritative for the exact fields; they vary slightly between versions.
 
 ## Run it
 
@@ -43,7 +63,7 @@ python sync_classifications_standalone.py
 
 For an instance running the **Collibra Cloud + Edge edition** of the search and rerun workflows, add `--stamp-index-ids`. That also writes the numeric *Data X-Ray Index ID* those workflows need, reading it from Data X-Ray's internal catalogue endpoints. The attribute type is created by configure from pack v2.1.0 onwards.
 
-The last line is the summary, in the same terms as the workflow's results screen:
+The first line after the catalogue count is the authentication check, `Collibra: authenticated with basic as 'jane.doe'`. The last line is the summary, in the same terms as the workflow's results screen:
 
 ```
 Sync complete: created=0 updated=69 retired=0 skipped=13 failed=0
