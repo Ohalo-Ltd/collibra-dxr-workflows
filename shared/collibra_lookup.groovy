@@ -148,3 +148,65 @@ def addAssetTagQuietly(UUID assetId, String tagName, String successNote) {
         return false
     }
 }
+
+// Values of one attribute type across a set of assets: [assetId → value].
+def fetchAttributeValuesByType(UUID attrTypeId, Set<UUID> assetIds) {
+    def out = [:]
+    def cursor = ''
+    while (true) {
+        def page = attributeApi.findAttributes(com.collibra.dgc.core.api.dto.instance.attribute.FindAttributesRequest.builder()
+            .typeIds([attrTypeId])
+            .limit(1000)
+            .cursor(cursor)
+            .build())
+        page.getResults().each { attr ->
+            def aid = attr.getAsset()?.getId()
+            def val = attr.getValue()
+            if (aid && val != null && assetIds.contains(aid)) {
+                out[aid] = val.toString()
+            }
+        }
+        cursor = page.getNextCursor()
+        if (!cursor) break
+    }
+    return out
+}
+
+// The Edge edition's classification index, built from Collibra alone (no
+// Data X-Ray catalogue calls): every classification asset with its public
+// Data X-Ray ID (uuid) and, when the Edge sync has stamped it, the numeric id
+// Data X-Ray's search index uses. All keys/values are Strings so the map can
+// round-trip through a JSON process variable. Returns
+//   [byDxrId: [uuid → assetId], byName: [name → assetId],
+//    indexIdByDxrId: [uuid → indexId], nameByDxrId: [uuid → asset name],
+//    labelDxrIdByIndexId / annotatorDxrIdByIndexId / extractorDxrIdByIndexId: [indexId → uuid],
+//    annotatorIndexIds: [indexId, …] (every annotator known to Collibra)]
+def buildEdgeClassificationIndex(Map ids) {
+    def assets = fetchAllAssetsInDomain(ids.classificationsDomainId)
+    def uuidByAsset  = fetchAttributeValuesByType(ids.dataxrayIdAttrTypeId, assets.keySet())
+    def indexByAsset = fetchAttributeValuesByType(ids.dataxrayIndexIdAttrTypeId, assets.keySet())
+    def out = [byDxrId: [:], byName: [:], indexIdByDxrId: [:], nameByDxrId: [:],
+               labelDxrIdByIndexId: [:], annotatorDxrIdByIndexId: [:], extractorDxrIdByIndexId: [:],
+               annotatorIndexIds: []]
+    assets.each { assetId, asset ->
+        def name = asset.getName()
+        out.byName[name] = assetId.toString()
+        def uuid = uuidByAsset[assetId]
+        if (!uuid) { return }
+        out.byDxrId[uuid] = assetId.toString()
+        out.nameByDxrId[uuid] = name
+        def indexId = indexByAsset[assetId]
+        if (!indexId) { return }
+        out.indexIdByDxrId[uuid] = indexId
+        def typeId = asset.getType()?.getId()
+        if (typeId == ids.labelTypeId) {
+            out.labelDxrIdByIndexId[indexId] = uuid
+        } else if (typeId == ids.extractorTypeId) {
+            out.extractorDxrIdByIndexId[indexId] = uuid
+        } else if (typeId == ids.annotatorTypeId) {
+            out.annotatorDxrIdByIndexId[indexId] = uuid
+            out.annotatorIndexIds << indexId
+        }
+    }
+    return out
+}

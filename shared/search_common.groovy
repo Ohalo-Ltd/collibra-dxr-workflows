@@ -179,8 +179,10 @@ def csvEscape(value) {
 // (the UUID Data X-Ray's public catalogue uses). Returns
 // [[id: UUID, name: String, dxrId: String], …]; unresolvable ids are skipped
 // with a warning, an asset without the attribute gets dxrId ''.
-def resolvePickedClassifications(List ids, UUID dataxrayIdAttrTypeId) {
+def resolvePickedClassifications(List ids, UUID dataxrayIdAttrTypeId, UUID indexIdAttrTypeId = null) {
     return resolvePickedAssets(ids).collect { a ->
-        [id: a.id, name: a.name, dxrId: readSingleAttribute(a.id, dataxrayIdAttrTypeId)]
+        [id: a.id, name: a.name,
+         dxrId: readSingleAttribute(a.id, dataxrayIdAttrTypeId),
+         indexId: indexIdAttrTypeId ? readSingleAttribute(a.id, indexIdAttrTypeId) : '']
     }
 }

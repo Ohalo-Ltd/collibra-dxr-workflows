@@ -100,6 +100,7 @@ def LINK_ATTR_ID        = '019c9fc5-aa4c-72af-8918-caa54fe61eba'
 def SEARCH_LINK_ATTR_ID = '019c9fc5-8ff5-77a7-962d-4b6b05c69254'
 def SUBTYPE_ATTR_ID     = '019c9fc5-ecc8-759b-9c0b-78547fa315ad'
 def DXID_ATTR_ID        = '019e73ae-1aa8-700c-8086-626326822c22'
+def INDEX_ID_ATTR_ID = '019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'  // Data X-Ray Index ID (Edge edition: numeric id in DXR's search index)
 def FILES_ATTR_ID       = '019e2736-8bd0-727a-b4ab-6899517a3e73'
 
 // File-import model (gated asset import + rerun + nightly file sync). Same
@@ -212,6 +213,7 @@ def attrTypeDefs = [
     [id: SEARCH_LINK_ATTR_ID,   name: 'Search Link',           stringType: 'PLAIN_TEXT'],
     [id: SUBTYPE_ATTR_ID,       name: 'Sub Type',              stringType: 'PLAIN_TEXT'],
     [id: DXID_ATTR_ID,          name: 'Data X-Ray ID',         stringType: 'PLAIN_TEXT'],
+    [id: INDEX_ID_ATTR_ID,      name: 'Data X-Ray Index ID',   stringType: 'PLAIN_TEXT'],
     [id: FILES_ATTR_ID,         name: 'Files',                 stringType: 'RICH_TEXT'],
     [id: FILE_PATH_ATTR_ID,     name: 'File Path',             stringType: 'PLAIN_TEXT'],
     [id: FILE_SIZE_ATTR_ID,     name: 'File Size',             stringType: 'PLAIN_TEXT'],
@@ -224,14 +226,14 @@ def attrTypeDefs = [
 // Which custom attribute types each asset type should surface on its page.
 def assignmentDefs = [
     [assetTypeId: '01965d43-235d-796b-be49-078f91d7472a', name: 'Classification',
-     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID]],
+     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID]],
     [assetTypeId: '01922a69-e7a0-7ac7-a581-c9ba9286ccf1', name: 'Annotator',
-     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID],
+     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
      relations: [[id: TEXT_FILTER_RELTYPE_ID, direction: 'TO_SOURCE']]], // text searched by queries
     [assetTypeId: '019c9fbd-a91b-7242-9451-79ab632163a3', name: 'Extractor',
-     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID]],
+     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID]],
     [assetTypeId: '019c9fbe-25c3-71b7-90ac-057dd582fa1e', name: 'Label',
-     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID]],
+     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID]],
     // relations: relation types surfaced on the asset page (the page only
     // renders characteristics that are IN the assignment — relations written
     // via the API exist regardless, but stay invisible without this).

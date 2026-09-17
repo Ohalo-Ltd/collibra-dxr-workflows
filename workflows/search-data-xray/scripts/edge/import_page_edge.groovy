@@ -2,25 +2,24 @@
 //
 // ASYNC task after each results-page External API task of the import: parse the
 // page, upsert it as one batch (shared/file_batch.groovy), arm the next page or
-// finish. A page that fails three times aborts the import cleanly; the summary
-// form then shows the counts reached so far plus the failure.
+// finish. Datasource names are looked up per id on first sight. A page that
+// fails three times aborts the import cleanly; the summary form then shows the
+// counts reached so far plus the failure.
 //
 // Reads:  dxr* response/loop variables, classIndex, queryAssetId, dataxrayUrl, dataxrayPageSize
 // Writes: import*Count, hasMoreWork, dxrFetchComplete, importAborted, importAbortReason
-
-import groovy.json.JsonSlurper
 
 // {{include:dxr_model.groovy}}
 // {{include:dxr_edge.groovy}}
 // {{include:file_batch.groovy}}
 
-def classIndex = new JsonSlurper().parseText((execution.getVariable('classIndex') ?: '{"byDxrId":{},"byName":{}}').toString())
-
-handleEdgeFilesPage([
+def classIndex = readJsonVariable('classIndex', [byDxrId: [:], byName: [:]])
+def opts = [
     label       : 'Import batch',
     queryAssetId: string2Uuid((execution.getVariable('queryAssetId') ?: '').toString()),
     dataxrayUrl : (execution.getVariable('dataxrayUrl') ?: '').toString(),
-    pageSize    : edgePageSize(execution.getVariable('dataxrayPageSize'), 50),
+    pageSize    : edgePageSize(execution.getVariable('dataxrayPageSize')),
+    index       : classIndex,
     classIndex  : classIndex,
     onPageZero  : { Map page ->
         // The preview may be a little stale; the cap was checked against it in
@@ -38,4 +37,6 @@ handleEdgeFilesPage([
         execution.setVariable('importFailedCount', ((execution.getVariable('importFailedCount') ?: 0) as int) + Math.max(0, total - done))
         execution.setVariable('hasMoreWork', false)
     },
-])
+]
+opts.onPage = { Map page, List tuples -> importEdgePage(opts, page, tuples) }
+handleEdgeFilesPage(opts)

@@ -27,7 +27,10 @@
 def rebuildQueryCriteria(UUID queryId, Map ids) {
     def out = [labelNames: [], extractorNames: [], annotatorNames: [], filter: '', filterAnnotatorNames: [],
                labelDxrIds: [], extractorDxrIds: [], annotatorDxrIds: [], filterAnnotatorDxrIds: [],
+               labelIndexIds: [], extractorIndexIds: [], annotatorIndexIds: [], filterAnnotatorIndexIds: [],
                deadCriteria: [], ignoredCriteria: 0, hasCriteria: false]
+    // Data X-Ray Index ID is only stamped by the Edge-edition sync; '' on on-prem installs.
+    def indexIdOf = { UUID assetId -> ids.dataxrayIndexIdAttrTypeId ? readSingleAttribute(assetId, ids.dataxrayIndexIdAttrTypeId) : '' }
 
     relationIdsByFarEnd(ids.groupsRelationTypeId, queryId, null).keySet().each { targetId ->
         def target
@@ -44,11 +47,11 @@ def rebuildQueryCriteria(UUID queryId, Map ids) {
         def typeId = target.getType()?.getId()
         def dxrId = readSingleAttribute(targetId, ids.dataxrayIdAttrTypeId)
         if (typeId == ids.labelTypeId) {
-            out.labelNames << target.getName(); out.labelDxrIds << dxrId
+            out.labelNames << target.getName(); out.labelDxrIds << dxrId; out.labelIndexIds << indexIdOf(targetId)
         } else if (typeId == ids.extractorTypeId) {
-            out.extractorNames << target.getName(); out.extractorDxrIds << dxrId
+            out.extractorNames << target.getName(); out.extractorDxrIds << dxrId; out.extractorIndexIds << indexIdOf(targetId)
         } else if (typeId == ids.annotatorTypeId) {
-            out.annotatorNames << target.getName(); out.annotatorDxrIds << dxrId
+            out.annotatorNames << target.getName(); out.annotatorDxrIds << dxrId; out.annotatorIndexIds << indexIdOf(targetId)
         } else {
             out.ignoredCriteria++
         }
@@ -78,6 +81,7 @@ def rebuildQueryCriteria(UUID queryId, Map ids) {
             }
             out.filterAnnotatorNames << target.getName()
             out.filterAnnotatorDxrIds << readSingleAttribute(targetId, ids.dataxrayIdAttrTypeId)
+            out.filterAnnotatorIndexIds << indexIdOf(targetId)
         }
     }
     if (!out.deadCriteria.isEmpty()) { return out }
