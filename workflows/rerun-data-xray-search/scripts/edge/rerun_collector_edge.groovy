@@ -2,9 +2,10 @@
 //
 // First, SYNCHRONOUS task of "Rerun Data X-Ray Search". Same guards and
 // criteria rebuild as the on-prem script (shared/rerun_common.groovy); instead
-// of fetching, it snapshots the previously returned files, builds the
-// classification index and arms the first request of the loop (the Data X-Ray
-// catalogues, then the results pages — rerun_page_edge.groovy).
+// of fetching, it translates the criteria into a Data X-Ray query (numeric
+// index ids stamped on the classification assets by the Edge-edition sync),
+// snapshots the previously returned files, builds the classification index
+// from Collibra and arms page 0 of the results (rerun_page_edge.groovy).
 //
 // Headless mode: the nightly driver starts this workflow with 'headless'='true'.
 // Headless runs never throw; every abort path sets rerunAborted=true so the
@@ -31,7 +32,7 @@ def abort = { String title, String message ->
     loggerApi.error("Rerun Data X-Ray Search aborted: ${message}")
     execution.setVariable('rerunAborted', true)
     execution.setVariable('rerunAbortReason', message)
-    zeroEdgeImportCounters(0, 50)
+    zeroEdgeImportCounters(0, dxrEdgeDefaultPageSize())
     execution.setVariable('hasMoreWork', false)
     execution.setVariable('dxrFetchComplete', false)
     execution.setVariable('previousFileIds', '[]')
@@ -56,7 +57,7 @@ if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {
 def dataxrayUrl = normalizeBaseUrl(execution.getVariable('dataxrayUrl'))
 if (isPlaceholderValue(dataxrayUrl)) { dataxrayUrl = '' }
 execution.setVariable('dataxrayUrl', dataxrayUrl)
-int pageSize = edgePageSize(execution.getVariable('dataxrayPageSize'), 50)
+int pageSize = edgePageSize(execution.getVariable('dataxrayPageSize'))
 execution.setVariable('dataxrayPageSize', pageSize.toString())
 
 // --- The query asset ---------------------------------------------------------------
@@ -97,35 +98,34 @@ def queryString = composeDxrQuery(criteria.labelNames, criteria.extractorNames, 
                                   criteria.filter, criteria.filterAnnotatorNames)
 loggerApi.info("Rerun of '${conditionName}' — rebuilt Data X-Ray query: ${displayQuery(queryString)}")
 recordQueryAttribute(queryId, ids, displayQuery(queryString))
-execution.setVariable('rerunCriteria', JsonOutput.toJson([
-    labelDxrIds: criteria.labelDxrIds, labelNames: criteria.labelNames,
-    extractorDxrIds: criteria.extractorDxrIds, extractorNames: criteria.extractorNames,
-    annotatorDxrIds: criteria.annotatorDxrIds, annotatorNames: criteria.annotatorNames,
-    filter: criteria.filter,
-    filterAnnotatorDxrIds: criteria.filterAnnotatorDxrIds, filterAnnotatorNames: criteria.filterAnnotatorNames,
-]))
 
-// --- Snapshot the files this query currently returns; index the classifications ----
+// --- Classification index from Collibra; translate the criteria ----------------------
+
+def classIndex = buildEdgeClassificationIndex(ids)
+execution.setVariable('classIndex', JsonOutput.toJson(classIndex))
+
+def q = composeEdgeQueryItems(criteria, classIndex.annotatorIndexIds)
+if (!q.unresolved.isEmpty()) {
+    abort('Rerun Data X-Ray Search', edgeUnresolvedMessage("rerun '${conditionName}'".toString(), q.unresolved))
+    return
+}
+execution.setVariable('dxrQueryItems', JsonOutput.toJson(q.items))
+
+// --- Snapshot the files this query currently returns ----------------------------------
 
 def previousFileIds = collectPreviousFileIds(queryId, ids)
 execution.setVariable('previousFileIds', JsonOutput.toJson(previousFileIds as List))
 execution.setVariable('filesDomainCount', countAssetsInDomain(ids.filesDomainId))
 
-def classIndex = buildClassificationIndex(ids.classificationsDomainId, ids.dataxrayIdAttrTypeId)
-execution.setVariable('classIndex', JsonOutput.toJson([
-    byDxrId: classIndex.byDxrId.collectEntries { k, v -> [(k.toString()): v.toString()] },
-    byName : classIndex.byName.collectEntries  { k, v -> [(k.toString()): v.toString()] },
-]))
-
-// --- Counters + kick off the request loop -----------------------------------------------
+// --- Counters + kick off the results loop ----------------------------------------------
 
 execution.setVariable('rerunAborted', false)
 execution.setVariable('rerunAbortReason', '')
 zeroEdgeImportCounters(0, pageSize)
 execution.setVariable('rerunRetiredCount', 0)
 execution.setVariable('rerunUnlinkedCount', 0)
-execution.setVariable('dxrFetchMode', 'import')
 execution.setVariable('dxrFetchComplete', false)
 execution.setVariable('rerunPageCount', 0)
-startEdgeCatalogue()
-loggerApi.info("Rerun of '${conditionName}' via Edge connection '${connectionName}': ${previousFileIds.size()} previously returned file(s); catalogue requests armed")
+execution.setVariable('dxrDatasourceNames', '{}')
+startEdgeFilesPage(q.items, 0, pageSize, null)
+loggerApi.info("Rerun of '${conditionName}' via Edge connection '${connectionName}': ${previousFileIds.size()} previously returned file(s); page 0 armed")

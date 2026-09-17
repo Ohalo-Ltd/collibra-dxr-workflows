@@ -4,12 +4,20 @@
 // workflow that fails before its first async task is retried 3× by Collibra and
 // then permanently disabled. Misconfiguration records an empty run summary and
 // sets syncSkip=true so the gateway ends the run before the External API task.
+// Otherwise it indexes what Collibra knows about the classifications and arms
+// the first catalogue request (shared/dxr_edge_sync.groovy).
 
+import groovy.json.JsonOutput
+
+// {{include:dxr_model.groovy}}
 // {{include:dxr_config.groovy}}
-// {{include:dxr_edge.groovy}}
+// {{include:collibra_lookup.groovy}}
+// {{include:dxr_edge_sync.groovy}}
 
+def ids = dxrModelIds()
 def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
 execution.setVariable('syncSkip', false)
+execution.setVariable('syncFailed', false)
 if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {
     def detailMsg = "Skipping Sync Data X-Ray Classification (Nightly) — the 'Edge HTTP connection name (Data X-Ray)' configuration variable is not set.\n\nOpen the workflow's settings page and enter the name of the HTTP connection to Data X-Ray on your Edge site; the next nightly run will pick it up automatically."
     loggerApi.error(detailMsg)
@@ -21,9 +29,9 @@ def dataxrayUrl = normalizeBaseUrl(execution.getVariable('dataxrayUrl'))
 if (isPlaceholderValue(dataxrayUrl)) { dataxrayUrl = '' }
 execution.setVariable('dataxrayUrl', dataxrayUrl)
 
-edgeResetRetries()
-armEdgeRequest('GET', '/api/v1/classifications', '')
-loggerApi.info("Sync Data X-Ray Classification (Nightly) via Edge connection '${connectionName}': request armed")
+execution.setVariable('classIndex', JsonOutput.toJson(buildEdgeClassificationIndex(ids)))
+startEdgeSync()
+loggerApi.info("Sync Data X-Ray Classification (Nightly) via Edge connection '${connectionName}': catalogue requests armed")
 
 // Persist the run outcome to process variables for audit / downstream tasks.
 def recordRunSummary(int created, int updated, int retired, int skipped, int failed, String failuresJoined) {

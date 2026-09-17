@@ -14,7 +14,7 @@ Each release ships **two bundles** with the same six workflows:
 | `collibra-data-xray-workflows-onprem-<version>.zip` | Collibra (self-hosted **or** Cloud) can reach your Data X-Ray directly over HTTPS. The workflows call Data X-Ray themselves with a Bearer token. | **This guide.** |
 | `collibra-data-xray-workflows-cloud-edge-<version>.zip` | Collibra **Cloud** and a Data X-Ray that is only reachable from inside your network. Calls go through a **Collibra Edge site** and an HTTP connection that holds the credentials. | [deployment-guide-edge.md](deployment-guide-edge.md) — Steps 1–3 and 5 below still apply; Step 4 differs. |
 
-Both editions use the same process ids, so you can switch from one to the other later by importing the other bundle over the installed workflows.
+Both editions use the same process ids, so you can switch from one to the other later by importing the other bundle over the installed workflows; you will need to re-enter the variables the new edition uses (the Bearer token for on-prem, the connection name for Edge), because Collibra drops variables a redeployed workflow no longer declares.
 
 ## The six workflows
 

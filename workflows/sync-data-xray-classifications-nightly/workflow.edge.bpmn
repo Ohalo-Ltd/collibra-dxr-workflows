@@ -72,6 +72,17 @@
         <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
       </extensionElements>
     </serviceTask>
+    <scriptTask id="syncPageTask" name="Handle Data X-Ray Response" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:sync_page_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="syncLoopGateway" name="More requests?" default="flowSyncFetched">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
     <scriptTask id="syncApplyTask" name="Sync Classifications" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
@@ -89,7 +100,12 @@
       <conditionExpression xsi:type="tFormalExpression"><![CDATA[${syncSkip == true}]]></conditionExpression>
     </sequenceFlow>
     <sequenceFlow id="flowConfigured" sourceRef="syncSkipGateway" targetRef="syncFetchTask"/>
-    <sequenceFlow id="flow3" sourceRef="syncFetchTask" targetRef="syncApplyTask"/>
+    <sequenceFlow id="flow3" sourceRef="syncFetchTask" targetRef="syncPageTask"/>
+    <sequenceFlow id="flowSyncPage" sourceRef="syncPageTask" targetRef="syncLoopGateway"/>
+    <sequenceFlow id="flowSyncMore" sourceRef="syncLoopGateway" targetRef="syncFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowSyncFetched" sourceRef="syncLoopGateway" targetRef="syncApplyTask"/>
     <sequenceFlow id="flow4" sourceRef="syncApplyTask" targetRef="endEvent"/>
   </process>
   <bpmndi:BPMNDiagram id="BPMNDiagram_syncDataXrayClassificationsNightly">
@@ -98,14 +114,19 @@
       <bpmndi:BPMNShape bpmnElement="syncPrepareTask" id="S_syncPrepareTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="140.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="syncSkipGateway" id="S_syncSkipGateway"><omgdc:Bounds height="40.0" width="40.0" x="270.0" y="160.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="syncFetchTask" id="S_syncFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="350.0" y="140.0"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="syncApplyTask" id="S_syncApplyTask"><omgdc:Bounds height="80.0" width="100.0" x="490.0" y="140.0"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="630.0" y="166.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="syncApplyTask" id="S_syncApplyTask"><omgdc:Bounds height="80.0" width="100.0" x="710.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="850.0" y="166.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="90.0" y="180.0"/><omgdi:waypoint x="130.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="230.0" y="180.0"/><omgdi:waypoint x="270.0" y="180.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flowSkip" id="E_flowSkip"><omgdi:waypoint x="290.0" y="200.0"/><omgdi:waypoint x="290.0" y="260.0"/><omgdi:waypoint x="644.0" y="260.0"/><omgdi:waypoint x="644.0" y="194.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSkip" id="E_flowSkip"><omgdi:waypoint x="290.0" y="200.0"/><omgdi:waypoint x="290.0" y="260.0"/><omgdi:waypoint x="864.0" y="260.0"/><omgdi:waypoint x="864.0" y="194.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowConfigured" id="E_flowConfigured"><omgdi:waypoint x="310.0" y="180.0"/><omgdi:waypoint x="350.0" y="180.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="450.0" y="180.0"/><omgdi:waypoint x="490.0" y="180.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flow4" id="E_flow4"><omgdi:waypoint x="590.0" y="180.0"/><omgdi:waypoint x="630.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="450.0" y="180.0"/><omgdi:waypoint x="710.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="E_flow4"><omgdi:waypoint x="810.0" y="180.0"/><omgdi:waypoint x="850.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape bpmnElement="syncPageTask" id="S_syncPageTask"><omgdc:Bounds height="80.0" width="100.0" x="490.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="syncLoopGateway" id="S_syncLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="630.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="flowSyncPage" id="E_flowSyncPage"><omgdi:waypoint x="590.0" y="180.0"/><omgdi:waypoint x="630.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSyncMore" id="E_flowSyncMore"><omgdi:waypoint x="650.0" y="160.0"/><omgdi:waypoint x="650.0" y="100.0"/><omgdi:waypoint x="410.0" y="100.0"/><omgdi:waypoint x="410.0" y="140.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowSyncFetched" id="E_flowSyncFetched"><omgdi:waypoint x="670.0" y="180.0"/><omgdi:waypoint x="710.0" y="180.0"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

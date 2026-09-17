@@ -44,7 +44,15 @@
 // Sync the catalogue. `dataxrayUrl` (no trailing slash) prefixes the relative
 // link/searchLink paths Data X-Ray returns. Returns
 // [created:, updated:, retired:, skipped:, failed:, failures: [String]].
-def syncClassificationCatalog(List classifications, String dataxrayUrl) {
+// opts (optional):
+//   indexIdAttrTypeId — when set, an item's `indexId` (Data X-Ray's numeric
+//                       search-index id) is stamped on the asset (Edge edition).
+//   noRetireTypeIds   — asset type ids that must NOT be retired this run (the
+//                       caller saw an incomplete list for them; Edge fallback).
+//   Items may carry `partial: true`: the item is known to exist in Data X-Ray
+//   (presence, name and ids are authoritative) but its description/link/subtype
+//   were NOT fetched this run — those attributes are left untouched.
+def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts = [:]) {
     def ids = dxrModelIds()
     final String SYNC_TAG = dxrClassificationSyncTag()
 
@@ -220,10 +228,15 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl) {
             // first-time-created assets for future runs.
             def attrErrors = []
             syncAttribute(attrErrors, assetId, ids.dataxrayIdAttrTypeId,  dataxrayId, 'dataxrayId')
-            syncAttribute(attrErrors, assetId, ids.descriptionAttrTypeId, classification.description, 'description')
-            syncAttribute(attrErrors, assetId, ids.linkAttrTypeId,        classification.link       ? dataxrayUrl + classification.link       : null, 'link')
-            syncAttribute(attrErrors, assetId, ids.searchLinkAttrTypeId,  classification.searchLink ? dataxrayUrl + classification.searchLink : null, 'searchLink')
-            syncAttribute(attrErrors, assetId, ids.subtypeAttrTypeId,     classification.subtype, 'subtype')
+            if (opts.indexIdAttrTypeId && classification.indexId != null && !classification.indexId.toString().isEmpty()) {
+                syncAttribute(attrErrors, assetId, opts.indexIdAttrTypeId, classification.indexId.toString(), 'indexId')
+            }
+            if (!classification.partial) {
+                syncAttribute(attrErrors, assetId, ids.descriptionAttrTypeId, classification.description, 'description')
+                syncAttribute(attrErrors, assetId, ids.linkAttrTypeId,        classification.link       ? dataxrayUrl + classification.link       : null, 'link')
+                syncAttribute(attrErrors, assetId, ids.searchLinkAttrTypeId,  classification.searchLink ? dataxrayUrl + classification.searchLink : null, 'searchLink')
+                syncAttribute(attrErrors, assetId, ids.subtypeAttrTypeId,     classification.subtype, 'subtype')
+            }
 
             if (!attrErrors.isEmpty()) {
                 loggerApi.warn("Asset '${name}' synced but ${attrErrors.size()} attribute(s) failed: ${attrErrors.join('; ')}")
@@ -252,8 +265,14 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl) {
         loggerApi.warn("Data X-Ray returned 0 classifications — skipping retirement step to avoid retiring the whole domain")
     } else {
         def taggedInDomain = fetchTaggedAssetsInDomain(ids.classificationsDomainId, SYNC_TAG)
+        def noRetire = (opts.noRetireTypeIds ?: []) as Set
         def toRetire = taggedInDomain.findAll {
             !touchedAssetIds.contains(it.getId()) && it.getStatus()?.getId() != ids.obsoleteStatusId
+                && !noRetire.contains(it.getType()?.getId())
+        }
+        if (!noRetire.isEmpty()) {
+            int spared = taggedInDomain.count { !touchedAssetIds.contains(it.getId()) && noRetire.contains(it.getType()?.getId()) }
+            if (spared > 0) { loggerApi.warn("Retirement skipped for ${spared} asset(s) whose catalogue could not be fetched completely this run") }
         }
         if (!toRetire.isEmpty()) {
             loggerApi.info("Retiring ${toRetire.size()} asset(s) no longer present in Data X-Ray")

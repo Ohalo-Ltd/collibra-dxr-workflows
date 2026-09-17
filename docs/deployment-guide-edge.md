@@ -8,7 +8,7 @@ Everything is done through the Collibra and Data X-Ray user interfaces; no comma
 
 The workflows never open a network connection themselves. Every call to Data X-Ray is a Collibra **External API task**, which Collibra hands to your Edge site; the Edge site makes the HTTP request inside your network using an **HTTP connection** that holds the Data X-Ray host and credentials, and returns the response to the workflow. The workflows only need to know the **name** of that connection.
 
-Because an External API task is asynchronous and its response is limited in size, the Edge edition fetches results **one page at a time** (50 files per request by default) and imports each page as it arrives. A search that matches thousands of files therefore takes a few seconds per 50 files; the nightly sync runs the same way, unattended.
+Because an External API task is asynchronous and its response is limited in size, the Edge edition fetches results **one page at a time** (25 files per request by default) and imports each page as it arrives. A search that matches thousands of files therefore takes roughly one to two seconds per 25 files; the nightly sync runs the same way, unattended.
 
 ## Prerequisites
 
@@ -35,7 +35,7 @@ The same connection is shared by all four Data X-Ray-calling workflows.
 
 ## Step 2 — Import the six workflow ZIPs
 
-Settings → Workflows → Definitions → **Upload**, once per ZIP. Order does not matter. The process ids are identical to the on-prem edition, so importing the Edge edition over an existing on-prem installation **replaces it in place** and keeps every configuration variable and start-role setting.
+Settings → Workflows → Definitions → **Upload**, once per ZIP. Order does not matter. The process ids are identical to the on-prem edition, so importing the Edge edition over an existing on-prem installation **replaces it in place** and keeps the start-role settings. Collibra drops configuration variables the new edition does not declare, so the Bearer token must be re-entered if you ever switch back to the on-prem edition.
 
 ## Step 3 — Enable each workflow and run *Configure Data X-Ray Workflows*
 
@@ -48,7 +48,7 @@ Settings → Workflows → Definitions → select a workflow → **Variables**:
 | Workflow | Variable | Value |
 |---|---|---|
 | Search Data X-Ray, Rerun Data X-Ray Search, Sync Data X-Ray Classifications, Sync Data X-Ray Classification (Nightly) | **Edge HTTP connection name (Data X-Ray)** | The connection name from Step 1 (`data-xray` unless you chose another). |
-| Search Data X-Ray, Rerun Data X-Ray Search | **Data X-Ray results per request (1-200)** | Leave at `50`. Lower it only if a Data X-Ray page exceeds Collibra's response limit (see *Limits*). |
+| Search Data X-Ray, Rerun Data X-Ray Search | **Data X-Ray results per request (1-100)** | Leave at `25`. Lower it only if a Data X-Ray page exceeds Collibra's response limit (see *Limits*). |
 | all four | **Data X-Ray Base URL (deep links only)** | Optional. Used only to build links from Collibra assets back to Data X-Ray; leave the placeholder to skip links. |
 
 There is **no Bearer token** in this edition: credentials live on the Edge connection.
@@ -57,11 +57,12 @@ There is **no Bearer token** in this edition: credentials live on the Edge conne
 
 Identical to the on-prem edition: members of `Data X-Ray User` may run the search and sync workflows; `Data X-Ray Admin` and Sysadmins edit the variables above.
 
-Run **Sync Data X-Ray Classifications** first, then **Search Data X-Ray** from the **+ Create** menu. Results appear in your task inbox after a few seconds (the search is asynchronous in this edition). Importing and reruns page through the results; the nightly jobs run unattended at 02:00 and 02:30 server time.
+Run **Sync Data X-Ray Classifications** first — it is mandatory in this edition: searches and reruns translate classifications to Data X-Ray's internal ids stored by that sync (attribute *Data X-Ray Index ID*), and refuse to run for a classification it has not synced. Then **Search Data X-Ray** from the **+ Create** menu. Results appear in your task inbox after a few seconds (the search is asynchronous in this edition). Importing and reruns page through the results; the nightly jobs run unattended at 02:00 and 02:30 server time.
 
 ## Limits specific to the Edge edition
 
-- **Response size**: Collibra caps the size of an External API response (about 500 KB on Collibra 2026.09; Collibra documents 100 KB). A page of 50 results is ~60–80 KB. If a page ever exceeds the cap, the workflow reports *Response size exceeds the allowed limit* — lower **results per request**.
+- **Response size**: Collibra caps an External API response at **100 KB**. A page of 25 results is typically 30–40 KB; rows grow with the number of annotators that match a file, so lower **results per request** if the workflow ever reports *Response size exceeds the allowed limit*.
+- **Large annotator catalogues**: the classification sync fetches the complete annotator list in one request when it fits (roughly up to 200 annotators). Beyond that it falls back to the annotators that currently have findings, fetching each unknown one individually (about one second each, once), and it then **never retires annotators** — a deleted annotator stays *Candidate* in Collibra until the catalogue fits again or it is retired by hand. Labels and extractors are always synced completely. The sync result reports when this fallback was used.
 - **Results per query**: Data X-Ray pages results with an offset and cannot go past its `max_result_window` (10,000 rows by default, 30,000 on some installations). A search matching more files than that can be previewed but not imported; narrow it (add a label or annotator) or split it per datasource.
 - **Latency**: each request through Edge takes roughly one second. Importing 5,000 files is ~100 requests, a couple of minutes.
 - **No results file**: the on-prem edition attaches the full result set as a ZIP'd CSV; the Edge edition shows a preview and imports instead.
