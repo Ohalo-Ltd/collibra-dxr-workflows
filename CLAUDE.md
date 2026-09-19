@@ -10,7 +10,7 @@ pack.json                  Pack manifest: bundle name, pinned harnessRef, workfl
 shared/*.groovy            Function-only Groovy included into scripts at build time (`// {{include:x.groovy}}`);
                            the ONLY place that knows the Data X-Ray API (dxr_rows / dxr_http_direct / dxr_edge)
 workflows/<name>/          One directory per workflow (app.json, workflow.bpmn, scripts/, forms/)
-  workflow.edge.bpmn       Edge-edition BPMN (4 DXR-calling workflows only); scripts/edge/*.groovy its glue
+  workflow.edge.bpmn.template  Edge-edition BPMN template (4 DXR-calling workflows only); scripts/edge/*.groovy its glue
 docs/deployment-guide.md   Customer-facing UI deployment guide, on-prem edition (shipped in both bundles)
 docs/deployment-guide-edge.md  Customer-facing guide for the Collibra Cloud + Edge edition (shipped in both)
 docs/file-asset-lifecycle.md  Customer-facing explainer: file asset creation, 25k cap, sync, orphaning/retirement, deletion (shipped)

@@ -22,7 +22,7 @@ Six workflows make up the Data X-Ray integration. Most are **global** (started f
 | **Sync Data X-Ray Classification (Nightly)** | `syncDataXrayClassificationsNightly` | The same classification sync, run automatically every night at **02:00** (server time). No manual start. |
 | **Sync Data X-Ray Files (Nightly)** | `syncDataXrayFilesNightly` | Finds every query asset tagged `dataxray-keep-in-sync` and starts one headless rerun per query, every night at **02:30** (after the classification sync). No manual start. |
 
-Each lives in its own directory under [`workflows/`](workflows/) — `app.json` (metadata), `workflow.bpmn` (process definition), `scripts/*.groovy` (logic), and `forms/*.form` (user input).
+Each lives in its own directory under [`workflows/`](workflows/) — `app.json` (metadata), `workflow.bpmn.template` (process definition; a template, not an importable file), `scripts/*.groovy` (logic), and `forms/*.form` (user input).
 
 ## Access control
 
@@ -84,7 +84,7 @@ python deploy.py bundle --pack packs/dxr-workflows       # build both release bu
 python tools/groovy_syntax_check.py packs/dxr-workflows  # compile every script of every variant (needs groovyc)
 ```
 
-Shared Groovy lives in [`shared/`](shared/) and is pulled into scripts with `// {{include:name.groovy}}` at build time; the Edge edition adds `workflow.edge.bpmn` and `scripts/edge/` per workflow. See [CLAUDE.md](CLAUDE.md) for the two-edition design and the Data X-Ray API contract each one relies on.
+Shared Groovy lives in [`shared/`](shared/) and is pulled into scripts with `// {{include:name.groovy}}` at build time; the Edge edition adds `workflow.edge.bpmn.template` and `scripts/edge/` per workflow. See [CLAUDE.md](CLAUDE.md) for the two-edition design and the Data X-Ray API contract each one relies on.
 
 Commit and push pack changes from inside `packs/dxr-workflows` (it is its own git repo), then commit the updated submodule pointer in the harness. Deployed definition UUIDs are recorded per environment in [`workflow-registry.json`](workflow-registry.json).
 

@@ -14,6 +14,10 @@
 # workflow checks the repository out with actions/checkout (a git clone), not
 # an archive download.
 #
-# Only the BPMN templates are excluded. The Groovy, forms, docs and tooling stay
-# in the archive, so a source snapshot is still a useful source snapshot.
+
+# Templates are named *.bpmn.template precisely so that nothing in a source tree
+# looks importable; both patterns are excluded as belt and braces. The Groovy,
+# forms, docs and tooling stay in the archive, so a source snapshot is still a
+# useful source snapshot.
 *.bpmn export-ignore
+*.bpmn.template export-ignore
