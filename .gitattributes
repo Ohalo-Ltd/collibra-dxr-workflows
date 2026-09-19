@@ -1,0 +1,19 @@
+# Keep GitHub's automatic "Source code (zip / tar.gz)" release archives free of
+# files that look like something you could import into Collibra.
+#
+# Those two links are added by GitHub to every release and cannot be removed.
+# A technician who downloads one and uploads a workflow.bpmn from it gets a
+# workflow that deploys and then fails at its first script task with
+# "MissingPropertyException: No such property: <script name>", because the
+# .bpmn files in this repository are TEMPLATES: their <script> elements hold
+# {{script:...}} placeholders that deploy.py replaces at build time.
+#
+# export-ignore excludes a path from `git archive`, which is what GitHub uses
+# to build those archives (verified against this repository, Sept 2026). The
+# release bundles we attach ourselves are unaffected, and so is CI: the release
+# workflow checks the repository out with actions/checkout (a git clone), not
+# an archive download.
+#
+# Only the BPMN templates are excluded. The Groovy, forms, docs and tooling stay
+# in the archive, so a source snapshot is still a useful source snapshot.
+*.bpmn export-ignore
