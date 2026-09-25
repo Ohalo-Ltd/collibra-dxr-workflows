@@ -282,7 +282,7 @@ def edgeQueryItem(String parameter, Object value, String type, String matchStrat
 
 // The user-facing explanation when a criterion has no numeric index id.
 def edgeUnresolvedMessage(String verb, List unresolved) {
-    return "Cannot ${verb}: ${unresolved.join(', ')} ${unresolved.size() == 1 ? 'has' : 'have'} no Data X-Ray Index ID in Collibra. Run Sync Data X-Ray Classifications (Collibra Cloud + Edge edition) first, then try again.".toString()
+    return "Cannot ${verb}: ${unresolved.join(', ')} ${unresolved.size() == 1 ? 'has' : 'have'} no Data X-Ray Index ID in Collibra. Run Sync Data X-Ray Classifications (Collibra Cloud + Edge edition) first — or, if classifications are synced with the standalone script, re-run it with --stamp-index-ids — then try again.".toString()
 }
 
 // Zero every import counter the page loop advances (the edge equivalent of
