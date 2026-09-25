@@ -32,8 +32,10 @@
 // disabled until redeployment. Every failure path logs and ends cleanly.
 //
 // This workflow has NO Data X-Ray connection settings of its own: it never
-// calls Data X-Ray. Each rerun instance it starts reads the Base URL / Bearer
-// token configured on the Rerun Data X-Ray Search workflow.
+// calls Data X-Ray, so the same script ships in both editions. Each rerun
+// instance it starts uses the connection settings configured on the Rerun
+// Data X-Ray Search workflow — the Base URL / Bearer token on-prem, the Edge
+// HTTP connection name in the Collibra Cloud + Edge edition.
 //
 // Process variables produced (audit only — there is no results form):
 //   nightlyQueriesFound   (Integer) – flagged query assets discovered (incl. retired)

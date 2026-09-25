@@ -61,7 +61,13 @@ Then run it for real:
 python sync_classifications_standalone.py
 ```
 
-For an instance running the **Collibra Cloud + Edge edition** of the search and rerun workflows, add `--stamp-index-ids`. That also writes the numeric *Data X-Ray Index ID* those workflows need, reading it from Data X-Ray's internal catalogue endpoints. The attribute type is created by configure from pack v2.1.0 onwards.
+**Collibra Cloud + Edge edition: add `--stamp-index-ids`.**
+
+```
+python sync_classifications_standalone.py --stamp-index-ids
+```
+
+That also writes the numeric *Data X-Ray Index ID* the Edge edition's search and rerun workflows need, reading it from Data X-Ray's internal catalogue endpoints. Without it, every search fails with *Cannot search: … has no Data X-Ray Index ID in Collibra*. Running the script again with the flag after a run without it updates the existing assets in place, and a later run without the flag leaves stamped ids untouched. The attribute type is created by configure from pack v2.1.0 onwards.
 
 The first line after the catalogue count is the authentication check, `Collibra: authenticated with basic as 'jane.doe'`. The last line is the summary, in the same terms as the workflow's results screen:
 
@@ -69,7 +75,7 @@ The first line after the catalogue count is the authentication check, `Collibra:
 Sync complete: created=0 updated=69 retired=0 skipped=13 failed=0
 ```
 
-`skipped` counts Data X-Ray data categories, which the workflow does not mirror either. The exit code is 0 when everything synced and 1 when any item failed or the catalogue came back empty, so a scheduler can alert on it. To run it nightly, a cron entry such as `0 2 * * * cd /opt/dxr-sync && python sync_classifications_standalone.py >> sync.log 2>&1` does the job; keep the `.env` file readable only by that account.
+`skipped` counts Data X-Ray data categories (logged as `Skipping data category '<name>'`), which the workflow does not mirror either — the annotators inside them are synced as usual, so custom data categories need no action. The exit code is 0 when everything synced and 1 when any item failed or the catalogue came back empty, so a scheduler can alert on it. To run it nightly, a cron entry such as `0 2 * * * cd /opt/dxr-sync && python sync_classifications_standalone.py >> sync.log 2>&1` does the job; keep the `.env` file readable only by that account.
 
 ## What it does, and what it deliberately mirrors
 

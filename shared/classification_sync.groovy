@@ -143,7 +143,12 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             def assetTypeId = assetTypeIdByType[type]
             if (!assetTypeId) {
                 skipped++
-                loggerApi.warn("Skipping '${name}': unknown type '${type}'")
+                if (type == 'ANNOTATOR_DOMAIN') {
+                    // Data categories group annotators in Data X-Ray; they are not mirrored (the annotators are).
+                    loggerApi.info("Skipping data category '${name}' (data categories are not mirrored to Collibra)")
+                } else {
+                    loggerApi.warn("Skipping '${name}': unknown type '${type}'")
+                }
                 return
             }
 

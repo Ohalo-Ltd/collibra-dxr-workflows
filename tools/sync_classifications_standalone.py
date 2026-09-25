@@ -120,6 +120,10 @@ SYNC_TAG          = "dataxray-classification-sync"          # dxrClassificationS
 
 PAGE = 1000
 
+NO_INDEX_IDS_NOTE = ("NOTE: running without --stamp-index-ids, so no Data X-Ray Index ID is written. That is fine for the "
+                     "on-prem edition; the Collibra Cloud + Edge edition's Search and Rerun refuse any classification "
+                     "without one. Re-run with --stamp-index-ids for that edition (existing assets are updated in place).")
+
 
 # ---------------------------------------------------------------- clients
 class BearerAuth(requests.auth.AuthBase):
@@ -346,7 +350,10 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
         type_id = ASSET_TYPE_BY_DXR_TYPE.get(dxr_type)
         if not type_id:
             counts["skipped"] += 1
-            log(f"Skipping '{name}': unknown type '{dxr_type}'")
+            if dxr_type == "ANNOTATOR_DOMAIN":
+                log(f"Skipping data category '{name}' (data categories are not mirrored to Collibra; their annotators are)")
+            else:
+                log(f"Skipping '{name}': unknown type '{dxr_type}'")
             continue
         asset_name = names.get(dxr_id, name)
         try:
@@ -438,6 +445,8 @@ def main() -> int:
     items = fetch_catalogue(dxr_url, token)
     print(f"Data X-Ray catalogue: {len(items)} item(s) {dict(Counter(i.get('type') for i in items))}{' [DRY RUN]' if args.dry_run else ''}")
     index_ids = fetch_index_ids(dxr_url, token) if args.stamp_index_ids else None
+    if index_ids is None:
+        print(NO_INDEX_IDS_NOTE)
 
     collibra = Collibra(args.collibra_url, auth, args.dry_run)
     try:
@@ -450,6 +459,8 @@ def main() -> int:
     print(f"\nSync complete: created={c['created']} updated={c['updated']} retired={c['retired']} skipped={c['skipped']} failed={c['failed']}")
     for f in result["failures"]:
         print(f"  - {f}")
+    if index_ids is None:
+        print(NO_INDEX_IDS_NOTE)
     return 1 if result["aborted"] or c["failed"] else 0
 
 
