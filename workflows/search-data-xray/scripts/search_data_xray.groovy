@@ -108,6 +108,17 @@ def filter       = (execution.getVariable('filter') ?: '').toString().trim()
 def filterAnnotatorIds = toIdList(execution.getVariable('filterAnnotator'))
 def description  = (execution.getVariable('description') ?: '').toString().trim()
 
+def retiredMsg = retiredPicksMessage([label: labelIds, extractor: extractorIds, annotator: annotatorIds,
+                                      'annotated-text annotator': filter.isEmpty() ? [] : filterAnnotatorIds],
+                                     ids.obsoleteStatusId)
+if (retiredMsg) {
+    loggerApi.error(retiredMsg)
+    def wf = new WorkflowException(retiredMsg)
+    wf.setTitleMessage('Search Data X-Ray')
+    wf.setUserMessage(retiredMsg)
+    throw wf
+}
+
 // --- Create the search-query asset ------------------------------------------
 
 def queryId = createQueryAsset(conditionName, ids)

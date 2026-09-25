@@ -58,10 +58,18 @@ if (conditionName.isEmpty()) {
 def filter      = (execution.getVariable('filter') ?: '').toString().trim()
 def description = (execution.getVariable('description') ?: '').toString().trim()
 
+def filterAnnotatorIds = toIdList(execution.getVariable('filterAnnotator'))
+def retiredMsg = retiredPicksMessage([label: toIdList(execution.getVariable('label')), extractor: toIdList(execution.getVariable('extractor')),
+                                      annotator: toIdList(execution.getVariable('annotator')),
+                                      'annotated-text annotator': filter.isEmpty() ? [] : filterAnnotatorIds],
+                                     ids.obsoleteStatusId)
+if (retiredMsg) {
+    failNow('Search Data X-Ray', retiredMsg)
+}
+
 def labels     = resolvePickedClassifications(toIdList(execution.getVariable('label')),     ids.dataxrayIdAttrTypeId, ids.dataxrayIndexIdAttrTypeId)
 def extractors = resolvePickedClassifications(toIdList(execution.getVariable('extractor')), ids.dataxrayIdAttrTypeId, ids.dataxrayIndexIdAttrTypeId)
 def annotators = resolvePickedClassifications(toIdList(execution.getVariable('annotator')), ids.dataxrayIdAttrTypeId, ids.dataxrayIndexIdAttrTypeId)
-def filterAnnotatorIds = toIdList(execution.getVariable('filterAnnotator'))
 def filterAnnotators = filter.isEmpty() ? [] : resolvePickedClassifications(filterAnnotatorIds, ids.dataxrayIdAttrTypeId, ids.dataxrayIndexIdAttrTypeId)
 if (filter.isEmpty() && !filterAnnotatorIds.isEmpty()) {
     loggerApi.warn("Ignoring ${filterAnnotatorIds.size()} annotated-text annotator(s): no annotated text was entered")
