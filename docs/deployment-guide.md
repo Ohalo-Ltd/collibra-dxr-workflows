@@ -214,5 +214,6 @@ that case, re-enter the token/URL (Step 4) and **run Configure once more** (Step
 | A user can't see Search/Sync in **+ Create**. | They don't hold **Data X-Ray User** or **Data X-Ray Admin** — assign the role (Step 5). |
 | A user can't edit the Base URL / token. | Editing requires **Data X-Ray Admin** (or Sysadmin / Workflow Administration). |
 | The import controls don't appear on the search results task. | Either the search returned 0 results, or the projected **Data X-Ray Files** population exceeds the 25,000 cap (the task shows the reason). |
+| A search is refused with "… was deleted in Data X-Ray (its Collibra asset is retired)". | A classification picked in the form was deleted in Data X-Ray; the sync marked its Collibra asset Obsolete, but the pickers still offer it. Remove it from the search. |
 | A rerun fails with "criterion no longer exists". | A classification used by the saved search was deleted in Data X-Ray. Recreate it there and run the classification sync, or create a new search. |
 | Nightly file sync did nothing. | No query assets carry the `dataxray-keep-in-sync` tag, or **Rerun Data X-Ray Search** isn't imported/enabled — check `dgc.log` for the run summary. |

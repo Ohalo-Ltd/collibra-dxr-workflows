@@ -40,6 +40,31 @@ def relateAssets(UUID sourceId, List<UUID> targetIds, UUID relationTypeId) {
     })
 }
 
+// A picked classification whose asset is retired (status Obsolete) was deleted in
+// Data X-Ray: the sync retires, never deletes, and the form pickers cannot filter
+// on status, so it stays pickable. Same rule as a rerun (rebuildQueryCriteria):
+// refuse rather than drop it — dropping an AND criterion broadens the search.
+// pickedIdsByKind: [label: [id, …], extractor: […], …] (kind is used in the message).
+// Returns the user-facing refusal, or '' when every pick is live.
+def retiredPicksMessage(Map pickedIdsByKind, UUID obsoleteStatusId) {
+    def retired = []
+    pickedIdsByKind.each { kind, idList ->
+        idList.each { id ->
+            try {
+                def asset = assetApi.getAsset(string2Uuid(id))
+                if (asset.getStatus()?.getId() == obsoleteStatusId) {
+                    retired << "${kind} '${asset.getName()}'".toString()
+                }
+            } catch (Exception ignored) {
+                // unresolvable ids are logged and skipped by resolvePickedAssets
+            }
+        }
+    }
+    if (retired.isEmpty()) { return '' }
+    def one = retired.size() == 1
+    return "Cannot search: ${retired.join(', ')} ${one ? 'was' : 'were'} deleted in Data X-Ray (${one ? 'its' : 'their'} Collibra asset is retired). Remove ${one ? 'it' : 'them'} from the search and try again.".toString()
+}
+
 // Look up each asset by ID, relate it to the query asset, and return the names.
 def resolveAndRelate(List ids, UUID sourceId, UUID relationTypeId) {
     def resolved = resolvePickedAssets(ids)
