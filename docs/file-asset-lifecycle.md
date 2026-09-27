@@ -12,12 +12,19 @@ Terminology used throughout:
 
 | Term | Meaning |
 |---|---|
-| **File asset** | An asset of type **Data X-Ray File** in the **Data X-Ray Files** domain. One per file in Data X-Ray. |
+| **File asset** | An asset of type **Data X-Ray File**, created in the **Data X-Ray Files** domain. One per file in Data X-Ray. |
 | **Query asset** | An asset of type **Unstructured Data Query** in the **Data X-Ray Custom Queries** domain. Created by **Search Data X-Ray**; one per saved search. |
 | **Returns** | The relation from a query asset to each file asset its search currently matches (*query* **returns** *file* / *file* **returned by** *query*). This is the integration's record of "which searches this file belongs to". |
 | **Retired** | Collibra status **Obsolete**. The asset and everything attached to it (attributes, relations, comments, attachments, history) is kept. |
 | **Active** | Collibra status **Candidate** — the status every file asset is created with and reactivated to. |
 | **Rerun** | A run of **Rerun Data X-Ray Search** for one query asset, started by a user from the asset's page or headlessly by **Sync Data X-Ray Files (Nightly)**. |
+
+Where everything lives: **Configure Data X-Ray Workflows** creates one
+community, **Collibra to Data X-Ray Integration**, once per Collibra instance,
+with three domains: **Data X-Ray Classifications**, **Data X-Ray Custom
+Queries** and **Data X-Ray Files**. There is no community or domain per Data
+X-Ray datasource; each file asset records its datasource in the **Datasource
+Name** attribute.
 
 ## The lifecycle at a glance
 
@@ -112,6 +119,35 @@ The imported assets appear in the **Data X-Ray Files** domain:
 
 ---
 
+## What counts as the same file?
+
+A file asset follows the file's **Data X-Ray file id**. As long as Data X-Ray
+keeps the id, every sync updates the same asset, whatever else changes. When
+Data X-Ray assigns a new id, Collibra sees a new file: the next rerun of a
+matching search creates a new asset, and the old one is retired (see
+[How are file assets orphaned?](#how-are-file-assets-orphaned)).
+
+Whether a file keeps its id depends on the Data X-Ray connector of its
+datasource:
+
+| Connector | Data X-Ray identifies a file by | Rename or move within the datasource |
+|---|---|---|
+| SMB, local / NFS, SFTP | its path | **New file id** → new asset |
+| Amazon S3, Azure Blob, Google Cloud Storage | its object key / blob name | **New file id** → new asset |
+| SharePoint on-premises | its path in the library | **New file id** → new asset |
+| SharePoint Online | the library plus SharePoint's item id | Same asset within a library; **new file id** when moved to another library |
+| OneDrive, Google Drive, Gmail, Box | the service's own item id | Same asset |
+| Connector plugins | whatever id the plugin reports | Depends on the plugin |
+
+For **every** connector, a file gets a new id when it is copied or moved to
+another datasource, or when its datasource is deleted and scanned again. A copy
+is a separate file: the original keeps its asset, and the copy gets its own.
+
+A new asset starts clean. Comments, attachments, history and any move to
+another community stay with the old, retired asset.
+
+---
+
 ## How is the maximum number of file assets controlled?
 
 There is a single **instance-wide cap of 25,000 file assets** in the
@@ -178,7 +214,8 @@ results, and then for each matching file:
 | Change in Data X-Ray | Effect on the Collibra file asset |
 |---|---|
 | New file matches the search | A new file asset is created and linked (as in an import). |
-| File renamed or moved (same Data X-Ray file id) | The **same** asset is renamed; File Path and the other attributes are refreshed. |
+| File renamed or moved, and Data X-Ray kept its file id (see [What counts as the same file?](#what-counts-as-the-same-file)) | The **same** asset is renamed; File Path and the other attributes are refreshed. |
+| File renamed or moved, and Data X-Ray assigned a new file id (e.g. on an SMB share) | A **new** asset is created; the old one is unlinked and retired as below. |
 | Size / last-modified changed | Attributes refreshed. |
 | A label was added, or an annotator/extractor now has hits | A *groups* relation to that classification is **added**. |
 | A label was removed, or a classification no longer has hits on the file | The stale *groups* relation is **removed** — the asset mirrors exactly what Data X-Ray asserts. |
@@ -231,6 +268,8 @@ returning it. The summary task reports both numbers separately (*Unlinked* vs
 | File changed so it no longer meets the criteria (e.g. a label removed) | Unlinked from that query; retired only if no other query returns it. |
 | Search criteria narrowed (a criterion removed in Data X-Ray is *not* silently dropped — the rerun fails instead, see the deployment guide) | Files outside the new criteria are unlinked, then retired if orphaned. |
 | Data X-Ray re-scanned a datasource and assigned **new file ids** | The new generation is created as new assets; the old generation becomes orphaned and is retired with its history intact. |
+| File renamed or moved on a connector that identifies files by path, or moved to another datasource | The same, for that one file: a new asset for the new file id, the old asset retired. |
+| Datasource deleted in Data X-Ray | Its files disappear from every search's results and are retired as each search reruns. A search that matched *only* that datasource now returns nothing, so the zero-results rule below keeps its files active; delete the query asset to retire them. |
 
 ### 2. The query asset itself was deleted
 
@@ -257,11 +296,41 @@ domain fails part-way, the sweep is skipped for that night and retried the next
   search that genuinely matches nothing; retiring a query's whole population on
   that basis would be wrong. The result set is fetched with up to three
   attempts, and if all fail the rerun stops with an error and changes nothing.
+  The flip side: a search that genuinely matches nothing any more (for example,
+  its only datasource was deleted in Data X-Ray) keeps its files active until
+  it matches something again or the query asset is deleted.
 - **An aborted rerun retires nothing.** If the run is refused (cap exceeded,
   connection not configured, a criterion deleted in Data X-Ray, started on the
   wrong asset type), the unlink/retire pass does not run.
 - **Files already retired are left alone** by both the rerun and the sweep —
   their status and history are not touched again.
+
+---
+
+## Can file assets be moved to another community?
+
+Yes. The integration tracks file assets by their UUID, not by domain, so an
+asset a user moves into a domain in another community (a business unit's, say)
+stays there. Every later sync updates its attributes and relations in place and
+never moves it back. Two conditions come from Collibra, not the integration:
+the target domain's type must allow the **Data X-Ray File** asset type, and the
+person moving it needs permission on both domains.
+
+Things to know before relying on it:
+
+- **A placement lasts as long as the file id.** If Data X-Ray assigns the file a
+  new id, for example when it is renamed or moved on an SMB share (see
+  [What counts as the same file?](#what-counts-as-the-same-file)), the new asset
+  is created in the **Data X-Ray Files** domain and the moved one is retired
+  where it is.
+- **The 25,000 cap and the nightly orphan sweep only look at the Data X-Ray
+  Files domain.** A moved asset is not counted towards the cap, and if its
+  query asset is deleted, the nightly sweep does not retire it. A rerun that
+  stops returning it still retires it normally.
+- **Deleting the community or domain deletes the asset with it.** If a search
+  still matches the file, its next rerun recreates the asset in the **Data X-Ray
+  Files** domain. Only that search's *returns* relation comes back at once; the
+  others return as each search reruns.
 
 ---
 
@@ -286,7 +355,8 @@ What to expect if file assets *are* deleted by hand:
 | A **retired** file asset | Nothing further happens. This is the safe, intended way to reclaim capacity (see below). If the file later matches a search again it is simply created afresh as a new asset (same UUID, but its old history is gone). |
 | An **active** file asset that a search still matches | The next rerun of that search (manual or nightly) **recreates** it — same UUID, same name, fresh attributes and relations — because the deterministic identity means the workflow simply sees a file it has not imported yet. Its comments and history are not restored. |
 | A **query asset** | Its file assets are **not** deleted. Those no other query returns are retired by the next nightly orphan sweep (see above). |
-| A **classification asset** | Not recommended — see the acceptance criteria (CAT-10). File assets keep working, but saved searches that used it silently lose that criterion. |
+| A **classification asset** | Not recommended — see the acceptance criteria (CAT-10). The next classification sync recreates it and file assets are relinked as their searches rerun, but saved searches that used it silently lose that criterion. Because criteria are AND-ed, they then return *more* files; a search left with no criteria stops with an error instead. |
+| A **community or domain** containing file assets | Collibra deletes the file assets with it. Each is recreated in the **Data X-Ray Files** domain by the next rerun of a search that still matches it (same UUID, no comments or history). See [Can file assets be moved to another community?](#can-file-assets-be-moved-to-another-community). |
 
 ---
 
@@ -364,8 +434,9 @@ needed).
 | Question | Answer |
 |---|---|
 | What creates a file asset? | An import from a search's results task, or a rerun that finds a new match. Never a search on its own. |
-| What is a file asset's identity? | Its Data X-Ray file id — the Collibra UUID is derived from it, so the same file is always the same asset. |
-| Which domain / type? | **Data X-Ray Files** / **Data X-Ray File**, status **Candidate** when active. |
+| What is a file asset's identity? | Its Data X-Ray file id — the Collibra UUID is derived from it, so the same file is always the same asset. On path-based connectors (SMB, file shares, S3, Azure Blob, SharePoint on-premises) a rename or move gives the file a new id, and so a new asset. |
+| Which domain / type? | Created in **Data X-Ray Files** / **Data X-Ray File**, status **Candidate** when active. |
+| Can I move one to another community? | Yes; syncs update it where it is. It is not counted by the cap or swept by the nightly, and the placement is lost if Data X-Ray assigns the file a new id. |
 | Maximum number? | **25,000** in the domain in total, retired ones included; warning above **10,000** per import. Fixed in the scripts. |
 | What keeps them current? | Manual **Rerun Data X-Ray Search** on the query asset, or the **02:30 nightly** for queries tagged `dataxray-keep-in-sync`. |
 | When is one retired? | When no query returns it any more — after a rerun unlinks it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). |

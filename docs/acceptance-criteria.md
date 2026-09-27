@@ -34,7 +34,7 @@ Owner: **Sync Data X-Ray Classifications** (manual) and its **Nightly** twin
 | CAT-7 | An asset in the Classifications domain was created **by hand** (no sync tag) | The sync runs | It is never touched — not updated, not retired | ✅ |
 | CAT-8 | The nightly sync hits any failure (unset token, Data X-Ray down, every item failing) | The 02:00 timer fires | The run logs the reason and ends **cleanly** — it never throws, so the schedule is never disabled by Collibra's retry-then-disable rule | ✅ |
 | CAT-9 | A regular Collibra user (no delete-capable responsibility on the domain) tries to delete a classification asset | They attempt the delete | Refused by Collibra's default permission model — asset deletion always requires an explicitly granted responsibility whose role includes asset removal, or Sysadmin. The integration grants no such responsibility; instances should not either (see D-2) | ✅ (Collibra default) |
-| CAT-10 | A Sysadmin (or a user someone granted a delete-capable responsibility) hard-deletes a classification asset that still exists in Data X-Ray | The next sync runs | The asset is recreated (matched by Data X-Ray ID) — but relations from saved queries to the old asset are gone, silently narrowing those searches. Prefer letting the sync retire; treat the domain as sync-owned | ⚠️ documented limitation, see D-2 |
+| CAT-10 | A Sysadmin (or a user someone granted a delete-capable responsibility) hard-deletes a classification asset that still exists in Data X-Ray | The next sync runs | The asset is recreated (matched by Data X-Ray ID) — but relations from saved queries to the old asset are gone, so each of those searches silently loses that criterion and its next rerun returns *more* files (criteria are AND-ed; if it was the only criterion the rerun fails instead, FILE-4). Prefer letting the sync retire; treat the domain as sync-owned | ⚠️ documented limitation, see D-2 |
 
 ## 2. Per-file classification evidence
 
@@ -82,7 +82,7 @@ via the nightly).
 | FILE-4 | A query asset has no criteria left (relations removed) and no filter | A rerun starts | It fails/skips with "criteria cannot be reconstructed" — it never falls back to an all-files search | 🔹 |
 | FILE-5 | A user starts Rerun on a **non-query** asset (e.g. a file asset) | The rerun starts | It refuses immediately, naming the asset's actual type (Collibra cannot hide the action on other asset pages when start roles are global roles) | ✅ |
 | FILE-6 | A **new** file matches the query since last run | The query is rerun | A new file asset is created and linked | ✅ |
-| FILE-7 | A matched file was **renamed/moved** in Data X-Ray (same file id) | The query is rerun | The same asset is updated: new name/display name, refreshed attributes | 🔹 |
+| FILE-7 | A matched file was **renamed/moved** in Data X-Ray on a connector that keeps the file id (one that identifies files by the source system's own item id: SharePoint Online within one library, OneDrive, Google Drive, Gmail, Box) | The query is rerun | The same asset is updated: new name/display name, refreshed attributes | 🔹 |
 | FILE-8 | A file **no longer matches** the query (changed, deleted, or no longer hits the criteria) | The query is rerun | The query's `returns` relation is removed; the asset is **retired** only if no other query returns it | ✅ |
 | FILE-9 | A file is returned by **two** queries and one stops matching it | That query is rerun | The file stays active (Candidate) and keeps the other query's relation | ✅ |
 | FILE-10 | A **retired** file matches any query again | That query is rerun / imported | The same asset is **reactivated** (Candidate) — history intact | ✅ |
@@ -90,6 +90,10 @@ via the nightly).
 | FILE-12 | A rerun's projected Files-domain population exceeds 25,000 | The rerun starts | Interactive: refused with the projection; headless: logged and skipped | 🔹 |
 | FILE-13 | A rerun's summary task is left **open** in someone's inbox | The user revisits the query asset / the nightly fires | The Rerun action is still available and the nightly still runs (workflow exclusivity is UNCONSTRAINED) | ✅ |
 | FILE-14 | Data X-Ray reassigns **file ids** (e.g. datasource deleted and re-scanned) | The next sync runs | New assets are created and the old generation retires as orphans, keeping its history — file identity follows the Data X-Ray file id. **Accepted by TRC** (see D-3) | 🔹 |
+| FILE-15 | A matched file was **renamed or moved** on a connector that identifies files by **path** (SMB, local/NFS, SFTP, Amazon S3, Azure Blob, Google Cloud Storage, SharePoint on-prem), moved to another SharePoint Online library, or copied/moved to **another datasource** (any connector) | Data X-Ray rescans and the query is rerun | Data X-Ray has assigned a new file id, so this is FILE-14 for one file: a new asset is created in the Data X-Ray Files domain, and the old asset is unlinked and retired where it is (history kept; comments, attachments and a manual domain/community placement do not carry over) | 🔹 |
+| FILE-16 | A user **moves** an active file asset to a domain in another community | The query is rerun | The asset is updated in place (attributes, classification and `returns` relations) and never moved back — the integration tracks file assets by UUID, not by domain (verified Sept 2026) | ✅ |
+| FILE-17 | A **community or domain** holding file assets is deleted in Collibra (Collibra deletes its assets with it) | A query that still matches one of those files is rerun | The asset is recreated in the Data X-Ray Files domain (same UUID). Only the rerun query's `returns` relation comes back; other queries' relations return as each of them reruns. Comments and history are gone (verified Sept 2026) | ✅ |
+| FILE-18 | A file asset moved **out of** the Data X-Ray Files domain (FILE-16) becomes orphaned because its query is deleted | The next nightly runs | The orphan sweep does **not** retire it and the 25,000 cap does not count it — both only look at the Data X-Ray Files domain. (A rerun that stops returning it still retires it normally.) | ⚠️ see D-5 |
 
 ## 5. Query asset lifecycle (Collibra side)
 
@@ -140,13 +144,22 @@ Owner: **Sync Data X-Ray Classification (Nightly)** at 02:00 and
   and don't grant Steward/Owner-style responsibilities on them. An enforcement
   role was prototyped, verified and deliberately rolled back as unnecessary
   complexity. Residual (CAT-10): a Sysadmin who hard-deletes still silently
-  narrows saved queries that used the classification — prefer sync-retire.
+  removes that criterion from saved queries that used it (so they return more
+  files) — prefer sync-retire.
 - ~~**D-3 (FILE-14): file identity is the Data X-Ray file id.**~~ **Accepted by
   TRC** (August 2026): "old generation retired with history, new generation
   starts clean." If Data X-Ray reassigns file ids (e.g. a datasource is deleted
   and re-scanned), Collibra creates new assets and the orphan sweep retires the
   old generation — records preserved, no migration attempted. (A content-hash
   based migration remains possible later if ever needed.)
+  Which events assign a new file id depends on the Data X-Ray connector
+  (verified in the Data X-Ray source, Sept 2026): connectors that identify
+  files by path (SMB, local/NFS, SFTP, S3, Azure Blob, GCS, SharePoint
+  on-prem) assign one on every rename or move; connectors that use the source
+  system's item id (SharePoint Online within a library, OneDrive, Google
+  Drive, Gmail, Box) keep it. Every connector assigns a new id when a file is
+  copied or moved to another datasource, or a datasource is deleted and
+  re-scanned. See FILE-7 and FILE-15.
 - ~~**D-4 (EVID-8): evidence freshness is bounded by Data X-Ray indexing.**~~
   **Accepted by TRC** (August 2026), with the agreed wording: "Collibra
   reflects Data X-Ray as of the last sync; changes in Data X-Ray appear after
@@ -155,5 +168,11 @@ Owner: **Sync Data X-Ray Classification (Nightly)** at 02:00 and
   immediately. The integration deliberately never second-guesses the source
   system.
 
-**All four decisions are closed** — D-1 and D-2 decided and implemented/rolled
-back as recorded above, D-3 and D-4 accepted by TRC as intended behavior.
+- **D-5 (FILE-18): file assets moved out of the Files domain.** Open
+  (September 2026). Moving file assets into other communities is supported
+  (FILE-16), but the nightly orphan sweep and the 25,000 cap still only look
+  at the Data X-Ray Files domain. Proposed: scope both by the Data X-Ray File
+  asset type instead, so a moved asset is swept and counted wherever it lives.
+
+D-1 to D-4 are closed — D-1 and D-2 decided and implemented/rolled back as
+recorded above, D-3 and D-4 accepted by TRC as intended behavior. D-5 is open.
