@@ -62,5 +62,18 @@ def opts = [
         execution.setVariable('dxrFetchComplete', false)
     },
 ]
+// A skipped result still matches the query: count it as seen so the retire
+// pass does not unlink it. If its id could not be read, nothing can be known
+// to be gone, so the retire pass is skipped for this run.
+opts.onSkip = { String fileId ->
+    execution.setVariable('importFailedCount', ((execution.getVariable('importFailedCount') ?: 0) as int) + 1)
+    if (fileId) {
+        int chunk = (execution.getVariable('rerunPageCount') ?: 0) as int
+        execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson([deterministicFileAssetId(fileId).toString()]))
+        execution.setVariable('rerunPageCount', chunk + 1)
+    } else {
+        execution.setVariable('rerunRetireUnsafe', true)
+    }
+}
 opts.onPage = { Map page, List tuples -> importEdgePage(opts, page, tuples) }
 handleEdgeFilesPage(opts)
