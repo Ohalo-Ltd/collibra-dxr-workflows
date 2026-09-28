@@ -6,7 +6,9 @@
 // set rerunAborted/rerunAbortReason and end the loop, which also keeps headless
 // nightly runs from wedging.
 //
-// Per page it records the deterministic file-asset ids seen (rerunSeenChunk_<n>)
+// Per page it records the deterministic file-asset ids seen (rerunSeenChunk_<n>,
+// n counting pages actually processed — not dxrPageNo, which is renumbered when
+// the page size shrinks)
 // so the retire pass can diff the complete current set against previousFileIds.
 
 import groovy.json.JsonOutput
@@ -48,8 +50,9 @@ def opts = [
     },
     afterPage   : { List tuples, int pageNo ->
         def seen = tuples.collect { deterministicFileAssetId(it[0]).toString() }
-        execution.setVariable("rerunSeenChunk_${pageNo}".toString(), JsonOutput.toJson(seen))
-        execution.setVariable('rerunPageCount', pageNo + 1)
+        int chunk = (execution.getVariable('rerunPageCount') ?: 0) as int
+        execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson(seen))
+        execution.setVariable('rerunPageCount', chunk + 1)
     },
     onFatal     : { String msg ->
         loggerApi.error("Rerun of '${conditionName}' aborted: ${msg}")
@@ -59,5 +62,18 @@ def opts = [
         execution.setVariable('dxrFetchComplete', false)
     },
 ]
+// A skipped result still matches the query: count it as seen so the retire
+// pass does not unlink it. If its id could not be read, nothing can be known
+// to be gone, so the retire pass is skipped for this run.
+opts.onSkip = { String fileId ->
+    execution.setVariable('importFailedCount', ((execution.getVariable('importFailedCount') ?: 0) as int) + 1)
+    if (fileId) {
+        int chunk = (execution.getVariable('rerunPageCount') ?: 0) as int
+        execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson([deterministicFileAssetId(fileId).toString()]))
+        execution.setVariable('rerunPageCount', chunk + 1)
+    } else {
+        execution.setVariable('rerunRetireUnsafe', true)
+    }
+}
 opts.onPage = { Map page, List tuples -> importEdgePage(opts, page, tuples) }
 handleEdgeFilesPage(opts)

@@ -21,7 +21,10 @@ def ids = dxrModelIds()
 def queryAssetId = string2Uuid((execution.getVariable('queryAssetId') ?: '').toString())
 def keepInSync   = execution.getVariable('keepInSync') == true
 int total        = (execution.getVariable('resultCount') ?: 0) as int
-int pageSize     = edgePageSize(execution.getVariable('dataxrayPageSize'))
+// Start no larger than the preview ended up using: if Collibra refused its
+// rows as too large at the configured size, the import pages would be too.
+int configuredPageSize = edgePageSize(execution.getVariable('dataxrayPageSize'))
+int pageSize     = Math.min(configuredPageSize, edgeCurrentPageSize(configuredPageSize))
 
 // --- Re-check the instance-wide cap -------------------------------------------
 

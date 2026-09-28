@@ -4,7 +4,8 @@
 // page, upsert it as one batch (shared/file_batch.groovy), arm the next page or
 // finish. Datasource names are looked up per id on first sight. A page that
 // fails three times aborts the import cleanly; the summary form then shows the
-// counts reached so far plus the failure.
+// counts reached so far plus the failure. A single result too large for
+// Collibra to receive even alone is skipped and counted as failed.
 //
 // Reads:  dxr* response/loop variables, classIndex, queryAssetId, dataxrayUrl, dataxrayPageSize
 // Writes: import*Count, hasMoreWork, dxrFetchComplete, importAborted, importAbortReason
@@ -38,5 +39,8 @@ def opts = [
         execution.setVariable('hasMoreWork', false)
     },
 ]
+opts.onSkip = { String fileId ->
+    execution.setVariable('importFailedCount', ((execution.getVariable('importFailedCount') ?: 0) as int) + 1)
+}
 opts.onPage = { Map page, List tuples -> importEdgePage(opts, page, tuples) }
 handleEdgeFilesPage(opts)

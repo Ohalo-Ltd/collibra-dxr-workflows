@@ -7,6 +7,8 @@
 //   – The pass only runs when EVERY results page was fetched (dxrFetchComplete).
 //     A run that died mid-walk must not treat the partial set as mass
 //     disappearance; it is retried next night / next rerun.
+//   – Nor when a result had to be skipped without its file id being readable
+//     (rerunRetireUnsafe): that file may be one previously returned.
 //
 // Reads:  rerunAborted, dxrFetchComplete, importTotal, rerunSeenChunk_<n>, rerunPageCount,
 //         previousFileIds, queryAssetId
@@ -23,6 +25,10 @@ if (execution.getVariable('rerunAborted') == true) {
 }
 if (execution.getVariable('dxrFetchComplete') != true) {
     loggerApi.warn('Retire pass skipped: not every results page was fetched — not retiring anything from a partial picture')
+    return
+}
+if (execution.getVariable('rerunRetireUnsafe') == true) {
+    loggerApi.warn('Retire pass skipped: a result too large to fetch was skipped and its file id could not be read — not retiring anything this run')
     return
 }
 int total = (execution.getVariable('importTotal') ?: 0) as int
