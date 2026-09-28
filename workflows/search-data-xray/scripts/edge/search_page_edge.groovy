@@ -17,7 +17,7 @@ import groovy.json.JsonOutput
 handleEdgeFilesPage([
     label      : 'Search preview',
     dataxrayUrl: (execution.getVariable('dataxrayUrl') ?: '').toString(),
-    pageSize   : 50,
+    pageSize   : edgePageSize(execution.getVariable('dataxrayPageSize')),
     index      : [labelDxrIdByIndexId: [:], annotatorDxrIdByIndexId: [:], extractorDxrIdByIndexId: [:], nameByDxrId: [:]],
     onFatal    : { String msg ->
         loggerApi.error("Search Data X-Ray failed: ${msg}")

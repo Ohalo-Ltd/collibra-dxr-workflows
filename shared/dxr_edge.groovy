@@ -22,7 +22,10 @@
 //     allowed limit." and, with ignoreException=true, the workflow CONTINUES
 //     with no body/status variables). Every request this file arms is designed
 //     to stay well under that: results are paged (dxrEdgeDefaultPageSize rows),
-//     catalogue objects are fetched per item, datasource names per id.
+//     catalogue objects are fetched per item, datasource names per id. Rows
+//     vary in size between instances, so a results page that is refused anyway
+//     is re-requested with fewer rows (shrinkEdgeFilesPage) instead of retried
+//     as-is.
 //   - One round trip costs ~0.5–2 s.
 //
 // Data X-Ray side: the pack uses DXR's internal search API,
@@ -143,14 +146,52 @@ def buildEdgeSearchBody(List queryItems, int pageNo, int pageSize, String pitId)
     return groovy.json.JsonOutput.toJson(req)
 }
 
-// Arm one page of the files search.
+// Arm one page of the files search. Rows pageNo × pageSize onwards.
 def startEdgeFilesPage(List queryItems, int pageNo, int pageSize, String pitId) {
     execution.setVariable('dxrStage', 'files')
     execution.setVariable('dxrPageNo', pageNo)
+    execution.setVariable('dxrPageSizeCur', pageSize)
     execution.setVariable('dxrPitId', pitId ?: '')
     armEdgeRequest('POST', '/api/indexed-files/search', buildEdgeSearchBody(queryItems, pageNo, pageSize, pitId))
     edgeResetRetries()
     execution.setVariable('hasMoreWork', true)
+}
+
+// The page size the files loop is using now: the configured one until Collibra
+// refuses a page as too large, then smaller (shrinkEdgeFilesPage). The row
+// offset is always dxrPageNo × this.
+def edgeCurrentPageSize(int configured) {
+    def v = execution.getVariable('dxrPageSizeCur')
+    return (v != null && v.toString().isInteger()) ? v.toString().toInteger() : configured
+}
+
+def isEdgeResponseTooLarge(String error) {
+    return (error ?: '').contains('exceeds the allowed limit')
+}
+
+// A smaller page size that can continue from row `offset`: Data X-Ray pages
+// from pageNumber × pageSize, so the new size must divide the offset. The
+// largest such size up to half the current one; 1 always qualifies.
+def smallerEdgePageSize(int current, int offset) {
+    for (int s = current.intdiv(2); s > 1; s--) {
+        if (offset % s == 0) { return s }
+    }
+    return 1
+}
+
+// Collibra refused the armed page as larger than its response limit. Re-arm the
+// same rows with a smaller page size (kept for the rest of the run) and return
+// true, or return false when a single row is already too large.
+def shrinkEdgeFilesPage(String what) {
+    int size = edgeCurrentPageSize(dxrEdgeDefaultPageSize())
+    if (size <= 1) { return false }
+    int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
+    int offset = pageNo * size
+    int smaller = smallerEdgePageSize(size, offset)
+    loggerApi.warn("${what}: ${size} result(s) exceed Collibra's response size limit — requesting ${smaller} per page from here on")
+    startEdgeFilesPage(readJsonVariable('dxrQueryItems', []), offset.intdiv(smaller), smaller,
+        (execution.getVariable('dxrPitId') ?: '').toString())
+    return true
 }
 
 // Parse a search response. Returns [hits: List, total: int, pitId: String, maxResultWindow: int].
@@ -350,6 +391,12 @@ def handleEdgeFilesPage(Map opts) {
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
     def what = "${opts.label} page ${pageNo + 1}".toString()
     if (!r.ok) {
+        if (isEdgeResponseTooLarge(r.error)) {
+            // Re-sending the same request would fail the same way: ask for fewer rows.
+            if (shrinkEdgeFilesPage(what)) { return }
+            opts.onFatal("A single Data X-Ray search result (${what}) is larger than Collibra allows for one External API response (100 KB), so this search cannot be run through Edge.".toString())
+            return
+        }
         if (edgeRetry(what, r.error)) { return }
         opts.onFatal(r.error)
         return
@@ -381,7 +428,7 @@ def handleEdgeFilesPage(Map opts) {
 
 def processEdgePage(Map page, Map dsNames, Map opts) {
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
-    int pageSize = opts.pageSize as int
+    int pageSize = edgeCurrentPageSize(opts.pageSize as int)
     def tuples = page.hits.collect { tupleFromSearchHit(it, opts.index, dsNames, opts.dataxrayUrl) }.findAll { it != null }
     boolean wantMore = opts.onPage(page, tuples)
     int nextPage = pageNo + 1
@@ -399,12 +446,13 @@ def processEdgePage(Map page, Map dsNames, Map opts) {
 // opts additionally: queryAssetId (UUID), classIndex (Map byDxrId/byName → asset ids).
 def importEdgePage(Map opts, Map page, List tuples) {
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
-    int pageSize = opts.pageSize as int
+    int pageSize = edgeCurrentPageSize(opts.pageSize as int)
     if (pageNo == 0) {
         execution.setVariable('importTotal', page.total)
-        execution.setVariable('importBatchCount', (int) Math.ceil(page.total / (double) pageSize))
     }
-    int batchCount = (execution.getVariable('importBatchCount') ?: 0) as int
+    // Recomputed every page: the page size can shrink part-way (pageNo follows it).
+    int batchCount = (int) Math.ceil(page.total / (double) pageSize)
+    execution.setVariable('importBatchCount', batchCount)
     int unresolved = resolveTupleClassifications(tuples, opts.classIndex)
     execution.setVariable('importSkippedClassifications',
         ((execution.getVariable('importSkippedClassifications') ?: 0) as int) + unresolved)
