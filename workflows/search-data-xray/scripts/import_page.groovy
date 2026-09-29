@@ -1,6 +1,6 @@
-// import_page_edge.groovy  (Collibra Cloud + Edge variant)
+// import_page.groovy  (both editions)
 //
-// ASYNC task after each results-page External API task of the import: parse the
+// ASYNC task after each results-page transport task of the import: parse the
 // page, upsert it as one batch (shared/file_batch.groovy), arm the next page or
 // finish. Datasource names are looked up per id on first sight. A page that
 // fails three times aborts the import cleanly; the summary form then shows the
@@ -11,7 +11,7 @@
 // Writes: import*Count, hasMoreWork, dxrFetchComplete, importAborted, importAbortReason
 
 // {{include:dxr_model.groovy}}
-// {{include:dxr_edge.groovy}}
+// {{include:dxr_search.groovy}}
 // {{include:file_batch.groovy}}
 
 def classIndex = readJsonVariable('classIndex', [byDxrId: [:], byName: [:]])
@@ -19,7 +19,7 @@ def opts = [
     label       : 'Import batch',
     queryAssetId: string2Uuid((execution.getVariable('queryAssetId') ?: '').toString()),
     dataxrayUrl : (execution.getVariable('dataxrayUrl') ?: '').toString(),
-    pageSize    : edgePageSize(execution.getVariable('dataxrayPageSize')),
+    pageSize    : clampPageSize(execution.getVariable('dataxrayPageSize')),
     index       : classIndex,
     classIndex  : classIndex,
     onPageZero  : { Map page ->
@@ -41,8 +41,8 @@ def opts = [
         execution.setVariable('hasMoreWork', false)
     },
 ]
-opts.onSkip = { String fileId ->
+opts.onSkip = { String assetId ->
     execution.setVariable('importFailedCount', ((execution.getVariable('importFailedCount') ?: 0) as int) + 1)
 }
-opts.onPage = { Map page, List tuples -> importEdgePage(opts, page, tuples) }
-handleEdgeFilesPage(opts)
+opts.onPage = { Map page, List tuples -> importFilesPage(opts, page, tuples) }
+handleFilesPage(opts)

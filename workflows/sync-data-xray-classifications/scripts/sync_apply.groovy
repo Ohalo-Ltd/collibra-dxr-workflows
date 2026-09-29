@@ -1,4 +1,4 @@
-// sync_apply_edge.groovy  (interactive; Collibra Cloud + Edge variant)
+// sync_apply.groovy  (interactive; both editions)
 //
 // ASYNC task after the catalogue loop: assemble the catalogue from the fetched
 // lists and details and sync it into Collibra (shared/classification_sync.groovy),
@@ -6,21 +6,21 @@
 // recorded in syncFailed/dxrErrorMessage and the "Sync Failed" form shows it.
 
 // {{include:dxr_model.groovy}}
-// {{include:dxr_edge_sync.groovy}}
+// {{include:dxr_catalog_sync.groovy}}
 // {{include:classification_sync.groovy}}
 
 def ids = dxrModelIds()
 if (execution.getVariable('syncFailed') == true) { return }
 
-def classifications = buildEdgeSyncCatalogue(readJsonVariable('classIndex', [:]))
+def classifications = buildSyncCatalogue(readJsonVariable('classIndex', [:]))
 loggerApi.info("Data X-Ray catalogue assembled: ${classifications.size()} classification(s); syncing into Collibra")
 
-boolean annotatorsComplete = edgeSyncAnnotatorsComplete()
+boolean annotatorsComplete = syncAnnotatorsComplete()
 def res = syncClassificationCatalog(classifications, (execution.getVariable('dataxrayUrl') ?: '').toString(),
                                     [indexIdAttrTypeId: ids.dataxrayIndexIdAttrTypeId,
                                      noRetireTypeIds: annotatorsComplete ? [] : [ids.annotatorTypeId]])
 if (!annotatorsComplete) {
-    res.failures << "Note: Data X-Ray's full annotator list exceeds Collibra's External API response limit, so only annotators with findings were synced and no annotator was retired this run"
+    res.failures << "Note: Data X-Ray's full annotator list exceeds the response size Collibra accepts from Data X-Ray, so only annotators with findings were synced and no annotator was retired this run"
 }
 
 execution.setVariable('syncCreatedCount', res.created)

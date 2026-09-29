@@ -106,7 +106,10 @@ For **each** of those four workflows:
 2. Find the **Variables** section and click the **edit** icon.
 3. Set:
    - **Data X-Ray Base URL** — the base URL of your Data X-Ray instance.
-   - **Data X-Ray Auth Token (Bearer)** — a valid Bearer token.
+   - **Data X-Ray Auth Token (Bearer)** — a valid Bearer token. The workflows
+     see exactly what this token's Data X-Ray user can see.
+   - **Data X-Ray results per request (1-100)** (Search and Rerun only) — leave
+     at `100`.
 4. Save.
 
 Until a real value is supplied, each field shows a placeholder such as
@@ -142,6 +145,14 @@ everything without being added to these roles.
 > similar) on these two domains, and let the syncs manage their content —
 > deleted classifications and files are **retired**, preserving history.
 
+## Step 6 — Sync the classifications before the first search
+
+Run **Sync Data X-Ray Classifications** once from the **+ Create** menu (the
+nightly sync keeps it current afterwards). It is mandatory: searches and reruns
+translate the classifications you pick into the ids Data X-Ray's search index
+uses, which the sync stores on each classification asset (attribute *Data X-Ray
+Index ID*), and they refuse to run for a classification the sync has not seen.
+
 ---
 
 ## Using the workflows
@@ -149,6 +160,11 @@ everything without being added to these roles.
 - **Search Data X-Ray** and **Sync Data X-Ray Classifications** — run from the
   **+ Create** menu. Visible to users holding **Data X-Ray User** or
   **Data X-Ray Admin** (and to admins).
+- **Search results arrive in your task inbox** a few seconds after you start
+  the search (it runs in the background). The full result set is attached to
+  the new query asset as a ZIP'd CSV; building it takes about a second per 100
+  matching files (a couple of minutes at 10,000). If Data X-Ray cannot be reached, you get a **Search Failed**
+  task that says why.
 - **Importing search results as assets** — after a search, the results task
   offers **Import all N matching files as assets**. A search matching more
   than **10,000** files cannot be imported: the task asks you to refine it.
@@ -211,6 +227,8 @@ that case, re-enter the token/URL (Step 4) and **run Configure once more** (Step
 |---|---|
 | Workflow's overview page is blank. | The workflow is disabled — enable it (Step 2). |
 | A run stops with "Data X-Ray … is not set" / "misconfigured". | The Base URL or Bearer token is still the placeholder — set it (Step 4). |
+| Task **Search Failed** / **Sync Failed** with *Data X-Ray request failed* or *HTTP 401/403*. | Collibra cannot reach the Data X-Ray base URL, or the Bearer token is wrong or expired. Check both (Step 4). |
+| *Cannot search: … has no Data X-Ray Index ID in Collibra.* | The classification sync has not run since the classification was created (Step 6), or the standalone script ran with `--no-index-ids`. Run **Sync Data X-Ray Classifications**, then search again. |
 | Configure's results list a workflow as **"not deployed yet"**. | That workflow wasn't imported when Configure ran — import it (Steps 1–2) and run Configure again (Step 3). |
 | A user can't see Search/Sync in **+ Create**. | They don't hold **Data X-Ray User** or **Data X-Ray Admin** — assign the role (Step 5). |
 | A user can't edit the Base URL / token. | Editing requires **Data X-Ray Admin** (or Sysadmin / Workflow Administration). |

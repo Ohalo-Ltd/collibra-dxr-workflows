@@ -1,31 +1,36 @@
-// retire_orphans.groovy  (on-prem variant)
+// retire_orphans.groovy  (both editions)
 //
-// Final sync stage of "Rerun Data X-Ray Search": files the query previously
-// returned but no longer does are unlinked and — when NO other query still
-// returns them — RETIRED (status Obsolete). Never deleted (see
-// shared/file_batch.groovy: retireOrphanFiles).
+// Final stage of the rerun: unlink files the query no longer returns and retire
+// the ones no query returns any more (shared/file_batch.groovy: retireOrphanFiles).
 //
-// Safety rails:
-//   – An aborted rerun (rerunAborted=true) touches nothing.
-//   – A rerun that returned ZERO results skips retirement entirely — a
-//     transient Data X-Ray outage or truncated response must not retire a
-//     query's whole file population (same guard as the classification sync).
-//   – A file returned by two queries is only retired once BOTH drop it.
+// Safety rails (in addition to the on-prem ones — aborted run, zero results):
+//   – The pass only runs when EVERY results page was fetched (dxrFetchComplete).
+//     A run that died mid-walk must not treat the partial set as mass
+//     disappearance; it is retried next night / next rerun.
+//   – Nor when a result had to be skipped without its file id being readable
+//     (rerunRetireUnsafe): that file may be one previously returned.
 //
-// Reads:  rerunAborted, importTotal, importWorkList, previousFileIds, queryAssetId
+// Reads:  rerunAborted, dxrFetchComplete, importTotal, rerunSeenChunk_<n>, rerunPageCount,
+//         previousFileIds, queryAssetId
 // Writes: rerunRetiredCount, rerunUnlinkedCount
 
 import groovy.json.JsonSlurper
 
 // {{include:dxr_model.groovy}}
-// {{include:worklist.groovy}}
 // {{include:file_batch.groovy}}
 
 if (execution.getVariable('rerunAborted') == true) {
     loggerApi.info('Retire pass skipped: the rerun was aborted')
     return
 }
-
+if (execution.getVariable('dxrFetchComplete') != true) {
+    loggerApi.warn('Retire pass skipped: not every results page was fetched — not retiring anything from a partial picture')
+    return
+}
+if (execution.getVariable('rerunRetireUnsafe') == true) {
+    loggerApi.warn('Retire pass skipped: a result too large to fetch was skipped and its file id could not be read — not retiring anything this run')
+    return
+}
 int total = (execution.getVariable('importTotal') ?: 0) as int
 if (total == 0) {
     loggerApi.warn('Retire pass skipped: the rerun returned 0 results — not retiring anything in case Data X-Ray answered incompletely')
@@ -33,16 +38,25 @@ if (total == 0) {
 }
 
 def queryAssetId = string2Uuid((execution.getVariable('queryAssetId') ?: '').toString())
+int pageCount = (execution.getVariable('rerunPageCount') ?: 0) as int
 
-// Current result set → deterministic asset ids.
 def currentIds = [] as Set
-decodeWorkList((execution.getVariable('importWorkList') ?: '').toString()).each { tuple ->
-    currentIds << deterministicFileAssetId(tuple[0]).toString()
+def chunkNames = []
+for (int n = 0; n < pageCount; n++) {
+    def name = "rerunSeenChunk_${n}".toString()
+    def raw = execution.getVariable(name)
+    if (raw != null) {
+        currentIds.addAll(new JsonSlurper().parseText(raw.toString()) as List)
+        chunkNames << name
+    }
 }
 def previousIds = new JsonSlurper().parseText((execution.getVariable('previousFileIds') ?: '[]').toString()) as List
 
 def r = retireOrphanFiles(currentIds, previousIds, queryAssetId)
 
+chunkNames.each { name ->
+    try { execution.removeVariable(name) } catch (Exception ignored) { /* best-effort */ }
+}
 execution.setVariable('rerunRetiredCount', r.retired)
 execution.setVariable('rerunUnlinkedCount', r.unlinked)
 loggerApi.info("Retire pass complete: ${r.unlinked} file(s) unlinked from the query, ${r.retired} retired (no longer returned by any query)")

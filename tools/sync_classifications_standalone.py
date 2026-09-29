@@ -14,9 +14,9 @@ rerun and nightly workflows keep working against them:
   - renames when the Data X-Ray name changed; reactivates a retired asset that came back
   - tags every asset "dataxray-classification-sync"
   - sets Data X-Ray ID, Description, Link, Search Link, Sub Type (links prefixed with
-    the Data X-Ray base URL); optionally the numeric "Data X-Ray Index ID" the Edge
-    edition of search/rerun needs (--stamp-index-ids, uses Data X-Ray's internal
-    /api/tags, /api/data-classes and /api/metadata-extractors)
+    the Data X-Ray base URL), and the numeric "Data X-Ray Index ID" that search and
+    rerun need in both editions (from Data X-Ray's internal /api/tags,
+    /api/data-classes and /api/metadata-extractors; --no-index-ids skips it)
   - RETIRES (status Obsolete, never deletes) tagged assets no longer in the catalogue;
     skipped entirely when the catalogue comes back empty
 
@@ -57,7 +57,7 @@ are supplied as environment variables (or a `.env` file next to the script):
   prints the Collibra user it resolved to, so a wrongly mapped token is
   caught before anything is written.
 
-Command-line switches: --dry-run, --stamp-index-ids, --link-base URL, and
+Command-line switches: --dry-run, --no-index-ids, --link-base URL, and
 --collibra-url / --collibra-user / --dxr-url to override the variables above.
 
 =============================================================================
@@ -74,7 +74,7 @@ not to edit this script.
 
 Usage:
   python sync_classifications_standalone.py --dry-run
-  python sync_classifications_standalone.py [--stamp-index-ids] [--link-base https://dxr.example.com]
+  python sync_classifications_standalone.py [--no-index-ids] [--link-base https://dxr.example.com]
 
 Exit code 0 when every item synced, 1 when any item failed or the run was aborted.
 Requires: requests (python-dotenv optional).
@@ -120,9 +120,9 @@ SYNC_TAG          = "dataxray-classification-sync"          # dxrClassificationS
 
 PAGE = 1000
 
-NO_INDEX_IDS_NOTE = ("NOTE: running without --stamp-index-ids, so no Data X-Ray Index ID is written. That is fine for the "
-                     "on-prem edition; the Collibra Cloud + Edge edition's Search and Rerun refuse any classification "
-                     "without one. Re-run with --stamp-index-ids for that edition (existing assets are updated in place).")
+NO_INDEX_IDS_NOTE = ("NOTE: running with --no-index-ids, so no Data X-Ray Index ID is written. Search and Rerun refuse "
+                     "any classification without one; run again without the switch to write them (existing assets are "
+                     "updated in place).")
 
 
 # ---------------------------------------------------------------- clients
@@ -422,7 +422,8 @@ def main() -> int:
     ap.add_argument("--collibra-user", default=os.environ.get("COLLIBRA_USER"), help="Basic-auth user (see the docstring for jwt / oauth2 modes)")
     ap.add_argument("--dxr-url", default=os.environ.get("DXR_BASE_URL"), help="Data X-Ray base URL (also the prefix for links unless --link-base is given)")
     ap.add_argument("--link-base", help="Base URL to prefix Link / Search Link with (default: --dxr-url)")
-    ap.add_argument("--stamp-index-ids", action="store_true", help="Also write the numeric Data X-Ray Index ID (needed by the Cloud + Edge edition of search/rerun)")
+    ap.add_argument("--no-index-ids", action="store_true", help="Do not write the numeric Data X-Ray Index ID (search and rerun need it)")
+    ap.add_argument("--stamp-index-ids", action="store_true", help=argparse.SUPPRESS)  # pre-3.0 switch; stamping is now the default
     ap.add_argument("--dry-run", action="store_true", help="Read everything, write nothing")
     args = ap.parse_args()
 
@@ -444,7 +445,7 @@ def main() -> int:
 
     items = fetch_catalogue(dxr_url, token)
     print(f"Data X-Ray catalogue: {len(items)} item(s) {dict(Counter(i.get('type') for i in items))}{' [DRY RUN]' if args.dry_run else ''}")
-    index_ids = fetch_index_ids(dxr_url, token) if args.stamp_index_ids else None
+    index_ids = None if args.no_index_ids else fetch_index_ids(dxr_url, token)
     if index_ids is None:
         print(NO_INDEX_IDS_NOTE)
 

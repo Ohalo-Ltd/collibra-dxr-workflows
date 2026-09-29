@@ -1,13 +1,15 @@
-// dxr_edge_sync.groovy — fetching the Data X-Ray classification catalogue
-// through Edge without ever exceeding Collibra's 100 KB response cap.
+// dxr_catalog_sync.groovy — fetching the Data X-Ray classification catalogue
+// in pieces small enough for Collibra's 100 KB External API response cap.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
-// EDGE VARIANT ONLY.
+// Used by both editions (the on-prem transport has no cap, so its first
+// /api/data-classes request always fits and the fallback never triggers).
 //
 // The public GET /api/v1/classifications returns the whole catalogue in one
 // body (~300 bytes per item — a tenant with ~900 classifications answers ~300 KB
-// and the External API task refuses it). Data X-Ray has no paged catalogue
-// endpoint, so the Edge sync assembles the same items from smaller calls:
+// and the External API task refuses it) and carries no numeric index ids, which
+// search needs. Data X-Ray has no paged catalogue endpoint, so the sync
+// assembles the same items from smaller calls:
 //
 //   GET /api/tags                                labels (all; ~450 B each)
 //   GET /api/metadata-extractors                 extractors (all; usually few)
@@ -20,7 +22,7 @@
 //                                                Collibra does not know yet or whose name changed
 //
 // In fallback mode the annotator list is incomplete (an annotator without hits
-// is invisible), so annotators are then NEVER retired by the Edge sync — only
+// is invisible), so annotators are then NEVER retired by the sync — only
 // labels and extractors, whose lists are always complete. Annotators already
 // known to Collibra are synced as *partial* items: presence, name and ids are
 // authoritative, their description/subtype/link attributes are left as they were.
@@ -34,9 +36,10 @@
 // ANNOTATOR_DOMAIN items (data categories) are not produced: the sync never
 // mapped them to an asset type (they were skipped as "unknown type").
 
-// {{include:dxr_edge.groovy}}
+// {{include:dxr_config.groovy}}
+// {{include:dxr_search.groovy}}
 
-def edgeSyncListRequests() {
+def syncListRequests() {
     return [
         [stage: 'tags',           path: '/api/tags'],
         [stage: 'extractors',     path: '/api/metadata-extractors'],
@@ -45,9 +48,9 @@ def edgeSyncListRequests() {
     ]
 }
 
-// Begin: arm the first list request. `known` is buildEdgeClassificationIndex()'s
+// Begin: arm the first list request. `known` is buildSearchClassificationIndex()'s
 // result (kept in the classIndex variable by the caller).
-def startEdgeSync() {
+def startCatalogSync() {
     execution.setVariable('dxrSyncLists', groovy.json.JsonOutput.toJson([tags: [], extractors: [], annotators: []]))
     execution.setVariable('dxrSyncDetails', '{}')
     execution.setVariable('dxrSyncAnnotatorsComplete', false)
@@ -55,8 +58,8 @@ def startEdgeSync() {
     execution.setVariable('dxrSyncFetched', 0)
     execution.setVariable('dxrStage', 'catalogue')
     execution.setVariable('dxrCatalogueIndex', 0)
-    armEdgeRequest('GET', edgeSyncListRequests()[0].path, '')
-    edgeResetRetries()
+    armDxrRequest('GET', syncListRequests()[0].path, '')
+    resetRequestRetries()
     execution.setVariable('hasMoreWork', true)
 }
 
@@ -64,32 +67,32 @@ def startEdgeSync() {
 // Collibra (annotatorDxrIdByIndexId, nameByDxrId). Calls onFatal(msg) and ends
 // the loop on an unrecoverable failure. Sets hasMoreWork=false when the
 // catalogue is complete (the caller's next task then applies it).
-def handleEdgeSyncPage(Map known, Closure onFatal) {
+def handleCatalogSyncPage(Map known, Closure onFatal) {
     def stage = (execution.getVariable('dxrStage') ?: '').toString()
-    def r = readEdgeResponse()
+    def r = readDxrResponse()
     def what = stage == 'annotatorDetail'
         ? "Data X-Ray annotator ${execution.getVariable('dxrSyncCurrentId')} detail".toString()
         : "Data X-Ray ${stage} request".toString()
-    def requests = edgeSyncListRequests()
+    def requests = syncListRequests()
     int idx = (execution.getVariable('dxrCatalogueIndex') ?: 0) as int
     if (!r.ok) {
         if (stage == 'catalogue' && requests[idx].stage == 'dataClasses' && r.error.contains('exceeds the allowed limit')) {
             // The complete annotator list does not fit under Collibra's response
             // cap: fall back to the annotators-with-findings list + per-item detail,
             // and remember that annotators must not be retired this run.
-            loggerApi.warn("Data X-Ray's full annotator list exceeds Collibra's External API response limit — falling back to annotators with findings; annotators will not be retired by this sync")
+            loggerApi.warn("Data X-Ray's full annotator list exceeds the response size Collibra accepts — falling back to annotators with findings; annotators will not be retired by this sync")
             execution.setVariable('dxrSyncAnnotatorsComplete', false)
-            edgeResetRetries()
+            resetRequestRetries()
             execution.setVariable('dxrCatalogueIndex', idx + 1)
-            armEdgeRequest('GET', requests[idx + 1].path, '')
+            armDxrRequest('GET', requests[idx + 1].path, '')
             execution.setVariable('hasMoreWork', true)
             return
         }
-        if (edgeRetry(what, r.error)) { return }
-        onFatal("${r.error}. Check the Edge HTTP connection '${execution.getVariable('dataxrayConnectionName')}'.".toString())
+        if (retryRequest(what, r.error)) { return }
+        onFatal("${r.error}. ${transportCheckHint()}".toString())
         return
     }
-    edgeResetRetries()
+    resetRequestRetries()
     def parsed
     try {
         parsed = new groovy.json.JsonSlurper().parseText(r.body)
@@ -140,7 +143,7 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
         idx++
         execution.setVariable('dxrCatalogueIndex', idx)
         if (idx < requests.size()) {
-            armEdgeRequest('GET', requests[idx].path, '')
+            armDxrRequest('GET', requests[idx].path, '')
             execution.setVariable('hasMoreWork', true)
             return
         }
@@ -153,7 +156,7 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
         }
         loggerApi.info("Data X-Ray catalogue lists loaded (fallback): ${lists.tags.size()} label(s), ${lists.extractors.size()} extractor(s), ${lists.annotators.size()} annotator(s) with findings; ${queue.size()} annotator detail(s) to fetch")
         execution.setVariable('dxrSyncQueue', groovy.json.JsonOutput.toJson(queue))
-        return armNextEdgeSyncDetail()
+        return armNextSyncDetail()
     }
 
     // stage == 'annotatorDetail'
@@ -167,11 +170,11 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
     }
     execution.setVariable('dxrSyncDetails', groovy.json.JsonOutput.toJson(details))
     execution.setVariable('dxrSyncFetched', ((execution.getVariable('dxrSyncFetched') ?: 0) as int) + 1)
-    armNextEdgeSyncDetail()
+    armNextSyncDetail()
 }
 
 // Arm the next annotator detail request, or finish the loop.
-def armNextEdgeSyncDetail() {
+def armNextSyncDetail() {
     def queue = readJsonVariable('dxrSyncQueue', [])
     if (queue.isEmpty()) {
         execution.setVariable('dxrStage', 'complete')
@@ -182,18 +185,18 @@ def armNextEdgeSyncDetail() {
     execution.setVariable('dxrSyncQueue', groovy.json.JsonOutput.toJson(queue))
     execution.setVariable('dxrSyncCurrentId', next)
     execution.setVariable('dxrStage', 'annotatorDetail')
-    armEdgeRequest('GET', "/api/data-classes/${next}".toString(), '')
+    armDxrRequest('GET', "/api/data-classes/${next}".toString(), '')
     execution.setVariable('hasMoreWork', true)
 }
 
 // Whether this run saw the COMPLETE annotator catalogue (false ⇒ annotators must not be retired).
-def edgeSyncAnnotatorsComplete() {
+def syncAnnotatorsComplete() {
     return execution.getVariable('dxrSyncAnnotatorsComplete') == true
 }
 
 // Assemble the /api/v1/classifications-shaped catalogue from the fetched lists,
 // the fetched annotator details and what Collibra already knew.
-def buildEdgeSyncCatalogue(Map known) {
+def buildSyncCatalogue(Map known) {
     def lists = readJsonVariable('dxrSyncLists', [tags: [], extractors: [], annotators: []])
     def details = readJsonVariable('dxrSyncDetails', [:])
     def items = []

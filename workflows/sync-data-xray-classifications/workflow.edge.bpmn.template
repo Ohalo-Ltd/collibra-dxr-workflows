@@ -2,6 +2,8 @@
 <!--
   syncDataXrayClassifications workflow — Collibra Cloud + Edge variant
   ====================================================================
+  This file is the source for BOTH editions: the on-prem workflow.bpmn.template
+  is generated from it by tools/derive_onprem_bpmn.py (edit here, then run it).
   Interactive classification sync; the catalogue is fetched through a Collibra
   External API task bound to an Edge HTTP connection:
     startEvent (form: startSyncForm)
@@ -44,7 +46,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:sync_prepare_edge.groovy}}</script>
+      <script>{{script:sync_prepare.groovy}}</script>
     </scriptTask>
     <serviceTask id="syncFetchTask" name="Fetch Classifications (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
       <extensionElements>
@@ -68,7 +70,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:sync_page_edge.groovy}}</script>
+      <script>{{script:sync_page.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="syncLoopGateway" name="More requests?" default="flowSyncFetched">
       <extensionElements>
@@ -79,7 +81,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:sync_apply_edge.groovy}}</script>
+      <script>{{script:sync_apply.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="syncOutcomeGateway" name="Sync succeeded?" default="flowSyncOk">
       <extensionElements>

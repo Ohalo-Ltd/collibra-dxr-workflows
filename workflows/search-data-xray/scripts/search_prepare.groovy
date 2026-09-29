@@ -1,4 +1,4 @@
-// search_prepare_edge.groovy  (Collibra Cloud + Edge variant)
+// search_prepare.groovy  (both editions)
 //
 // First, SYNCHRONOUS task of Search Data X-Ray: everything that can fail with a
 // message the user sees in the start dialog happens here — configuration,
@@ -6,10 +6,10 @@
 // composing the query. Nothing is written to Collibra yet (the External API
 // tasks that follow are asynchronous, so a failure after them cannot roll back
 // into the user's dialog; the query asset is created in
-// search_finalize_edge.groovy once the results are in).
+// search_finalize.groovy once the results are in).
 //
 // The query needs each criterion's numeric Data X-Ray index id, which the
-// Edge-edition classification sync stamps on the Collibra asset ("Data X-Ray
+// classification sync stamps on the Collibra asset ("Data X-Ray
 // Index ID"). A criterion without one fails the search here, with a message
 // telling the user to run that sync first.
 //
@@ -25,7 +25,7 @@ import groovy.json.JsonOutput
 // {{include:dxr_query.groovy}}
 // {{include:collibra_lookup.groovy}}
 // {{include:search_common.groovy}}
-// {{include:dxr_edge.groovy}}
+// {{include:dxr_search.groovy}}
 
 def ids = dxrModelIds()
 
@@ -39,15 +39,15 @@ def failNow = { String title, String msg ->
 
 // --- Configuration ------------------------------------------------------------
 
-def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
-if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {
+def transport = checkDxrTransport()
+if (!transport.ok) {
     failNow('Search Data X-Ray misconfigured',
-        "Cannot run Search Data X-Ray — the 'Edge HTTP connection name (Data X-Ray)' configuration variable is not set.\n\nOpen the workflow's settings page and enter the name of the HTTP connection to Data X-Ray on your Edge site, then start the workflow again.")
+        transportMisconfiguredMessage('Cannot run Search Data X-Ray', transport) + ', then start the workflow again.')
 }
 def dataxrayUrl = normalizeBaseUrl(execution.getVariable('dataxrayUrl'))
 if (isPlaceholderValue(dataxrayUrl)) { dataxrayUrl = '' }
 execution.setVariable('dataxrayUrl', dataxrayUrl)
-execution.setVariable('dataxrayPageSize', edgePageSize(execution.getVariable('dataxrayPageSize')).toString())
+execution.setVariable('dataxrayPageSize', clampPageSize(execution.getVariable('dataxrayPageSize')).toString())
 
 // --- Inputs -------------------------------------------------------------------
 
@@ -85,9 +85,9 @@ loggerApi.info("Composed Data X-Ray query: ${displayQuery(queryString)}")
 
 // A phrase with no picked annotators is searched in every annotator Collibra knows.
 def allAnnotatorIndexIds = (!filter.isEmpty() && filterAnnotators.isEmpty())
-    ? buildEdgeClassificationIndex(ids).annotatorIndexIds
+    ? buildSearchClassificationIndex(ids).annotatorIndexIds
     : []
-def q = composeEdgeQueryItems([
+def q = composeQueryItems([
     labelIndexIds: labels*.indexId,         labelNames: labels*.name,
     extractorIndexIds: extractors*.indexId, extractorNames: extractors*.name,
     annotatorIndexIds: annotators*.indexId, annotatorNames: annotators*.name,
@@ -95,7 +95,7 @@ def q = composeEdgeQueryItems([
     filterAnnotatorIndexIds: filterAnnotators*.indexId, filterAnnotatorNames: filterAnnotators*.name,
 ], allAnnotatorIndexIds)
 if (!q.unresolved.isEmpty()) {
-    failNow('Search Data X-Ray', edgeUnresolvedMessage('search', q.unresolved))
+    failNow('Search Data X-Ray', unresolvedCriteriaMessage('search', q.unresolved))
 }
 
 def asJson = { List picked -> picked.collect { [id: it.id.toString(), name: it.name, dxrId: it.dxrId, indexId: it.indexId] } }
@@ -107,7 +107,7 @@ execution.setVariable('searchCriteria', JsonOutput.toJson([
 execution.setVariable('dxrQueryItems', JsonOutput.toJson(q.items))
 execution.setVariable('conditionName', conditionName)
 execution.setVariable('queryString', displayQuery(queryString))
-execution.setVariable('searchUrl', "edge:${connectionName} POST /api/indexed-files/search".toString())
+execution.setVariable('searchUrl', "${transport.via} POST /api/indexed-files/search".toString())
 execution.setVariable('searchFailed', false)
 execution.setVariable('dxrErrorMessage', '')
 execution.setVariable('dxrDatasourceNames', '{}')
@@ -116,6 +116,6 @@ execution.setVariable('dxrFetchComplete', false)
 // --- Kick off the request loop with the preview page -----------------------------
 
 execution.setVariable('dxrSearchPhase', 'preview')
-beginEdgeFilesPass()
-startEdgeFilesPage(q.items, 0, edgePageSize(execution.getVariable('dataxrayPageSize')), null)
-loggerApi.info("Search Data X-Ray via Edge connection '${connectionName}': preview page armed (${q.items.size()} query item(s))")
+beginFilesPass()
+startFilesPage(q.items, 0, clampPageSize(execution.getVariable('dataxrayPageSize')), null)
+loggerApi.info("Search Data X-Ray via ${transport.via}: preview page armed (${q.items.size()} query item(s))")

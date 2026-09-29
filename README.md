@@ -42,7 +42,9 @@ Publishing a GitHub release produces the customer-ready deliverables automatical
 | Bundle | Edition |
 |---|---|
 | `collibra-data-xray-workflows-onprem-<tag>.zip` | Direct HTTPS from Collibra to Data X-Ray (Bearer token on the workflows). |
-| `collibra-data-xray-workflows-cloud-edge-<tag>.zip` | Collibra Cloud → Edge site → Data X-Ray (credentials on the Edge HTTP connection; Data X-Ray is paged through its internal search API). |
+| `collibra-data-xray-workflows-cloud-edge-<tag>.zip` | Collibra Cloud → Edge site → Data X-Ray (credentials on the Edge HTTP connection). |
+
+Both editions page through Data X-Ray's internal search API with the same scripts; only the task that carries each request differs.
 
 Both hold the same six workflows under the same process ids; a customer installs one of them. No Collibra credentials are involved — the build is entirely offline.
 
@@ -82,9 +84,10 @@ python deploy.py search-data-xray --enable               # deploy the on-prem ed
 python deploy.py search-data-xray --variant edge         # deploy the Cloud + Edge edition instead (same process id)
 python deploy.py bundle --pack packs/dxr-workflows       # build both release bundles locally
 python tools/groovy_syntax_check.py packs/dxr-workflows  # compile every script of every variant (needs groovyc)
+python packs/dxr-workflows/tools/derive_onprem_bpmn.py --check  # on-prem BPMN templates match their Edge sources
 ```
 
-Shared Groovy lives in [`shared/`](shared/) and is pulled into scripts with `// {{include:name.groovy}}` at build time; the Edge edition adds `workflow.edge.bpmn.template` and `scripts/edge/` per workflow. See [CLAUDE.md](CLAUDE.md) for the two-edition design and the Data X-Ray API contract each one relies on.
+Shared Groovy lives in [`shared/`](shared/) and is pulled into scripts with `// {{include:name.groovy}}` at build time; each Data X-Ray-calling workflow's `workflow.edge.bpmn.template` is the source for both editions, and its on-prem `workflow.bpmn.template` is generated from it (`python tools/derive_onprem_bpmn.py`; `--check` fails when one is stale). See [CLAUDE.md](CLAUDE.md) for the two-edition design and the Data X-Ray API contract.
 
 Commit and push pack changes from inside `packs/dxr-workflows` (it is its own git repo), then commit the updated submodule pointer in the harness. Deployed definition UUIDs are recorded per environment in [`workflow-registry.json`](workflow-registry.json).
 

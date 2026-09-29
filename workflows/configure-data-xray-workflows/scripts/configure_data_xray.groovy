@@ -100,7 +100,7 @@ def LINK_ATTR_ID        = '019c9fc5-aa4c-72af-8918-caa54fe61eba'
 def SEARCH_LINK_ATTR_ID = '019c9fc5-8ff5-77a7-962d-4b6b05c69254'
 def SUBTYPE_ATTR_ID     = '019c9fc5-ecc8-759b-9c0b-78547fa315ad'
 def DXID_ATTR_ID        = '019e73ae-1aa8-700c-8086-626326822c22'
-def INDEX_ID_ATTR_ID = '019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'  // Data X-Ray Index ID (Edge edition: numeric id in DXR's search index)
+def INDEX_ID_ATTR_ID = '019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'  // Data X-Ray Index ID (numeric id in DXR's search index)
 def FILES_ATTR_ID       = '019e2736-8bd0-727a-b4ab-6899517a3e73'
 
 // File-import model (gated asset import + rerun + nightly file sync). Same

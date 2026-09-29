@@ -172,16 +172,16 @@ def fetchAttributeValuesByType(UUID attrTypeId, Set<UUID> assetIds) {
     return out
 }
 
-// The Edge edition's classification index, built from Collibra alone (no
+// The search classification index, built from Collibra alone (no
 // Data X-Ray catalogue calls): every classification asset with its public
-// Data X-Ray ID (uuid) and, when the Edge sync has stamped it, the numeric id
+// Data X-Ray ID (uuid) and, when the classification sync has stamped it, the numeric id
 // Data X-Ray's search index uses. All keys/values are Strings so the map can
 // round-trip through a JSON process variable. Returns
 //   [byDxrId: [uuid → assetId], byName: [name → assetId],
 //    indexIdByDxrId: [uuid → indexId], nameByDxrId: [uuid → asset name],
 //    labelDxrIdByIndexId / annotatorDxrIdByIndexId / extractorDxrIdByIndexId: [indexId → uuid],
 //    annotatorIndexIds: [indexId, …] (every annotator known to Collibra)]
-def buildEdgeClassificationIndex(Map ids) {
+def buildSearchClassificationIndex(Map ids) {
     def assets = fetchAllAssetsInDomain(ids.classificationsDomainId)
     def uuidByAsset  = fetchAttributeValuesByType(ids.dataxrayIdAttrTypeId, assets.keySet())
     def indexByAsset = fetchAttributeValuesByType(ids.dataxrayIndexIdAttrTypeId, assets.keySet())

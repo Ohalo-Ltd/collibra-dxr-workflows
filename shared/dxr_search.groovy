@@ -1,53 +1,58 @@
-// dxr_edge.groovy — the Collibra Cloud + Edge transport to Data X-Ray.
+// dxr_search.groovy — how both editions talk to Data X-Ray.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
-// EDGE VARIANT ONLY. No HTTP is opened from Groovy: every call is a Collibra
-// **External API task** (BPMN serviceTask flowable:type="http") routed through
-// an Edge site's HTTP connection, which also holds the credentials. A script
-// before the task "arms" the request in process variables; the task runs
-// asynchronously; the script after it reads the response variables.
 //
-// Facts verified on Collibra Cloud 2026.09 / Edge 2026.6 (Sept 2026):
+// Every Data X-Ray call, in both editions, is one turn of a loop:
+//   a script ARMS the request in process variables (armDxrRequest: dxrMethod,
+//   dxrRequestPath, dxrRequestHeaders, dxrRequestBody) → an async TRANSPORT
+//   task runs it → the next script READS the response (readDxrResponse:
+//   dxrResponseBody, dxrResponseStatusCode, dxrResponseReason, dxrErrorMessage).
+// The transport is the only difference between the editions:
+//   – Cloud + Edge: a Collibra External API task (BPMN serviceTask
+//     flowable:type="http") bound to an Edge site's HTTP connection, which holds
+//     the credentials; no HTTP is opened from Groovy.
+//   – on-prem: an async script task (dxr_call_direct.groovy →
+//     dxr_http_direct.groovy) calling the Data X-Ray base URL over HTTPS with the
+//     admin's Bearer token. workflow.bpmn.template is generated from
+//     workflow.edge.bpmn.template (tools/derive_onprem_bpmn.py).
+//
+// External API task facts (Collibra Cloud 2026.09 / Edge 2026.6, Sept 2026):
 //   - <design:http-connection-name>${dataxrayConnectionName}</…> resolves an
 //     expression to a connection on the Edge site; Basic auth on the connection
 //     authenticates to Data X-Ray.
 //   - requestUrl is a RELATIVE path appended to the connection's Host; method,
 //     headers, path and body all accept expressions.
-//   - The response body lands in <responseVariableName> as a String; with
-//     saveResponseParameters, <prefix>ResponseStatusCode (Integer),
-//     <prefix>ResponseReason and <prefix>ResponseHeaders are set too.
 //   - Every HTTP status is "success": a 404 simply yields status 404.
-//   - **Responses above 100 KB are refused** (Collibra support, Sept 2026; an
-//     oversized body ends as <prefix>ErrorMessage "Response size exceeds the
-//     allowed limit." and, with ignoreException=true, the workflow CONTINUES
-//     with no body/status variables). Every request this file arms is designed
-//     to stay well under that: results are paged (dxrEdgeDefaultPageSize rows),
-//     catalogue objects are fetched per item, datasource names per id. Rows
-//     vary in size between instances, so a results page that is refused anyway
-//     is re-requested with fewer rows (shrinkEdgeFilesPage) instead of retried
-//     as-is; a single row that is too large on its own is identified (its _id
-//     alone, every field excluded) and skipped (skipEdgeRow).
+//   - **Responses above 100 KB are refused** (Collibra support, Sept 2026; the
+//     workflow CONTINUES with dxrErrorMessage "Response size exceeds the allowed
+//     limit." and no body). Results are paged (dxrDefaultPageSize rows),
+//     catalogue objects fetched per item, datasource names per id; a page that
+//     is refused anyway is re-requested with fewer rows (shrinkFilesPage), and a
+//     single row too large on its own is identified and skipped (skipResultRow).
+//     The on-prem transport has no such cap, so none of this triggers there.
 //   - One round trip costs ~0.5–2 s.
 //
-// Data X-Ray side: the pack uses DXR's internal search API,
-// POST /api/indexed-files/search, because the public /api/v1/files endpoint
-// streams the whole index and cannot be paged. Contract verified against
-// demo.dataxray.io (Sept 2026) — see the pack CLAUDE.md "Edge edition" section.
+// Data X-Ray side: both editions use DXR's internal search API,
+// POST /api/indexed-files/search (the on-prem Bearer token is accepted on every
+// /api/** path). The public /api/v1/files export cannot be paged and does not
+// carry object_id, the connector's identifier for a file that file identity is
+// built on (dxr_rows.groovy). Contract verified against demo.dataxray.io (Sept
+// 2026) — see the pack CLAUDE.md.
 //
 // Classification ids: the index stores labels as numeric tag ids (dxr#tags),
 // annotator hits under annotation_stats#unique_phrase_count.<numericId> and
 // extractor output under extracted_metadata#<numericId>. Collibra holds the
 // mapping numeric id → public UUID → asset in the "Data X-Ray Index ID" and
-// "Data X-Ray ID" attributes, stamped by the Edge-edition classification sync
-// (dxr_edge_sync.groovy). Search and rerun therefore need NO catalogue calls.
+// "Data X-Ray ID" attributes, stamped by the classification sync
+// (dxr_catalog_sync.groovy). Search and rerun therefore need NO catalogue calls.
 
 // {{include:dxr_rows.groovy}}
 // {{include:dxr_query.groovy}}
 
 // --- Arming requests and reading responses ------------------------------------
 
-// Prime the next External API task: method, relative path, body, headers.
-def armEdgeRequest(String method, String path, String body, String extraHeaders = '') {
+// Prime the next transport task: method, relative path, body, headers.
+def armDxrRequest(String method, String path, String body, String extraHeaders = '') {
     execution.setVariable('dxrMethod', method)
     execution.setVariable('dxrRequestPath', path)
     execution.setVariable('dxrRequestBody', body ?: '')
@@ -58,10 +63,10 @@ def armEdgeRequest(String method, String path, String body, String extraHeaders 
     execution.setVariable('dxrRequestHeaders', headers)
 }
 
-// Read AND CLEAR what the External API task left behind, so a stale body can
+// Read AND CLEAR what the transport task left behind, so a stale body can
 // never be mistaken for a fresh one on a retry.
 // Returns [ok: boolean, status: int (-1 when none), body: String, error: String].
-def readEdgeResponse() {
+def readDxrResponse() {
     def status = execution.getVariable('dxrResponseStatusCode')
     def body   = execution.getVariable('dxrResponseBody')
     def err    = execution.getVariable('dxrErrorMessage')
@@ -77,7 +82,7 @@ def readEdgeResponse() {
     int code = status == null ? -1 : (status.toString().isInteger() ? status.toString().toInteger() : -1)
     def text = body == null ? '' : body.toString()
     if (err) {
-        return [ok: false, status: code, body: text, error: "Edge request failed: ${err}".toString()]
+        return [ok: false, status: code, body: text, error: "Data X-Ray request failed: ${err}".toString()]
     }
     if (code != 200) {
         def detail = truncateText(text, 300)
@@ -91,8 +96,8 @@ def readEdgeResponse() {
 }
 
 // Retry bookkeeping for one armed request (the request stays armed; the loop
-// simply runs the External API task again). Returns true while retries remain.
-def edgeRetry(String what, String error) {
+// simply runs the transport task again). Returns true while retries remain.
+def retryRequest(String what, String error) {
     int attempts = ((execution.getVariable('dxrPageAttempts') ?: 0) as int) + 1
     execution.setVariable('dxrPageAttempts', attempts)
     if (attempts < 3) {
@@ -104,15 +109,15 @@ def edgeRetry(String what, String error) {
     return false
 }
 
-def edgeResetRetries() {
+def resetRequestRetries() {
     execution.setVariable('dxrPageAttempts', 0)
 }
 
 // The page size configuration variable, clamped to a sane range.
-def edgePageSize(Object raw) {
+def clampPageSize(Object raw) {
     def s = raw == null ? '' : raw.toString().trim()
-    if (!s.isInteger()) { return dxrEdgeDefaultPageSize() }
-    return Math.max(1, Math.min(dxrEdgeMaxPageSize(), s.toInteger()))
+    if (!s.isInteger()) { return dxrDefaultPageSize() }
+    return Math.max(1, Math.min(dxrMaxPageSize(), s.toInteger()))
 }
 
 // Read a JSON process variable into an object ('' / null → the fallback).
@@ -127,45 +132,51 @@ def readJsonVariable(String name, Object fallback) {
 // Fields dropped from every hit to keep a page well under the 100 KB response
 // cap. annotation_stats#unique_phrase_count.<id> is kept as the per-annotator
 // hit evidence; annotation.<id> (the phrases) is not needed.
-def edgeExcludedFields() {
+def defaultExcludedFields() {
     return ['dxr#raw_text', 'annotations', 'annotation.*', 'annotation_stats#count.*', 'computed.*', 'ai#*',
             'external*', 'metadata#OWNER', 'metadata#WHO_CAN_ACCESS', 'metadata#CREATED_BY', 'metadata#MODIFIED_BY',
             'metadata#OWNER_GROUP*', 'metadata#binary_hash', 'dxr#sha_256*', 'folder_id', 'dxr#manually_removed_tags']
 }
 
-// The Cloud + Edge results file needs only datasource and path: exclude every
+// The results file needs only datasource and path (and the identity): exclude every
 // other field family, which brings a row from ~1.2 KB to ~280 bytes (demo,
 // Sept 2026), so 100 rows fit easily under the 100 KB cap.
-def edgeResultsFileExcludedFields() {
-    return ['dxr#*', 'metadata#*', 'annotation*', 'extracted_metadata#*', 'computed*', 'object_id',
+def resultsFileExcludedFields() {
+    return ['dxr#*', 'metadata#*', 'annotation*', 'extracted_metadata#*', 'computed*',
             'ai#*', 'external*', 'folder_id', 'ds#file_size']
 }
 
-// The exclusions of the current pass (beginEdgeFilesPass), else the default.
-def edgeActiveExcludedFields() {
+// A row too large to fetch even alone is looked up with everything but its
+// identity excluded: datasource_id and object_id (a few hundred bytes).
+def identityOnlyExcludedFields() {
+    return resultsFileExcludedFields() + ['ds#*']
+}
+
+// The exclusions of the current pass (beginFilesPass), else the default.
+def activeExcludedFields() {
     def raw = (execution.getVariable('dxrExcludedFields') ?: '').toString()
-    return raw ? (new groovy.json.JsonSlurper().parseText(raw) as List) : edgeExcludedFields()
+    return raw ? (new groovy.json.JsonSlurper().parseText(raw) as List) : defaultExcludedFields()
 }
 
 // A stable sort (same order the public export uses) so from/size paging under a
 // point-in-time id never skips or repeats rows.
-def edgeSearchSort() {
+def searchSort() {
     return [[property: 'datasource_id', order: 'ASCENDING'], [property: 'ds#file_name.raw', order: 'ASCENDING']]
 }
 
-def buildEdgeSearchBody(List queryItems, int pageNo, int pageSize, String pitId, List excludedFields = null) {
+def buildSearchBody(List queryItems, int pageNo, int pageSize, String pitId, List excludedFields = null) {
     def req = [mode: 'DXR_JSON_QUERY', datasourceIds: [], pageNumber: pageNo, pageSize: pageSize,
-               filter: [query_items: queryItems], sort: edgeSearchSort(),
-               excludedFields: excludedFields ?: edgeActiveExcludedFields(), usePIT: true]
+               filter: [query_items: queryItems], sort: searchSort(),
+               excludedFields: excludedFields ?: activeExcludedFields(), usePIT: true]
     if (pitId) { req.pitId = pitId }
     return groovy.json.JsonOutput.toJson(req)
 }
 
 // Start a walk through the results (the preview, the results file, an import
 // and a rerun are separate passes; several share one process instance). Call
-// before the pass's first startEdgeFilesPage. `excludedFields` null → the
+// before the pass's first startFilesPage. `excludedFields` null → the
 // default set, which keeps the classification evidence import needs.
-def beginEdgeFilesPass(List excludedFields = null) {
+def beginFilesPass(List excludedFields = null) {
     execution.setVariable('dxrFirstPageDone', false)
     execution.setVariable('dxrSkippedFiles', '[]')
     execution.setVariable('dxrPageSizeOk', 0)
@@ -175,32 +186,32 @@ def beginEdgeFilesPass(List excludedFields = null) {
 }
 
 // Arm one page of the files search. Rows pageNo × pageSize onwards.
-def startEdgeFilesPage(List queryItems, int pageNo, int pageSize, String pitId) {
+def startFilesPage(List queryItems, int pageNo, int pageSize, String pitId) {
     execution.setVariable('dxrStage', 'files')
     execution.setVariable('dxrPageNo', pageNo)
     execution.setVariable('dxrPageSizeCur', pageSize)
     execution.setVariable('dxrPitId', pitId ?: '')
-    armEdgeRequest('POST', '/api/indexed-files/search', buildEdgeSearchBody(queryItems, pageNo, pageSize, pitId))
-    edgeResetRetries()
+    armDxrRequest('POST', '/api/indexed-files/search', buildSearchBody(queryItems, pageNo, pageSize, pitId))
+    resetRequestRetries()
     execution.setVariable('hasMoreWork', true)
 }
 
 // The page size the files loop is using now: the configured one until Collibra
-// refuses a page as too large, then smaller (shrinkEdgeFilesPage). The row
+// refuses a page as too large, then smaller (shrinkFilesPage). The row
 // offset is always dxrPageNo × this.
-def edgeCurrentPageSize(int configured) {
+def currentPageSize(int configured) {
     def v = execution.getVariable('dxrPageSizeCur')
     return (v != null && v.toString().isInteger()) ? v.toString().toInteger() : configured
 }
 
-def isEdgeResponseTooLarge(String error) {
+def isResponseTooLarge(String error) {
     return (error ?: '').contains('exceeds the allowed limit')
 }
 
 // A smaller page size that can continue from row `offset`: Data X-Ray pages
 // from pageNumber × pageSize, so the new size must divide the offset. The
 // largest such size up to half the current one; 1 always qualifies.
-def smallerEdgePageSize(int current, int offset) {
+def smallerPageSize(int current, int offset) {
     return largestPageSizeFor(offset, current.intdiv(2))
 }
 
@@ -215,50 +226,53 @@ def largestPageSizeFor(int offset, int max) {
 // Collibra refused the armed page as larger than its response limit. Re-arm the
 // same rows with a smaller page size (kept for the rest of the run) and return
 // true, or return false when a single row is already too large.
-def shrinkEdgeFilesPage(String what) {
-    int size = edgeCurrentPageSize(dxrEdgeDefaultPageSize())
+def shrinkFilesPage(String what) {
+    int size = currentPageSize(dxrDefaultPageSize())
     if (size <= 1) { return false }
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
     int offset = pageNo * size
-    int smaller = smallerEdgePageSize(size, offset)
+    int smaller = smallerPageSize(size, offset)
     loggerApi.warn("${what}: ${size} result(s) exceed Collibra's response size limit — requesting ${smaller} per page from here on")
-    startEdgeFilesPage(readJsonVariable('dxrQueryItems', []), offset.intdiv(smaller), smaller,
+    startFilesPage(readJsonVariable('dxrQueryItems', []), offset.intdiv(smaller), smaller,
         (execution.getVariable('dxrPitId') ?: '').toString())
     return true
 }
 
 // Even one row is too large. Ask for the same row with every field excluded,
 // which returns just its _id (~400 bytes), so the skip can name the file.
-def armEdgeSkipProbe() {
+def armSkipProbe() {
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
     execution.setVariable('dxrStage', 'probe')
-    armEdgeRequest('POST', '/api/indexed-files/search',
-        buildEdgeSearchBody(readJsonVariable('dxrQueryItems', []), pageNo, 1,
-            (execution.getVariable('dxrPitId') ?: '').toString(), ['*']))
-    edgeResetRetries()
+    armDxrRequest('POST', '/api/indexed-files/search',
+        buildSearchBody(readJsonVariable('dxrQueryItems', []), pageNo, 1,
+            (execution.getVariable('dxrPitId') ?: '').toString(), identityOnlyExcludedFields()))
+    resetRequestRetries()
     execution.setVariable('hasMoreWork', true)
 }
 
-// Skip the row at `offset` (fileId '' when even the probe failed): record it,
-// tell the caller (opts.onSkip), and continue at the next row, growing back
+// Skip the row at `offset`: record it, tell the caller (opts.onSkip, with the
+// file asset UUID the row would have had — '' when even the lookup failed),
+// and continue at the next row, growing back
 // towards the largest page size that has worked this run (else the configured one). The next request is made even past
 // the last row: its (empty) answer ends the loop through the normal path.
-def skipEdgeRow(int offset, String fileId, Map opts) {
-    loggerApi.warn("${opts.label}: skipped result ${offset + 1}${fileId ? " (Data X-Ray file ${fileId})" : ' (its Data X-Ray file id could not be read)'} — on its own it is larger than Collibra allows for one External API response (100 KB)")
+def skipResultRow(int offset, Map identity, Map opts) {
+    def assetId = identity ? deterministicFileAssetId(identity.datasourceId, identity.objectId).toString() : ''
+    def named = identity ? " (Data X-Ray file ${identity.fileId}, datasource ${identity.datasourceId}, object '${identity.objectId}')" : ' (its identity could not be read)'
+    loggerApi.warn("${opts.label}: skipped result ${offset + 1}${named} — on its own it is larger than Collibra can receive in one response")
     def skipped = readJsonVariable('dxrSkippedFiles', [])
-    skipped << [offset: offset, fileId: fileId]
+    skipped << [offset: offset, assetId: assetId]
     execution.setVariable('dxrSkippedFiles', groovy.json.JsonOutput.toJson(skipped))
-    if (opts.onSkip) { opts.onSkip(fileId) }
+    if (opts.onSkip) { opts.onSkip(assetId) }
     int next = offset + 1
     int target = Math.max(1, ((execution.getVariable('dxrPageSizeOk') ?: 0) as int) ?: (opts.pageSize as int))
     int size = largestPageSizeFor(next, target)
     execution.setVariable('dxrRegrowTo', size < target ? target : 0)
-    startEdgeFilesPage(readJsonVariable('dxrQueryItems', []), next.intdiv(size), size,
+    startFilesPage(readJsonVariable('dxrQueryItems', []), next.intdiv(size), size,
         (execution.getVariable('dxrPitId') ?: '').toString())
 }
 
 // Parse a search response. Returns [hits: List, total: int, pitId: String, maxResultWindow: int].
-def parseEdgeSearchPage(String body) {
+def parseSearchPage(String body) {
     def parsed = new groovy.json.JsonSlurper().parseText(body)
     def hits = parsed?.hits?.hits
     if (!(parsed instanceof Map) || !(hits instanceof List)) {
@@ -273,15 +287,16 @@ def parseEdgeSearchPage(String body) {
 // --- Rows ----------------------------------------------------------------------
 
 // Distill one search hit into the same work-item tuple dxr_rows.groovy defines
-// for /api/v1/files rows. `index` is buildEdgeClassificationIndex()'s result
+// for /api/v1/files rows. `index` is buildSearchClassificationIndex()'s result
 // (numeric id → public uuid per kind, names by uuid); `dsNames` maps datasource
 // id → name. Classification refs are [uuid, name] pairs; a numeric id Collibra
 // does not know becomes ['', 'kind#<id>'] so it counts as unresolved downstream
-// (run the Edge-edition classification sync to teach Collibra about it).
+// (run the classification sync to teach Collibra about it).
 def tupleFromSearchHit(Map hit, Map index, Map dsNames, String baseUrl) {
     def src = hit?._source instanceof Map ? hit._source : [:]
     def id = (hit?._id ?: '').toString()
-    if (id.isEmpty()) { return null }
+    def objectId = (src.object_id ?: '').toString()
+    if (id.isEmpty() || objectId.isEmpty() || src.datasource_id == null) { return null }   // no identity
 
     def fileName = (src['ds#file_name'] ?: '').toString().replaceFirst('^/', '')
     def folders = src['ds#parent_folder_paths']
@@ -309,7 +324,7 @@ def tupleFromSearchHit(Map hit, Map index, Map dsNames, String baseUrl) {
             if (v != null && !v.toString().trim().isEmpty()) { ref(index.extractorDxrIdByIndexId, key.substring(ext.length()), 'extractor') }
         }
     }
-    return [id, datasource.toString(), path, fileName, size, modified, '', refs]
+    return [id, datasource.toString(), path, fileName, size, modified, '', refs, dsId, objectId]
 }
 
 // Datasource ids in a page that `dsNames` does not know yet.
@@ -339,7 +354,7 @@ def tuplesAsPreviewRows(List tuples) {
 // the same semantics dxr_query.groovy encodes as KQL for the on-prem variant.
 // Returns [items: List, unresolved: List<String>] — a criterion without a known
 // numeric index id is reported, never silently dropped.
-def composeEdgeQueryItems(Map criteria, List allAnnotatorIndexIds) {
+def composeQueryItems(Map criteria, List allAnnotatorIndexIds) {
     def items = []
     def unresolved = []
     int group = 0
@@ -348,15 +363,15 @@ def composeEdgeQueryItems(Map criteria, List allAnnotatorIndexIds) {
 
     (criteria.labelIndexIds ?: []).eachWithIndex { n, i ->
         if (!present(n)) { unresolved << "label '${nameAt(criteria.labelNames, i)}'".toString() }
-        else { items << edgeQueryItem('dxr#tags', n, 'number', 'exact', 'AND', group++, 0) }
+        else { items << queryItem('dxr#tags', n, 'number', 'exact', 'AND', group++, 0) }
     }
     (criteria.annotatorIndexIds ?: []).eachWithIndex { n, i ->
         if (!present(n)) { unresolved << "annotator '${nameAt(criteria.annotatorNames, i)}'".toString() }
-        else { items << edgeQueryItem('annotators', "annotation.${n}", 'text', 'exists', 'AND', group++, 0) }
+        else { items << queryItem('annotators', "annotation.${n}", 'text', 'exists', 'AND', group++, 0) }
     }
     (criteria.extractorIndexIds ?: []).eachWithIndex { n, i ->
         if (!present(n)) { unresolved << "extractor '${nameAt(criteria.extractorNames, i)}'".toString() }
-        else { items << edgeQueryItem("extracted_metadata#${n}", '', 'text', 'isSet', 'AND', group++, 0) }
+        else { items << queryItem("extracted_metadata#${n}", '', 'text', 'isSet', 'AND', group++, 0) }
     }
     def phrase = (criteria.filter ?: '').toString().trim()
     if (!phrase.isEmpty()) {
@@ -372,26 +387,26 @@ def composeEdgeQueryItems(Map criteria, List allAnnotatorIndexIds) {
             }
         }
         targets.eachWithIndex { n, i ->
-            items << edgeQueryItem("annotation.${n}", phrase, 'text', 'contains', i == 0 ? 'AND' : 'OR', group, i)
+            items << queryItem("annotation.${n}", phrase, 'text', 'contains', i == 0 ? 'AND' : 'OR', group, i)
         }
         group++
     }
     return [items: items, unresolved: unresolved]
 }
 
-def edgeQueryItem(String parameter, Object value, String type, String matchStrategy, String operator, int groupId, int groupOrder) {
+def queryItem(String parameter, Object value, String type, String matchStrategy, String operator, int groupId, int groupOrder) {
     return [parameter: parameter, value: value.toString(), type: type, match_strategy: matchStrategy,
             operator: operator, group_id: groupId, group_order: groupOrder]
 }
 
 // The user-facing explanation when a criterion has no numeric index id.
-def edgeUnresolvedMessage(String verb, List unresolved) {
-    return "Cannot ${verb}: ${unresolved.join(', ')} ${unresolved.size() == 1 ? 'has' : 'have'} no Data X-Ray Index ID in Collibra. Run Sync Data X-Ray Classifications (Collibra Cloud + Edge edition) first — or, if classifications are synced with the standalone script, re-run it with --stamp-index-ids — then try again.".toString()
+def unresolvedCriteriaMessage(String verb, List unresolved) {
+    return "Cannot ${verb}: ${unresolved.join(', ')} ${unresolved.size() == 1 ? 'has' : 'have'} no Data X-Ray Index ID in Collibra. Run Sync Data X-Ray Classifications first — or, if classifications are synced with the standalone script, re-run it with --stamp-index-ids — then try again.".toString()
 }
 
-// Zero every import counter the page loop advances (the edge equivalent of
-// worklist.groovy's publishWorkList — there is no work list, pages are batches).
-def zeroEdgeImportCounters(int total, int pageSize) {
+// Zero every import counter the page loop advances (there is no work list:
+// each page is one batch).
+def zeroImportCounters(int total, int pageSize) {
     execution.setVariable('importTotal', total)
     execution.setVariable('importBatchCount', (int) Math.ceil(total / (double) Math.max(1, pageSize)))
     execution.setVariable('importCreatedCount', 0)
@@ -402,22 +417,22 @@ def zeroEdgeImportCounters(int total, int pageSize) {
     execution.setVariable('importSkippedClassifications', 0)
 }
 
-// --- The files loop: one page per External API task, plus datasource lookups ---
+// --- The files loop: one page per transport task, plus datasource lookups ---
 
 // Datasource names are fetched one id at a time (GET /api/datasources/<id>,
 // api-version V3) the first time a page mentions the id, and cached in the
 // dxrDatasourceNames JSON variable. While names are being fetched the page
 // body waits in dxrPendingPage.
-def armEdgeDatasourceLookup(String dsId) {
+def armDatasourceLookup(String dsId) {
     execution.setVariable('dxrStage', 'datasource')
     execution.setVariable('dxrPendingDatasourceId', dsId)
-    armEdgeRequest('GET', "/api/datasources/${dsId}".toString(), '', 'api-version: V3')
-    edgeResetRetries()
+    armDxrRequest('GET', "/api/datasources/${dsId}".toString(), '', 'api-version: V3')
+    resetRequestRetries()
     execution.setVariable('hasMoreWork', true)
 }
 
 // opts: label (String, log prefix), dataxrayUrl (String), pageSize (int),
-//       index (Map, buildEdgeClassificationIndex result),
+//       index (Map, buildSearchClassificationIndex result),
 //       onFatal (Closure String→void: record the abort; never throws),
 //       onPage (Closure (Map page, List tuples) → boolean continueToNextPage),
 //       onPageZero (Closure Map page → String veto message or null, optional;
@@ -426,9 +441,9 @@ def armEdgeDatasourceLookup(String dsId) {
 //               fetch even alone was skipped; fileId '' when it could not be read).
 // Reads the armed request's response and drives the stage machine:
 //   files → (datasource lookups as needed) → onPage → next page or done.
-def handleEdgeFilesPage(Map opts) {
+def handleFilesPage(Map opts) {
     def stage = (execution.getVariable('dxrStage') ?: 'files').toString()
-    def r = readEdgeResponse()
+    def r = readDxrResponse()
     def dsNames = readJsonVariable('dxrDatasourceNames', [:])
 
     if (stage == 'datasource') {
@@ -437,19 +452,19 @@ def handleEdgeFilesPage(Map opts) {
             def parsed = new groovy.json.JsonSlurper().parseText(r.body)
             dsNames[dsId] = ((parsed instanceof Map ? parsed.name : null) ?: dsId).toString()
         } else {
-            if (edgeRetry("Data X-Ray datasource ${dsId} lookup", r.error)) { return }
+            if (retryRequest("Data X-Ray datasource ${dsId} lookup", r.error)) { return }
             loggerApi.warn("Datasource ${dsId} could not be resolved (${r.error}); file assets will show the id")
             dsNames[dsId] = dsId
         }
-        edgeResetRetries()
+        resetRequestRetries()
         execution.setVariable('dxrDatasourceNames', groovy.json.JsonOutput.toJson(dsNames))
         def pending = (execution.getVariable('dxrPendingPage') ?: '').toString()
-        def page = parseEdgeSearchPage(pending)
+        def page = parseSearchPage(pending)
         def missing = unknownDatasourceIds(page.hits, dsNames)
-        if (!missing.isEmpty()) { armEdgeDatasourceLookup(missing[0]); return }
+        if (!missing.isEmpty()) { armDatasourceLookup(missing[0]); return }
         execution.removeVariable('dxrPendingPage')
         execution.setVariable('dxrStage', 'files')
-        processEdgePage(page, dsNames, opts)
+        processFilesPage(page, dsNames, opts)
         return
     }
 
@@ -457,46 +472,50 @@ def handleEdgeFilesPage(Map opts) {
 
     if (stage == 'probe') {
         // pageNo is the row offset here: the probe is always a 1-row page.
-        String fileId = ''
+        Map identity = null
         if (r.ok) {
             try {
-                def probed = parseEdgeSearchPage(r.body)
-                fileId = probed.hits ? (probed.hits[0]?._id ?: '').toString() : ''
+                def probed = parseSearchPage(r.body)
+                def hit = probed.hits ? probed.hits[0] : null
+                def src = hit?._source instanceof Map ? hit._source : [:]
+                if (src.datasource_id != null && src.object_id) {
+                    identity = [fileId: (hit._id ?: '').toString(), datasourceId: src.datasource_id.toString(), objectId: src.object_id.toString()]
+                }
             } catch (Exception probeEx) {
-                loggerApi.warn("Could not read the skipped result's file id: ${probeEx.message}")
+                loggerApi.warn("Could not read the skipped result's identity: ${probeEx.message}")
             }
-        } else if (!isEdgeResponseTooLarge(r.error) && edgeRetry("${opts.label} result ${pageNo + 1} id lookup".toString(), r.error)) {
+        } else if (!isResponseTooLarge(r.error) && retryRequest("${opts.label} result ${pageNo + 1} id lookup".toString(), r.error)) {
             return
         }
-        skipEdgeRow(pageNo, fileId, opts)
+        skipResultRow(pageNo, identity, opts)
         return
     }
 
     // stage == 'files'
     def what = "${opts.label} page ${pageNo + 1}".toString()
     if (!r.ok) {
-        if (isEdgeResponseTooLarge(r.error)) {
+        if (isResponseTooLarge(r.error)) {
             // Re-sending the same request would fail the same way: ask for fewer
             // rows, and once a single row is too large, skip it.
-            if (!shrinkEdgeFilesPage(what)) { armEdgeSkipProbe() }
+            if (!shrinkFilesPage(what)) { armSkipProbe() }
             return
         }
-        if (edgeRetry(what, r.error)) { return }
+        if (retryRequest(what, r.error)) { return }
         opts.onFatal(r.error)
         return
     }
     def page
     try {
-        page = parseEdgeSearchPage(r.body)
+        page = parseSearchPage(r.body)
     } catch (Exception parseEx) {
-        if (edgeRetry(what, parseEx.message)) { return }
+        if (retryRequest(what, parseEx.message)) { return }
         opts.onFatal("Data X-Ray search response could not be parsed: ${parseEx.message}".toString())
         return
     }
-    edgeResetRetries()
+    resetRequestRetries()
     // Largest page size that has worked this run: what a skip grows back towards.
     execution.setVariable('dxrPageSizeOk', Math.max((execution.getVariable('dxrPageSizeOk') ?: 0) as int,
-        edgeCurrentPageSize(opts.pageSize as int)))
+        currentPageSize(opts.pageSize as int)))
     // "Page zero" = the first page that arrived, which is not page 0 when the
     // first row was skipped.
     if (execution.getVariable('dxrFirstPageDone') != true) {
@@ -510,15 +529,15 @@ def handleEdgeFilesPage(Map opts) {
     def missing = unknownDatasourceIds(page.hits, dsNames)
     if (!missing.isEmpty()) {
         execution.setVariable('dxrPendingPage', r.body)
-        armEdgeDatasourceLookup(missing[0])
+        armDatasourceLookup(missing[0])
         return
     }
-    processEdgePage(page, dsNames, opts)
+    processFilesPage(page, dsNames, opts)
 }
 
-def processEdgePage(Map page, Map dsNames, Map opts) {
+def processFilesPage(Map page, Map dsNames, Map opts) {
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
-    int pageSize = edgeCurrentPageSize(opts.pageSize as int)
+    int pageSize = currentPageSize(opts.pageSize as int)
     def tuples = page.hits.collect { tupleFromSearchHit(it, opts.index, dsNames, opts.dataxrayUrl) }.findAll { it != null }
     boolean wantMore = opts.onPage(page, tuples)
     int nextOffset = (pageNo + 1) * pageSize
@@ -533,7 +552,7 @@ def processEdgePage(Map page, Map dsNames, Map opts) {
             if (size >= regrowTo) { execution.setVariable('dxrRegrowTo', 0) }
         }
         def items = readJsonVariable('dxrQueryItems', [])
-        startEdgeFilesPage(items, nextOffset.intdiv(size), size, page.pitId)
+        startFilesPage(items, nextOffset.intdiv(size), size, page.pitId)
     } else {
         execution.setVariable('hasMoreWork', false)
         execution.setVariable('dxrFetchComplete', true)
@@ -542,9 +561,9 @@ def processEdgePage(Map page, Map dsNames, Map opts) {
 
 // The import/rerun page handler: upsert the page as one batch and keep counters.
 // opts additionally: queryAssetId (UUID), classIndex (Map byDxrId/byName → asset ids).
-def importEdgePage(Map opts, Map page, List tuples) {
+def importFilesPage(Map opts, Map page, List tuples) {
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
-    int pageSize = edgeCurrentPageSize(opts.pageSize as int)
+    int pageSize = currentPageSize(opts.pageSize as int)
     execution.setVariable('importTotal', page.total)
     // Recomputed every page: the page size can shrink part-way (pageNo follows it).
     int batchCount = (int) Math.ceil(page.total / (double) pageSize)

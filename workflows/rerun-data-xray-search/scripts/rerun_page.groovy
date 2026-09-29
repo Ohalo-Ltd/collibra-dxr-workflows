@@ -1,8 +1,8 @@
-// rerun_page_edge.groovy  (Collibra Cloud + Edge variant)
+// rerun_page.groovy  (both editions)
 //
-// ASYNC task after every External API task of the rerun: one results page per
+// ASYNC task after every transport task of the rerun: one results page per
 // execution (plus datasource-name lookups on first sight), upserted as one
-// batch (shared/file_batch.groovy via dxr_edge.groovy). Never throws: failures
+// batch (shared/file_batch.groovy via dxr_search.groovy). Never throws: failures
 // set rerunAborted/rerunAbortReason and end the loop, which also keeps headless
 // nightly runs from wedging.
 //
@@ -14,7 +14,7 @@
 import groovy.json.JsonOutput
 
 // {{include:dxr_model.groovy}}
-// {{include:dxr_edge.groovy}}
+// {{include:dxr_search.groovy}}
 // {{include:file_batch.groovy}}
 
 if (execution.getVariable('rerunAborted') == true) {
@@ -31,7 +31,7 @@ def opts = [
     label       : 'Import batch',
     queryAssetId: string2Uuid((execution.getVariable('queryAssetId') ?: '').toString()),
     dataxrayUrl : (execution.getVariable('dataxrayUrl') ?: '').toString(),
-    pageSize    : edgePageSize(execution.getVariable('dataxrayPageSize')),
+    pageSize    : clampPageSize(execution.getVariable('dataxrayPageSize')),
     index       : classIndex,
     classIndex  : classIndex,
     onPageZero  : { Map page ->
@@ -49,7 +49,7 @@ def opts = [
         return null
     },
     afterPage   : { List tuples, int pageNo ->
-        def seen = tuples.collect { deterministicFileAssetId(it[0]).toString() }
+        def seen = tuples.collect { fileAssetIdOf(it).toString() }
         int chunk = (execution.getVariable('rerunPageCount') ?: 0) as int
         execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson(seen))
         execution.setVariable('rerunPageCount', chunk + 1)
@@ -65,15 +65,15 @@ def opts = [
 // A skipped result still matches the query: count it as seen so the retire
 // pass does not unlink it. If its id could not be read, nothing can be known
 // to be gone, so the retire pass is skipped for this run.
-opts.onSkip = { String fileId ->
+opts.onSkip = { String assetId ->
     execution.setVariable('importFailedCount', ((execution.getVariable('importFailedCount') ?: 0) as int) + 1)
-    if (fileId) {
+    if (assetId) {
         int chunk = (execution.getVariable('rerunPageCount') ?: 0) as int
-        execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson([deterministicFileAssetId(fileId).toString()]))
+        execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson([assetId]))
         execution.setVariable('rerunPageCount', chunk + 1)
     } else {
         execution.setVariable('rerunRetireUnsafe', true)
     }
 }
-opts.onPage = { Map page, List tuples -> importEdgePage(opts, page, tuples) }
-handleEdgeFilesPage(opts)
+opts.onPage = { Map page, List tuples -> importFilesPage(opts, page, tuples) }
+handleFilesPage(opts)

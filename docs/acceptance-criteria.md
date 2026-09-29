@@ -39,7 +39,7 @@ Owner: **Sync Data X-Ray Classifications** (manual) and its **Nightly** twin
 ## 2. Per-file classification evidence
 
 Owner: the import/rerun batch stage. "Evidence" = what a file's row in the
-Data X-Ray `/api/v1/files` response asserts.
+Data X-Ray search result asserts (`POST /api/indexed-files/search`, both editions).
 
 | ID | Given | When | Then | Status |
 |---|---|---|---|---|
@@ -64,10 +64,10 @@ Owner: **Search Data X-Ray**.
 | IMP-4 | Current Files-domain population + this result set would exceed **25,000** | The results task is shown / import is forced via API | The import is refused with a message naming the projected total (enforced in script, not only in the form) | 🔹 |
 | IMP-5 | A search matches more than **5,000** and at most **10,000** files (within cap) | The results task is shown | Import is offered with a duration warning | 🔹 |
 | IMP-11 | A search matches more than **10,000** files | The results task is shown / import is forced via API | Import is not offered; the task asks the user to refine the search. The import job refuses it too (enforced in script). The Cloud + Edge edition attaches no results file | 🔹 |
-| IMP-12 | A Cloud + Edge search matches 1–10,000 files | The results task is shown | The query asset carries `<search>-results.zip` with `results.csv` (Datasource, Path) listing every matching file, as in the on-prem edition; a file too large to send through Edge is left out and the task says how many | 🔹 |
+| IMP-12 | A search matches 1–10,000 files (either edition) | The results task is shown | The query asset carries `<search>-results.zip` with `results.csv` (Datasource, Path) listing every matching file; a file too large for Collibra to receive is left out and the task says how many | 🔹 |
 | IMP-6 | The user ticks "Import all N…" | The import finishes | One file asset per result in **Data X-Ray Files**: clean filename as display name, uniqueness-suffixed full name, File Path / File Size / Last Modified / Datasource Name / Data X-Ray ID attributes, a `returns` relation from the query, and evidence-based classification relations. An Import Summary task reports created/updated/failed counts | ✅ |
-| IMP-7 | A file was already imported by **another** query | This query's import runs | The **same** asset is reused (deterministic ID from the Data X-Ray file id) and updated in place — never duplicated | ✅ |
-| IMP-8 | Data X-Ray stalls or drops the result stream mid-response | The search / import / rerun fetch runs | Up to **3 attempts** are made; on final failure nothing is saved (the transaction rolls back) and the error says so and advises retrying | ✅ |
+| IMP-7 | A file was already imported by **another** query | This query's import runs | The **same** asset is reused (deterministic ID from the file identity: Data X-Ray datasource id + object id) and updated in place — never duplicated | ✅ |
+| IMP-8 | Data X-Ray is unreachable, slow or returns an error for one request | The search / import / rerun fetch runs | That request is retried up to **3 attempts** (a page Collibra refuses as too large is re-requested with fewer rows instead); on final failure the search ends in a **Search Failed** task, an import in an Import Summary naming the failure, a rerun is aborted with the reason — and a rerun that did not see every page retires nothing | 🔹 |
 | IMP-9 | The user ticks "Keep in sync nightly" | The import starts | The query asset is tagged `dataxray-keep-in-sync`; removing the tag by hand stops the nightly sync for that query | ✅ |
 | IMP-10 | One import batch fails mid-run | The batch loop continues | The failed batch is counted and logged; remaining batches proceed — an import is never wedged by one bad batch | 🔹 |
 
@@ -84,15 +84,15 @@ via the nightly).
 | FILE-4 | A query asset has no criteria left (relations removed) and no filter | A rerun starts | It fails/skips with "criteria cannot be reconstructed" — it never falls back to an all-files search | 🔹 |
 | FILE-5 | A user starts Rerun on a **non-query** asset (e.g. a file asset) | The rerun starts | It refuses immediately, naming the asset's actual type (Collibra cannot hide the action on other asset pages when start roles are global roles) | ✅ |
 | FILE-6 | A **new** file matches the query since last run | The query is rerun | A new file asset is created and linked | ✅ |
-| FILE-7 | A matched file was **renamed/moved** in Data X-Ray on a connector that keeps the file id (one that identifies files by the source system's own item id: SharePoint Online within one library, OneDrive, Google Drive, Gmail, Box) | The query is rerun | The same asset is updated: new name/display name, refreshed attributes | 🔹 |
+| FILE-7 | A matched file was **renamed/moved** in Data X-Ray on a connector that identifies files by the source system's own item id (SharePoint Online within one library, OneDrive, Google Drive, Gmail, Box) | The query is rerun | The same asset is updated: new name/display name, refreshed attributes | 🔹 |
 | FILE-8 | A file **no longer matches** the query (changed, deleted, or no longer hits the criteria) | The query is rerun | The query's `returns` relation is removed; the asset is **retired** only if no other query returns it | ✅ |
 | FILE-9 | A file is returned by **two** queries and one stops matching it | That query is rerun | The file stays active (Candidate) and keeps the other query's relation | ✅ |
 | FILE-10 | A **retired** file matches any query again | That query is rerun / imported | The same asset is **reactivated** (Candidate) — history intact | ✅ |
 | FILE-11 | A rerun gets **0 results** from Data X-Ray | The retire pass would run | Retirement is skipped entirely — a transient empty answer must never retire a query's whole population | ✅ |
 | FILE-12 | A rerun's projected Files-domain population exceeds 25,000 | The rerun starts | Interactive: refused with the projection; headless: logged and skipped | 🔹 |
 | FILE-13 | A rerun's summary task is left **open** in someone's inbox | The user revisits the query asset / the nightly fires | The Rerun action is still available and the nightly still runs (workflow exclusivity is UNCONSTRAINED) | ✅ |
-| FILE-14 | Data X-Ray reassigns **file ids** (e.g. datasource deleted and re-scanned) | The next sync runs | New assets are created and the old generation retires as orphans, keeping its history — file identity follows the Data X-Ray file id. **Accepted by TRC** (see D-3) | 🔹 |
-| FILE-15 | A matched file was **renamed or moved** on a connector that identifies files by **path** (SMB, local/NFS, SFTP, Amazon S3, Azure Blob, Google Cloud Storage, SharePoint on-prem), moved to another SharePoint Online library, or copied/moved to **another datasource** (any connector) | Data X-Ray rescans and the query is rerun | Data X-Ray has assigned a new file id, so this is FILE-14 for one file: a new asset is created in the Data X-Ray Files domain, and the old asset is unlinked and retired where it is (history kept; comments, attachments and a manual domain/community placement do not carry over) | 🔹 |
+| FILE-14 | A datasource is **rescanned**, or Data X-Ray's search index is **rebuilt** and the datasources rescanned (every file gets a new Data X-Ray file id) | The next rerun runs | The **same** assets are updated — identity is the datasource id + object id, which a rescan does not change. Only the Data X-Ray ID attribute changes. A datasource **deleted and recreated** has a new id, so its files are new assets and the old generation retires as orphans (see D-3) | 🔹 |
+| FILE-15 | A matched file was **renamed or moved** on a connector that identifies files by **path** (SMB, local/NFS, SFTP, Amazon S3, Azure Blob, Google Cloud Storage, SharePoint on-prem), moved to another SharePoint Online library, or copied/moved to **another datasource** (any connector) | Data X-Ray rescans and the query is rerun | The file has a new identity: a new asset is created in the Data X-Ray Files domain, and the old asset is unlinked and retired where it is (history kept; comments, attachments and a manual domain/community placement do not carry over) | 🔹 |
 | FILE-16 | A user **moves** an active file asset to a domain in another community | The query is rerun | The asset is updated in place (attributes, classification and `returns` relations) and never moved back — the integration tracks file assets by UUID, not by domain (verified Sept 2026) | ✅ |
 | FILE-17 | A **community or domain** holding file assets is deleted in Collibra (Collibra deletes its assets with it) | A query that still matches one of those files is rerun | The asset is recreated in the Data X-Ray Files domain (same UUID). Only the rerun query's `returns` relation comes back; other queries' relations return as each of them reruns. Comments and history are gone (verified Sept 2026) | ✅ |
 | FILE-18 | A file asset moved **out of** the Data X-Ray Files domain (FILE-16) becomes orphaned because its query is deleted | The next nightly runs | The orphan sweep does **not** retire it and the 25,000 cap does not count it — both only look at the Data X-Ray Files domain. (A rerun that stops returning it still retires it normally.) | ⚠️ see D-5 |
@@ -148,20 +148,19 @@ Owner: **Sync Data X-Ray Classification (Nightly)** at 02:00 and
   complexity. Residual (CAT-10): a Sysadmin who hard-deletes still silently
   removes that criterion from saved queries that used it (so they return more
   files) — prefer sync-retire.
-- ~~**D-3 (FILE-14): file identity is the Data X-Ray file id.**~~ **Accepted by
-  TRC** (August 2026): "old generation retired with history, new generation
-  starts clean." If Data X-Ray reassigns file ids (e.g. a datasource is deleted
-  and re-scanned), Collibra creates new assets and the orphan sweep retires the
-  old generation — records preserved, no migration attempted. (A content-hash
-  based migration remains possible later if ever needed.)
-  Which events assign a new file id depends on the Data X-Ray connector
-  (verified in the Data X-Ray source, Sept 2026): connectors that identify
-  files by path (SMB, local/NFS, SFTP, S3, Azure Blob, GCS, SharePoint
-  on-prem) assign one on every rename or move; connectors that use the source
-  system's item id (SharePoint Online within a library, OneDrive, Google
-  Drive, Gmail, Box) keep it. Every connector assigns a new id when a file is
-  copied or moved to another datasource, or a datasource is deleted and
-  re-scanned. See FILE-7 and FILE-15.
+- ~~**D-3 (FILE-14): what counts as the same file.**~~ **Accepted by TRC**
+  (August 2026): "old generation retired with history, new generation starts
+  clean." **Changed in pack v3.0.0**: identity was the Data X-Ray file id (the
+  search index's document id, which Data X-Ray reassigns whenever its index is
+  rebuilt); it is now the Data X-Ray datasource id + the connector's object id,
+  the key Data X-Ray itself uses across scans, so rescans and index rebuilds
+  keep every asset. A new generation still appears when a datasource is deleted
+  and recreated, and — on connectors that identify files by path (SMB,
+  local/NFS, SFTP, S3, Azure Blob, GCS, SharePoint on-prem) — for a renamed or
+  moved file; connectors that use the source system's item id (SharePoint
+  Online within a library, OneDrive, Google Drive, Gmail, Box) keep it
+  (verified in the Data X-Ray source and on demo, Sept 2026). No migration is
+  attempted. See FILE-7, FILE-14 and FILE-15.
 - ~~**D-4 (EVID-8): evidence freshness is bounded by Data X-Ray indexing.**~~
   **Accepted by TRC** (August 2026), with the agreed wording: "Collibra
   reflects Data X-Ray as of the last sync; changes in Data X-Ray appear after

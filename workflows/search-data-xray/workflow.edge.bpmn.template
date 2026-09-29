@@ -2,7 +2,9 @@
 <!--
   searchDataXray workflow — Collibra Cloud + Edge variant
   =======================================================
-  Same process id, forms and outcome as workflow.bpmn, but Data X-Ray is reached
+  This file is the source for BOTH editions: the on-prem workflow.bpmn.template
+  is generated from it by tools/derive_onprem_bpmn.py (edit here, then run it).
+  Same process id, forms and outcome as the on-prem edition, but Data X-Ray is reached
   through a Collibra External API task bound to an Edge HTTP connection (which
   holds the credentials), never from Groovy. Every External API task is
   asynchronous and its response is capped in size, so the search runs as a loop:
@@ -58,7 +60,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:search_prepare_edge.groovy}}</script>
+      <script>{{script:search_prepare.groovy}}</script>
     </scriptTask>
     <serviceTask id="searchFetchTask" name="Call Data X-Ray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
       <extensionElements>
@@ -82,7 +84,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:search_page_edge.groovy}}</script>
+      <script>{{script:search_page.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="searchLoopGateway" name="More requests?" default="flowSearchFetched">
       <extensionElements>
@@ -93,7 +95,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:search_finalize_edge.groovy}}</script>
+      <script>{{script:search_finalize.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="searchOutcomeGateway" name="Search succeeded?" default="flowSearchOk">
       <extensionElements>
@@ -119,7 +121,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:import_collector_edge.groovy}}</script>
+      <script>{{script:import_collector.groovy}}</script>
     </scriptTask>
     <serviceTask id="importFetchTask" name="Fetch Results Page (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
       <extensionElements>
@@ -143,7 +145,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:import_page_edge.groovy}}</script>
+      <script>{{script:import_page.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="importLoopGateway" name="More pages?" default="flowImportDone">
       <extensionElements>

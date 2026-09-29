@@ -1,14 +1,14 @@
-// sync_page_edge.groovy  (nightly; Collibra Cloud + Edge variant)
+// sync_page.groovy  (nightly; both editions)
 //
-// ASYNC task after every External API task of the catalogue loop: folds the
+// ASYNC task after every transport task of the catalogue loop: folds the
 // response into the catalogue state and arms the next request
-// (shared/dxr_edge_sync.groovy). Timer-triggered and unattended, so it never
+// (shared/dxr_catalog_sync.groovy). Timer-triggered and unattended, so it never
 // throws — a failure records an empty run summary and ends the loop.
 
 // {{include:dxr_model.groovy}}
-// {{include:dxr_edge_sync.groovy}}
+// {{include:dxr_catalog_sync.groovy}}
 
-handleEdgeSyncPage(readJsonVariable('classIndex', [:])) { String msg ->
+handleCatalogSyncPage(readJsonVariable('classIndex', [:])) { String msg ->
     loggerApi.error("Failed to fetch the classification catalogue from Data X-Ray: ${msg}")
     execution.setVariable('syncFailed', true)
     execution.setVariable('hasMoreWork', false)

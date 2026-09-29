@@ -1,6 +1,6 @@
-// search_page_edge.groovy  (Collibra Cloud + Edge variant)
+// search_page.groovy  (both editions)
 //
-// ASYNC task that runs after every External API task of the search phase.
+// ASYNC task that runs after every transport task of the search phase.
 // Two passes through the results, one page per execution (plus any
 // datasource-name lookups a page needs):
 //
@@ -27,7 +27,7 @@ import groovy.json.JsonOutput
 
 // {{include:dxr_model.groovy}}
 // {{include:search_common.groovy}}
-// {{include:dxr_edge.groovy}}
+// {{include:dxr_search.groovy}}
 
 def dataxrayUrl = (execution.getVariable('dataxrayUrl') ?: '').toString()
 def emptyIndex = [labelDxrIdByIndexId: [:], annotatorDxrIdByIndexId: [:], extractorDxrIdByIndexId: [:], nameByDxrId: [:]]
@@ -67,20 +67,20 @@ def startResultsFile = {
     }
     execution.setVariable('dxrSearchPhase', 'file')
     execution.setVariable('resultsFileStatus', 'building')
-    beginEdgeFilesPass(edgeResultsFileExcludedFields())
+    beginFilesPass(resultsFileExcludedFields())
     // Same point-in-time snapshot as the preview, so the file matches its total.
-    startEdgeFilesPage(readJsonVariable('dxrQueryItems', []), 0, dxrEdgeMaxPageSize(),
+    startFilesPage(readJsonVariable('dxrQueryItems', []), 0, dxrMaxPageSize(),
         (execution.getVariable('dxrPreviewPitId') ?: '').toString())
-    loggerApi.info("Building the results file: ${total} file(s), ${dxrEdgeMaxPageSize()} per request")
+    loggerApi.info("Building the results file: ${total} file(s), ${dxrMaxPageSize()} per request")
 }
 
 def phase = (execution.getVariable('dxrSearchPhase') ?: 'preview').toString()
 
 if (phase == 'file') {
-    handleEdgeFilesPage([
+    handleFilesPage([
         label      : 'Results file',
         dataxrayUrl: dataxrayUrl,
-        pageSize   : dxrEdgeMaxPageSize(),
+        pageSize   : dxrMaxPageSize(),
         index      : emptyIndex,
         onFatal    : { String msg ->
             loggerApi.warn("Results file not attached: ${msg}")
@@ -88,7 +88,7 @@ if (phase == 'file') {
             execution.setVariable('resultsFileError', msg)
             execution.setVariable('hasMoreWork', false)
         },
-        onSkip     : { String fileId ->
+        onSkip     : { String assetId ->
             execution.setVariable('resultsFileSkipped', ((execution.getVariable('resultsFileSkipped') ?: 0) as int) + 1)
         },
         onPage     : { Map page, List tuples ->
@@ -104,8 +104,8 @@ if (phase == 'file') {
 }
 
 // phase == 'preview'
-int configuredPageSize = edgePageSize(execution.getVariable('dataxrayPageSize'))
-handleEdgeFilesPage([
+int configuredPageSize = clampPageSize(execution.getVariable('dataxrayPageSize'))
+handleFilesPage([
     label      : 'Search preview',
     dataxrayUrl: dataxrayUrl,
     pageSize   : configuredPageSize,
@@ -126,6 +126,6 @@ handleEdgeFilesPage([
     },
 ])
 if (execution.getVariable('searchFailed') != true && execution.getVariable('dxrFetchComplete') == true) {
-    execution.setVariable('dxrPreviewPageSize', edgeCurrentPageSize(configuredPageSize))
+    execution.setVariable('dxrPreviewPageSize', currentPageSize(configuredPageSize))
     startResultsFile()
 }

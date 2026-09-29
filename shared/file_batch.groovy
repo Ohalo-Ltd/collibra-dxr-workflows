@@ -2,11 +2,11 @@
 // retiring the files a query no longer returns.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
-// Used by the search import, the rerun sync (on-prem: from the work list;
-// edge: straight from each fetched page) and the rerun's retire pass.
+// Used by the search import and the rerun (one fetched page = one batch) and
+// the rerun's retire pass.
 //
 // Per work item (tuple layout in dxr_rows.groovy):
-//   – Deterministic asset UUID from the Data X-Ray file id, so the same file
+//   – Deterministic asset UUID from the file identity (datasource id + object id), so the same file
 //     always maps to the same Collibra asset: upsert is assetApi.exists().
 //   – Missing assets are bulk-created (addAssets) in the Data X-Ray Files
 //     domain. The full name carries a short UUID-derived suffix (Collibra
@@ -47,7 +47,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label) {
         def newItems = []       // [tuple, assetId]
         def existingItems = []  // [tuple, assetId]
         batch.each { tuple ->
-            def assetId = deterministicFileAssetId(tuple[0])
+            def assetId = fileAssetIdOf(tuple)
             if (assetApi.exists(assetId)) {
                 existingItems << [tuple, assetId]
             } else {

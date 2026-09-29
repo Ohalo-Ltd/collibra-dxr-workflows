@@ -65,13 +65,6 @@ def retiredPicksMessage(Map pickedIdsByKind, UUID obsoleteStatusId) {
     return "Cannot search: ${retired.join(', ')} ${one ? 'was' : 'were'} deleted in Data X-Ray (${one ? 'its' : 'their'} Collibra asset is retired). Remove ${one ? 'it' : 'them'} from the search and try again.".toString()
 }
 
-// Look up each asset by ID, relate it to the query asset, and return the names.
-def resolveAndRelate(List ids, UUID sourceId, UUID relationTypeId) {
-    def resolved = resolvePickedAssets(ids)
-    relateAssets(sourceId, resolved.collect { it.id }, relationTypeId)
-    return resolved.collect { it.name }
-}
-
 // Create the search-query asset; throws a user-facing WorkflowException on failure.
 def createQueryAsset(String conditionName, Map ids) {
     try {

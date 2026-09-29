@@ -29,7 +29,7 @@ def rebuildQueryCriteria(UUID queryId, Map ids) {
                labelDxrIds: [], extractorDxrIds: [], annotatorDxrIds: [], filterAnnotatorDxrIds: [],
                labelIndexIds: [], extractorIndexIds: [], annotatorIndexIds: [], filterAnnotatorIndexIds: [],
                deadCriteria: [], ignoredCriteria: 0, hasCriteria: false]
-    // Data X-Ray Index ID is only stamped by the Edge-edition sync; '' on on-prem installs.
+    // Data X-Ray Index ID is stamped by the classification sync; '' until it has run.
     def indexIdOf = { UUID assetId -> ids.dataxrayIndexIdAttrTypeId ? readSingleAttribute(assetId, ids.dataxrayIndexIdAttrTypeId) : '' }
 
     relationIdsByFarEnd(ids.groupsRelationTypeId, queryId, null).keySet().each { targetId ->

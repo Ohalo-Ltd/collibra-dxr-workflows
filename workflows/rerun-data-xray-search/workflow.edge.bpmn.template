@@ -2,7 +2,9 @@
 <!--
   rerunDataXraySearch workflow — Collibra Cloud + Edge variant
   ============================================================
-  Same process id, form and outcome as workflow.bpmn; Data X-Ray is reached
+  This file is the source for BOTH editions: the on-prem workflow.bpmn.template
+  is generated from it by tools/derive_onprem_bpmn.py (edit here, then run it).
+  Same process id, form and outcome as the on-prem edition; Data X-Ray is reached
   through a Collibra External API task bound to an Edge HTTP connection:
     startEvent (no form — started from the query asset's page, or headlessly
                 by the nightly file sync driver)
@@ -53,7 +55,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:rerun_collector_edge.groovy}}</script>
+      <script>{{script:rerun_collector.groovy}}</script>
     </scriptTask>
     <serviceTask id="rerunFetchTask" name="Call Data X-Ray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
       <extensionElements>
@@ -77,7 +79,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:rerun_page_edge.groovy}}</script>
+      <script>{{script:rerun_page.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="rerunLoopGateway" name="More requests?" default="flowSyncDone">
       <extensionElements>
@@ -88,7 +90,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:retire_orphans_edge.groovy}}</script>
+      <script>{{script:retire_orphans.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="headlessGateway" name="Headless?" default="flowInteractive">
       <extensionElements>

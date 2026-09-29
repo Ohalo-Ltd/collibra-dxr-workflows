@@ -35,7 +35,7 @@ def dxrModelIds() {
         lastModifiedAttrTypeId : string2Uuid('019e9210-ad15-73f8-bc06-7e94a1d52c37'),
         datasourceAttrTypeId   : string2Uuid('019e9210-be62-7a89-90d3-48b6f57e0c21'),
         dataxrayIdAttrTypeId   : string2Uuid('019e73ae-1aa8-700c-8086-626326822c22'),  // Data X-Ray ID (public UUID)
-        dataxrayIndexIdAttrTypeId: string2Uuid('019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'), // Data X-Ray Index ID (numeric id in DXR's search index; stamped by the Edge-edition sync)
+        dataxrayIndexIdAttrTypeId: string2Uuid('019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'), // Data X-Ray Index ID (numeric id in DXR's search index; stamped by the classification sync)
         linkAttrTypeId         : string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba'),
         searchLinkAttrTypeId   : string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254'),
         subtypeAttrTypeId      : string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad'),
@@ -51,7 +51,7 @@ def dxrModelIds() {
 def dxrMaxTotalFileAssets() { return 25_000 }
 
 // A search matching more files than this cannot be imported (either edition):
-// the user is asked to refine it. Also the most rows the Cloud + Edge edition
+// the user is asked to refine it. Also the most rows a search's results file
 // puts in a search's results file. Reruns of saved searches are not affected.
 def dxrMaxImportFiles() { return 10_000 }
 
@@ -64,15 +64,13 @@ def dxrTooManyToImportMessage(Object totalDisplay) {
 // it will take a while.
 def dxrWarnImportFiles() { return 5_000 }
 
-// Work items processed per async batch task execution (one DB transaction).
-def dxrBatchSize() { return 50 }
-
-// Edge edition: results fetched per External API task. Collibra caps a response
-// at 100 KB; a row carries one hit-count field per matching annotator, so rows
+// Results fetched per request. The Cloud + Edge edition's External API task caps
+// a response at 100 KB; a row carries one hit-count field per matching annotator, so rows
 // grow with the size of the catalogue. 25 rows stayed under 40 KB on a demo
-// tenant with ~60 annotators. Configurable per workflow (dataxrayPageSize).
-def dxrEdgeDefaultPageSize() { return 25 }
-def dxrEdgeMaxPageSize() { return 100 }
+// tenant with ~60 annotators. Configurable per workflow (dataxrayPageSize; the
+// on-prem BPMN defaults it to 100, the maximum, since its transport has no cap).
+def dxrDefaultPageSize() { return 25 }
+def dxrMaxPageSize() { return 100 }
 
 // Tag on a query asset that opts it into the nightly file sync.
 def dxrKeepInSyncTag() { return 'dataxray-keep-in-sync' }

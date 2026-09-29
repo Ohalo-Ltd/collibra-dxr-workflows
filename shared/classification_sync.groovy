@@ -46,9 +46,9 @@
 // [created:, updated:, retired:, skipped:, failed:, failures: [String]].
 // opts (optional):
 //   indexIdAttrTypeId — when set, an item's `indexId` (Data X-Ray's numeric
-//                       search-index id) is stamped on the asset (Edge edition).
+//                       search-index id) is stamped on the asset.
 //   noRetireTypeIds   — asset type ids that must NOT be retired this run (the
-//                       caller saw an incomplete list for them; Edge fallback).
+//                       caller saw an incomplete list for them; catalogue fallback).
 //   Items may carry `partial: true`: the item is known to exist in Data X-Ray
 //   (presence, name and ids are authoritative) but its description/link/subtype
 //   were NOT fetched this run — those attributes are left untouched.

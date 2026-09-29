@@ -2,6 +2,8 @@
 <!--
   syncDataXrayClassificationsNightly workflow — Collibra Cloud + Edge variant
   ===========================================================================
+  This file is the source for BOTH editions: the on-prem workflow.bpmn.template
+  is generated from it by tools/derive_onprem_bpmn.py (edit here, then run it).
   Timer-triggered (cron "0 0 2 * * ?") classification sync; the catalogue is
   fetched through a Collibra External API task bound to an Edge HTTP connection:
     startEvent (timer)
@@ -47,7 +49,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:sync_prepare_edge.groovy}}</script>
+      <script>{{script:sync_prepare.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="syncSkipGateway" name="Configured?" default="flowConfigured">
       <extensionElements>
@@ -76,7 +78,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:sync_page_edge.groovy}}</script>
+      <script>{{script:sync_page.groovy}}</script>
     </scriptTask>
     <exclusiveGateway id="syncLoopGateway" name="More requests?" default="flowSyncFetched">
       <extensionElements>
@@ -87,7 +89,7 @@
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>
-      <script>{{script:sync_apply_edge.groovy}}</script>
+      <script>{{script:sync_apply.groovy}}</script>
     </scriptTask>
     <endEvent id="endEvent" name="End">
       <extensionElements>

@@ -61,13 +61,7 @@ Then run it for real:
 python sync_classifications_standalone.py
 ```
 
-**Collibra Cloud + Edge edition: add `--stamp-index-ids`.**
-
-```
-python sync_classifications_standalone.py --stamp-index-ids
-```
-
-That also writes the numeric *Data X-Ray Index ID* the Edge edition's search and rerun workflows need, reading it from Data X-Ray's internal catalogue endpoints. Without it, every search fails with *Cannot search: … has no Data X-Ray Index ID in Collibra*. Running the script again with the flag after a run without it updates the existing assets in place, and a later run without the flag leaves stamped ids untouched. The attribute type is created by configure from pack v2.1.0 onwards.
+The script also writes the numeric *Data X-Ray Index ID* that the search and rerun workflows need (in both editions), reading it from Data X-Ray's internal catalogue endpoints. `--no-index-ids` skips that, and every search then fails with *Cannot search: … has no Data X-Ray Index ID in Collibra*; a later run without the switch updates the existing assets in place. The attribute type is created by configure (pack v2.1.0 onwards). The pre-3.0 `--stamp-index-ids` switch is still accepted and does nothing.
 
 The first line after the catalogue count is the authentication check, `Collibra: authenticated with basic as 'jane.doe'`. The last line is the summary, in the same terms as the workflow's results screen:
 

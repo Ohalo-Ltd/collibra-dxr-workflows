@@ -1,4 +1,4 @@
-// search_finalize_edge.groovy  (Collibra Cloud + Edge variant)
+// search_finalize.groovy  (both editions)
 //
 // Runs once the search loop has ended. On success it does what the on-prem
 // script does after its fetch: creates the search-query asset, links the
@@ -6,7 +6,7 @@
 // feasibility and publishes the variables the results form renders. On failure
 // it only publishes what the "Search Failed" form needs.
 //
-// The results file: search_page_edge.groovy collected every matching file's
+// The results file: search_page.groovy collected every matching file's
 // datasource and path as CSV chunks (resultsFileChunk_<n>); they are zipped
 // into the same results.csv the on-prem edition attaches. None is attached when
 // the search matched more than dxrMaxImportFiles() files (the user is asked to
@@ -21,7 +21,7 @@ import java.util.zip.ZipOutputStream
 // {{include:dxr_query.groovy}}
 // {{include:collibra_lookup.groovy}}
 // {{include:search_common.groovy}}
-// {{include:dxr_edge.groovy}}
+// {{include:dxr_search.groovy}}
 
 def ids = dxrModelIds()
 def criteria = new JsonSlurper().parseText(execution.getVariable('searchCriteria').toString())
@@ -78,7 +78,7 @@ if (fileStatus == 'complete') {
     }
 }
 def skippedNote = fileSkipped > 0
-    ? ", except ${fileSkipped} file(s) whose result was too large to send through Collibra Edge (named in the Collibra log)"
+    ? ", except ${fileSkipped} file(s) whose result was too large for Collibra to receive (named in the Collibra log)"
     : ''
 def attachmentDescription
 if (attachmentName) {
@@ -98,7 +98,7 @@ def shown = tuplesAsPreviewRows(rows)
 def moreNote = ''
 if (total > shown.size()) {
     moreNote = attachmentName
-        ? " The full result set (${totalDisplay} file(s)${fileSkipped > 0 ? ", less ${fileSkipped} too large to send through Edge" : ''}) is attached to this asset as ${attachmentName}."
+        ? " The full result set (${totalDisplay} file(s)${fileSkipped > 0 ? ", less ${fileSkipped} too large for Collibra to receive" : ''}) is attached to this asset as ${attachmentName}."
         : fileStatus == 'tooMany'
         ? " Showing the first ${shown.size()}. The search matched more than ${fileLimit} files: refine it to get a results file and import it."
         : " Showing the first ${shown.size()}; import the results to bring every matching file into Collibra."
