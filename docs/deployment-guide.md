@@ -150,9 +150,10 @@ everything without being added to these roles.
   **+ Create** menu. Visible to users holding **Data X-Ray User** or
   **Data X-Ray Admin** (and to admins).
 - **Importing search results as assets** — after a search, the results task
-  offers **Import all N matching files as assets** (up to an instance-wide
-  limit of **25,000** file assets in the **Data X-Ray Files** domain; a warning
-  appears above 10,000). Ticking **Keep in sync nightly** flags the search for
+  offers **Import all N matching files as assets**. A search matching more
+  than **10,000** files cannot be imported: the task asks you to refine it.
+  Imports also stay within an instance-wide limit of **25,000** file assets in
+  the **Data X-Ray Files** domain, and a warning appears above 5,000. Ticking **Keep in sync nightly** flags the search for
   the nightly file sync.
 - **Rerun Data X-Ray Search** — open a saved **Unstructured Data Query** asset
   and start the workflow from its page. The saved criteria are rebuilt from the

@@ -25,7 +25,9 @@ def opts = [
     onPageZero  : { Map page ->
         // The preview may be a little stale; the cap was checked against it in
         // the collector, so only a hard paging-window violation is refused here.
-        page.total > page.maxResultWindow
+        page.total > dxrMaxImportFiles()
+            ? "Import aborted: the search now matches ${page.total} file(s), more than the ${dxrMaxImportFiles()} a search can import. Refine the search and run it again.".toString()
+            : page.total > page.maxResultWindow
             ? "Import aborted: the search now matches ${page.total} file(s), more than the ${page.maxResultWindow} results Data X-Ray can page through.".toString()
             : null
     },

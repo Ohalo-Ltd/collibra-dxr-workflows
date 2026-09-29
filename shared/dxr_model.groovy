@@ -50,9 +50,19 @@ def dxrModelIds() {
 // exceed it are refused.
 def dxrMaxTotalFileAssets() { return 25_000 }
 
+// A search matching more files than this cannot be imported (either edition):
+// the user is asked to refine it. Also the most rows the Cloud + Edge edition
+// puts in a search's results file. Reruns of saved searches are not affected.
+def dxrMaxImportFiles() { return 10_000 }
+
+// The user-facing refusal for a search above dxrMaxImportFiles().
+def dxrTooManyToImportMessage(Object totalDisplay) {
+    return "Importing is disabled for this search: it matched ${totalDisplay} file(s), more than the ${dxrMaxImportFiles()} a search can import. Refine the search (add a label, extractor or annotator, or annotated text) and run it again.".toString()
+}
+
 // Above this many files an import is allowed but the results form warns that
 // it will take a while.
-def dxrWarnImportFiles() { return 10_000 }
+def dxrWarnImportFiles() { return 5_000 }
 
 // Work items processed per async batch task execution (one DB transaction).
 def dxrBatchSize() { return 50 }

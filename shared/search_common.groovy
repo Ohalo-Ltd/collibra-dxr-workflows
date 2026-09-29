@@ -180,12 +180,12 @@ def renderPreviewHtml(List shown, String totalDisplay, String moreNote) {
 // Returns [importAllowed:, importWarn:, importBlocked:, importBlockedMessage:, projectedTotal:].
 def computeImportFeasibility(int total, int filesDomainCount, String totalDisplay) {
     int projectedTotal = filesDomainCount + total
-    boolean importAllowed = total > 0 && projectedTotal <= dxrMaxTotalFileAssets()
+    boolean tooMany = total > dxrMaxImportFiles()
+    boolean importAllowed = total > 0 && !tooMany && projectedTotal <= dxrMaxTotalFileAssets()
     boolean importWarn    = importAllowed && total > dxrWarnImportFiles()
     boolean importBlocked = total > 0 && !importAllowed
-    def importBlockedMessage = importBlocked
-        ? "Importing is disabled for this search: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this search matched ${totalDisplay} file(s) — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit. Narrow the query, or retire imported searches you no longer need.".toString()
-        : ''
+    def importBlockedMessage = !importBlocked ? '' : tooMany ? dxrTooManyToImportMessage(totalDisplay)
+        : "Importing is disabled for this search: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this search matched ${totalDisplay} file(s) — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit. Narrow the query, or retire imported searches you no longer need.".toString()
     return [importAllowed: importAllowed, importWarn: importWarn, importBlocked: importBlocked,
             importBlockedMessage: importBlockedMessage, projectedTotal: projectedTotal]
 }

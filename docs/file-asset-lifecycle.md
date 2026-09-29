@@ -151,7 +151,9 @@ another community stay with the old, retired asset.
 ## How is the maximum number of file assets controlled?
 
 There is a single **instance-wide cap of 25,000 file assets** in the
-**Data X-Ray Files** domain, with a **warning above 10,000** for any one import.
+**Data X-Ray Files** domain. On top of it, **a search matching more than 10,000
+files cannot be imported** (refine it instead), and an import of more than
+5,000 files carries a warning that it will take a while.
 The cap exists to keep imports, nightly syncs and the Collibra instance itself
 responsive; it is a fixed constant in the workflow scripts, not a setting that
 can be changed in the Collibra UI (contact Ohalo if your deployment needs a
@@ -184,7 +186,8 @@ What you see when the cap is hit:
 | Situation | Behaviour |
 |---|---|
 | A search's results task, and the projected total would exceed 25,000 | The import checkboxes are not shown. Instead the task shows: *"Importing is disabled for this search: the Data X-Ray Files domain holds N file asset(s) and this search matched M file(s) — the projected N+M would exceed the 25000 instance-wide limit. Narrow the query, or retire imported searches you no longer need."* |
-| A search matched more than 10,000 files but is within the cap | Import is offered, with a *"Large import — expect it to run for a while in the background"* warning. |
+| A search matched more than 10,000 files | The import checkboxes are not shown. Instead the task shows: *"Importing is disabled for this search: it matched N file(s), more than the 10000 a search can import. Refine the search (add a label, extractor or annotator, or annotated text) and run it again."* The import job enforces the same limit. |
+| A search matched more than 5,000 files and is within the limits | Import is offered, with a *"Large import — expect it to run for a while in the background"* warning. |
 | A **manual** rerun (from the query asset's page) would exceed the cap | The rerun stops immediately with an error naming the current population, the number of new files, and the projected total. Nothing is changed. |
 | The **nightly** reruns a keep-in-sync query that would exceed the cap | The rerun is refused, logged in `dgc.log`, and ends cleanly. That query's file assets are left exactly as they were; other queries are unaffected. It will be refused again every night until the population is reduced or the query narrowed. |
 
@@ -437,7 +440,7 @@ needed).
 | What is a file asset's identity? | Its Data X-Ray file id — the Collibra UUID is derived from it, so the same file is always the same asset. On path-based connectors (SMB, file shares, S3, Azure Blob, SharePoint on-premises) a rename or move gives the file a new id, and so a new asset. |
 | Which domain / type? | Created in **Data X-Ray Files** / **Data X-Ray File**, status **Candidate** when active. |
 | Can I move one to another community? | Yes; syncs update it where it is. It is not counted by the cap or swept by the nightly, and the placement is lost if Data X-Ray assigns the file a new id. |
-| Maximum number? | **25,000** in the domain in total, retired ones included; warning above **10,000** per import. Fixed in the scripts. |
+| Maximum number? | **25,000** in the domain in total, retired ones included. A search matching more than **10,000** files cannot be imported; warning above **5,000**. Fixed in the scripts. |
 | What keeps them current? | Manual **Rerun Data X-Ray Search** on the query asset, or the **02:30 nightly** for queries tagged `dataxray-keep-in-sync`. |
 | When is one retired? | When no query returns it any more — after a rerun unlinks it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). |
 | When is one deleted? | Only by a person. The integration never deletes. |

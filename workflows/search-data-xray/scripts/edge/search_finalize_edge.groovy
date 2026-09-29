@@ -6,12 +6,16 @@
 // feasibility and publishes the variables the results form renders. On failure
 // it only publishes what the "Search Failed" form needs.
 //
-// No results ZIP in this variant: the External API task caps response sizes,
-// so the full result set is never streamed. The preview shows the first page;
-// importing walks every page.
+// The results file: search_page_edge.groovy collected every matching file's
+// datasource and path as CSV chunks (resultsFileChunk_<n>); they are zipped
+// into the same results.csv the on-prem edition attaches. None is attached when
+// the search matched more than dxrMaxImportFiles() files (the user is asked to
+// refine it) or when collecting failed (the task says so).
 
 import com.collibra.dgc.workflow.api.exception.WorkflowException
 import groovy.json.JsonSlurper
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 // {{include:dxr_model.groovy}}
 // {{include:dxr_query.groovy}}
@@ -50,12 +54,55 @@ if (!filter.isEmpty()) {
 }
 writeQueryAttributes(queryId, ids, (criteria.description ?: '').toString(), queryString, filter)
 
+// --- Results file (ZIP'd CSV) ------------------------------------------------------
+
+def fileStatus = (execution.getVariable('resultsFileStatus') ?: 'none').toString()
+int fileSkipped = (execution.getVariable('resultsFileSkipped') ?: 0) as int
+int fileLimit = Math.min(dxrMaxImportFiles(), maxResultWindow)
+def attachmentName = ''
+if (fileStatus == 'complete') {
+    int chunks = (execution.getVariable('resultsFileChunks') ?: 0) as int
+    def bytes = new ByteArrayOutputStream()
+    new ZipOutputStream(bytes).withCloseable { zos ->
+        zos.putNextEntry(new ZipEntry('results.csv'))
+        zos.write('Datasource,Path\r\n'.getBytes('UTF-8'))
+        for (int n = 0; n < chunks; n++) {
+            zos.write((execution.getVariable("resultsFileChunk_${n}".toString()) ?: '').toString().getBytes('UTF-8'))
+        }
+        zos.closeEntry()
+    }
+    def name = safeAttachmentName(conditionName, '-results.zip')
+    if (attachFileToAsset(queryId, name, bytes.toByteArray())) { attachmentName = name }
+    for (int n = 0; n < chunks; n++) {
+        try { execution.removeVariable("resultsFileChunk_${n}".toString()) } catch (Exception ignored) { /* best-effort */ }
+    }
+}
+def skippedNote = fileSkipped > 0
+    ? ", except ${fileSkipped} file(s) whose result was too large to send through Collibra Edge (named in the Collibra log)"
+    : ''
+def attachmentDescription
+if (attachmentName) {
+    attachmentDescription = "The full result set is attached to the asset as a ZIP'd CSV (${attachmentName})${skippedNote}. Open the asset to review the preview and download the attachment."
+} else if (fileStatus == 'tooMany') {
+    attachmentDescription = "No results file is attached: this search matched ${totalDisplay} file(s), more than the ${fileLimit} a results file can hold. Refine the search (add a label, extractor or annotator, or annotated text) and run it again."
+} else if (fileStatus == 'failed' || fileStatus == 'complete') {
+    def reason = (execution.getVariable('resultsFileError') ?: '').toString()
+    attachmentDescription = "The results file could not be ${fileStatus == 'failed' ? 'built' : 'attached'}${reason ? " (${reason})" : ''}. Open the asset to review the preview, or run the search again."
+} else {
+    attachmentDescription = 'Open the asset to review the preview.'
+}
+
 // --- Preview table ----------------------------------------------------------------
 
 def shown = tuplesAsPreviewRows(rows)
-def moreNote = total > shown.size()
-    ? " Showing the first ${shown.size()}; import the results to bring every matching file into Collibra."
-    : ''
+def moreNote = ''
+if (total > shown.size()) {
+    moreNote = attachmentName
+        ? " The full result set (${totalDisplay} file(s)${fileSkipped > 0 ? ", less ${fileSkipped} too large to send through Edge" : ''}) is attached to this asset as ${attachmentName}."
+        : fileStatus == 'tooMany'
+        ? " Showing the first ${shown.size()}. The search matched more than ${fileLimit} files: refine it to get a results file and import it."
+        : " Showing the first ${shown.size()}; import the results to bring every matching file into Collibra."
+}
 addAttributeQuietly(queryId, ids.filesAttrTypeId, renderPreviewHtml(shown, totalDisplay, moreNote))
 
 // --- Import feasibility (instance-wide cap + Data X-Ray paging window) -----------
@@ -83,8 +130,8 @@ execution.setVariable('queryString', displayQuery(queryString))
 execution.setVariable('resultCount', total)
 execution.setVariable('resultCountDisplay', totalDisplay)
 execution.setVariable('shownCount', shown.size())
-execution.setVariable('attachmentName', '')
-execution.setVariable('attachmentDescription', 'Results are not attached as a file in the Collibra Cloud + Edge edition — import them to work with the full set in Collibra.')
+execution.setVariable('attachmentName', attachmentName)
+execution.setVariable('attachmentDescription', attachmentDescription.toString())
 execution.setVariable('zipCapped', false)
 execution.setVariable('queryAssetId', queryId.toString())
 execution.setVariable('importAllowed', feasibility.importAllowed)
@@ -95,4 +142,4 @@ execution.setVariable('filesDomainCount', filesDomainCount)
 execution.setVariable('importDecision', false)
 execution.setVariable('keepInSync', false)
 
-loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")
+loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, resultsFile=${attachmentName ?: fileStatus}${fileSkipped ? " (${fileSkipped} skipped)" : ''}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")

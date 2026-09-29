@@ -133,6 +133,20 @@ def edgeExcludedFields() {
             'metadata#OWNER_GROUP*', 'metadata#binary_hash', 'dxr#sha_256*', 'folder_id', 'dxr#manually_removed_tags']
 }
 
+// The Cloud + Edge results file needs only datasource and path: exclude every
+// other field family, which brings a row from ~1.2 KB to ~280 bytes (demo,
+// Sept 2026), so 100 rows fit easily under the 100 KB cap.
+def edgeResultsFileExcludedFields() {
+    return ['dxr#*', 'metadata#*', 'annotation*', 'extracted_metadata#*', 'computed*', 'object_id',
+            'ai#*', 'external*', 'folder_id', 'ds#file_size']
+}
+
+// The exclusions of the current pass (beginEdgeFilesPass), else the default.
+def edgeActiveExcludedFields() {
+    def raw = (execution.getVariable('dxrExcludedFields') ?: '').toString()
+    return raw ? (new groovy.json.JsonSlurper().parseText(raw) as List) : edgeExcludedFields()
+}
+
 // A stable sort (same order the public export uses) so from/size paging under a
 // point-in-time id never skips or repeats rows.
 def edgeSearchSort() {
@@ -142,20 +156,26 @@ def edgeSearchSort() {
 def buildEdgeSearchBody(List queryItems, int pageNo, int pageSize, String pitId, List excludedFields = null) {
     def req = [mode: 'DXR_JSON_QUERY', datasourceIds: [], pageNumber: pageNo, pageSize: pageSize,
                filter: [query_items: queryItems], sort: edgeSearchSort(),
-               excludedFields: excludedFields ?: edgeExcludedFields(), usePIT: true]
+               excludedFields: excludedFields ?: edgeActiveExcludedFields(), usePIT: true]
     if (pitId) { req.pitId = pitId }
     return groovy.json.JsonOutput.toJson(req)
 }
 
+// Start a walk through the results (the preview, the results file, an import
+// and a rerun are separate passes; several share one process instance). Call
+// before the pass's first startEdgeFilesPage. `excludedFields` null → the
+// default set, which keeps the classification evidence import needs.
+def beginEdgeFilesPass(List excludedFields = null) {
+    execution.setVariable('dxrFirstPageDone', false)
+    execution.setVariable('dxrSkippedFiles', '[]')
+    execution.setVariable('dxrPageSizeOk', 0)
+    execution.setVariable('dxrRegrowTo', 0)
+    execution.setVariable('dxrFetchComplete', false)
+    execution.setVariable('dxrExcludedFields', excludedFields ? groovy.json.JsonOutput.toJson(excludedFields) : '')
+}
+
 // Arm one page of the files search. Rows pageNo × pageSize onwards.
 def startEdgeFilesPage(List queryItems, int pageNo, int pageSize, String pitId) {
-    if (pageNo == 0 && !pitId) {
-        // A fresh run (the preview and the import share one process instance).
-        execution.setVariable('dxrFirstPageDone', false)
-        execution.setVariable('dxrSkippedFiles', '[]')
-        execution.setVariable('dxrPageSizeOk', 0)
-        execution.setVariable('dxrRegrowTo', 0)
-    }
     execution.setVariable('dxrStage', 'files')
     execution.setVariable('dxrPageNo', pageNo)
     execution.setVariable('dxrPageSizeCur', pageSize)

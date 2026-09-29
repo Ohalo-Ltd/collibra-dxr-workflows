@@ -81,7 +81,18 @@ if (skippedNoId > 0) {
     loggerApi.warn("Import: skipped ${skippedNoId} result row(s) without a usable file id")
 }
 
-// --- Re-check the instance-wide cap -------------------------------------------
+// --- Re-check the import limits -------------------------------------------
+
+// The results form hides the import controls above these limits, but a task can
+// be completed through the REST API, so the script enforces them too.
+if (workItems.size() > dxrMaxImportFiles()) {
+    def msg = dxrTooManyToImportMessage(workItems.size())
+    loggerApi.error(msg)
+    def wf = new WorkflowException(msg)
+    wf.setTitleMessage('Data X-Ray import refused')
+    wf.setUserMessage(msg)
+    throw wf
+}
 
 int filesDomainCount = countAssetsInDomain(ids.filesDomainId)
 int projectedTotal = filesDomainCount + workItems.size()

@@ -39,7 +39,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Large import",
-          "value": "<p>⚠️ This search matched more than 10,000 files. The import will work, but expect it to run for a while in the background — check the <b>Data X-Ray Files</b> domain or wait for the <b>Import Summary</b> task.</p>",
+          "value": "<p>⚠️ This search matched more than 5,000 files. The import will work, but expect it to run for a while in the background — check the <b>Data X-Ray Files</b> domain or wait for the <b>Import Summary</b> task.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,

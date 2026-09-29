@@ -115,5 +115,7 @@ execution.setVariable('dxrFetchComplete', false)
 
 // --- Kick off the request loop with the preview page -----------------------------
 
+execution.setVariable('dxrSearchPhase', 'preview')
+beginEdgeFilesPass()
 startEdgeFilesPage(q.items, 0, edgePageSize(execution.getVariable('dataxrayPageSize')), null)
 loggerApi.info("Search Data X-Ray via Edge connection '${connectionName}': preview page armed (${q.items.size()} query item(s))")
