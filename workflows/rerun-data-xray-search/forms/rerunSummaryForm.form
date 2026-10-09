@@ -43,6 +43,23 @@
           "type": "htmlComponent"
         }
       ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "label": "",
+          "value": "<p style=\"color:#888;font-size:smaller\">{{dxrVersionLabel}}</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "dxrVersionFooter",
+          "type": "htmlComponent"
+        }
+      ]
     }
   ],
   "metadata": {

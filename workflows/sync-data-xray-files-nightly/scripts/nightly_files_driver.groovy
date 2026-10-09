@@ -50,9 +50,12 @@ import com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest
 import com.collibra.dgc.core.api.dto.workflow.StartWorkflowInstancesRequest
 import com.collibra.dgc.core.api.model.workflow.WorkflowBusinessItemType
 
+// {{include:dxr_model.groovy}}
+
 final String KEEP_IN_SYNC_TAG = 'dataxray-keep-in-sync'
 final String RERUN_PROCESS_ID = 'rerunDataXraySearch'
 
+announceDxrVersion('Sync Data X-Ray Files (Nightly)')
 def queryDomainId         = string2Uuid('019dcf96-233a-72e1-bf25-8398b8c9146e')
 def filesDomainId         = string2Uuid('019e9210-52a4-7c31-9b5e-3d8f0a6c1e42')
 def returnsRelationTypeId = string2Uuid('019e9210-f180-79dc-b5a0-6c31e94f82d5')

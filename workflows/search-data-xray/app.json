@@ -1,14 +1,14 @@
 {
   "key": "searchDataXray",
   "name": "Search Data X-Ray",
-  "description": "Search Data X-Ray for files matching the labels, extractors and annotators you choose.",
+  "description": "Search Data X-Ray for files matching the labels, extractors and annotators you choose. Data X-Ray workflows {{pack:version}} ({{pack:variant}}).",
   "theme": "theme-3",
   "icon": "glyphicon-inbox",
   "businessItemResourceType": "GLOBAL",
   "globalCreate": true,
   "variants": {
     "edge": {
-      "description": "Search Data X-Ray for files matching the labels, extractors and annotators you choose. Collibra Cloud + Edge edition: Data X-Ray is reached through an Edge HTTP connection."
+      "description": "Search Data X-Ray for files matching the labels, extractors and annotators you choose. Collibra Cloud + Edge edition: Data X-Ray is reached through an Edge HTTP connection. Data X-Ray workflows {{pack:version}} ({{pack:variant}})."
     }
   }
 }

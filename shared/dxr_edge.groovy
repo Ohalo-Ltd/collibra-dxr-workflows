@@ -41,6 +41,7 @@
 // "Data X-Ray ID" attributes, stamped by the Edge-edition classification sync
 // (dxr_edge_sync.groovy). Search and rerun therefore need NO catalogue calls.
 
+// {{include:dxr_model.groovy}}
 // {{include:dxr_rows.groovy}}
 // {{include:dxr_query.groovy}}
 
@@ -100,7 +101,7 @@ def edgeRetry(String what, String error) {
         execution.setVariable('hasMoreWork', true)
         return true
     }
-    loggerApi.error("${what} failed after ${attempts} attempts: ${error}")
+    loggerApi.error("${what} failed after ${attempts} attempts: ${error} [${dxrVersionLabel()}]")
     return false
 }
 
@@ -175,6 +176,15 @@ def edgeCurrentPageSize(int configured) {
 
 def isEdgeResponseTooLarge(String error) {
     return (error ?: '').contains('exceeds the allowed limit')
+}
+
+// Collibra refused to hand over Data X-Ray's answer. Its explicit form is the
+// "exceeds the allowed limit" error; it also arrives as an HTTP 5xx with an
+// EMPTY body while Data X-Ray itself answered 200 (TRC, 2026-10-09: three 190 KB
+// pages logged 200 by Data X-Ray's nginx, seen by the workflow as status 500).
+// A real Data X-Ray error always carries a JSON body, so it is not mistaken for this.
+def isEdgeRefusal(Map r) {
+    return isEdgeResponseTooLarge(r.error) || (r.status >= 500 && (r.body ?: '').trim().isEmpty())
 }
 
 // A smaller page size that can continue from row `offset`: Data X-Ray pages
@@ -445,7 +455,12 @@ def handleEdgeFilesPage(Map opts) {
             } catch (Exception probeEx) {
                 loggerApi.warn("Could not read the skipped result's file id: ${probeEx.message}")
             }
-        } else if (!isEdgeResponseTooLarge(r.error) && edgeRetry("${opts.label} result ${pageNo + 1} id lookup".toString(), r.error)) {
+        } else {
+            // The lookup asks for the row's _id only (~400 bytes): if even that
+            // fails, Data X-Ray or the connection is down — skipping row after row
+            // would only hide an outage. Retry, then give up on the run.
+            if (edgeRetry("${opts.label} result ${pageNo + 1} id lookup".toString(), r.error)) { return }
+            opts.onFatal("Even a one-file request to Data X-Ray failed (${r.error}), so this is not a response-size problem: Data X-Ray or its connection is unavailable. Try again later.".toString())
             return
         }
         skipEdgeRow(pageNo, fileId, opts)
@@ -455,7 +470,7 @@ def handleEdgeFilesPage(Map opts) {
     // stage == 'files'
     def what = "${opts.label} page ${pageNo + 1}".toString()
     if (!r.ok) {
-        if (isEdgeResponseTooLarge(r.error)) {
+        if (isEdgeRefusal(r)) {
             // Re-sending the same request would fail the same way: ask for fewer
             // rows, and once a single row is too large, skip it.
             if (!shrinkEdgeFilesPage(what)) { armEdgeSkipProbe() }

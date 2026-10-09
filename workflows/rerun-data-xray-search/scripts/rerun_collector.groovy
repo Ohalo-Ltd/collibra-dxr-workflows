@@ -42,6 +42,7 @@ import groovy.json.JsonOutput
 // {{include:rerun_common.groovy}}
 // {{include:worklist.groovy}}
 
+announceDxrVersion('Rerun Data X-Ray Search')
 def ids = dxrModelIds()
 
 // --- Headless normalization ----------------------------------------------------

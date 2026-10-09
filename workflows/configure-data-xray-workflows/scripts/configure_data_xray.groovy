@@ -84,6 +84,10 @@ import com.collibra.dgc.core.api.model.security.Permission
 import com.collibra.dgc.core.api.dto.workflow.ChangeWorkflowDefinitionRequest
 import com.collibra.dgc.core.api.model.workflow.WorkflowExclusivity
 
+// {{include:dxr_model.groovy}}
+
+announceDxrVersion('Configure Data X-Ray Workflows')
+
 // --- Canonical identifiers (fixed across instances) -------------------------
 
 def COMMUNITY_ID   = '019c9fbf-0ab2-7258-b118-e68d3e814fe1'

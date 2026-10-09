@@ -27,6 +27,7 @@ import groovy.json.JsonOutput
 // {{include:search_common.groovy}}
 // {{include:dxr_edge.groovy}}
 
+announceDxrVersion('Search Data X-Ray')
 def ids = dxrModelIds()
 
 def failNow = { String title, String msg ->
