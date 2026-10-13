@@ -64,6 +64,19 @@ def dxrBatchSize() { return 50 }
 def dxrEdgeDefaultPageSize() { return 25 }
 def dxrEdgeMaxPageSize() { return 100 }
 
+// The release this build came from, stamped in by the harness at build time
+// ({{pack:version}} / {{pack:variant}}): the tag, e.g. 'v2.3.0', or
+// 'dev-<commit>' for a dev deploy, and the bundle ('onprem' / 'cloud-edge').
+def dxrPackVersion() { return '{{pack:version}}' }
+def dxrPackEdition() { return '{{pack:variant}}' }
+def dxrVersionLabel() { return "Data X-Ray workflows ${dxrPackVersion()} (${dxrPackEdition()})".toString() }
+
+// Log which release is running and publish it for the task forms' footer.
+def announceDxrVersion(String workflowName) {
+    execution.setVariable('dxrVersionLabel', dxrVersionLabel())
+    loggerApi.info("${workflowName}: ${dxrVersionLabel()}")
+}
+
 // Tag on a query asset that opts it into the nightly file sync.
 def dxrKeepInSyncTag() { return 'dataxray-keep-in-sync' }
 

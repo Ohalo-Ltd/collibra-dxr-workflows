@@ -73,7 +73,7 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
     def requests = edgeSyncListRequests()
     int idx = (execution.getVariable('dxrCatalogueIndex') ?: 0) as int
     if (!r.ok) {
-        if (stage == 'catalogue' && requests[idx].stage == 'dataClasses' && r.error.contains('exceeds the allowed limit')) {
+        if (stage == 'catalogue' && requests[idx].stage == 'dataClasses' && isEdgeRefusal(r)) {
             // The complete annotator list does not fit under Collibra's response
             // cap: fall back to the annotators-with-findings list + per-item detail,
             // and remember that annotators must not be retired this run.

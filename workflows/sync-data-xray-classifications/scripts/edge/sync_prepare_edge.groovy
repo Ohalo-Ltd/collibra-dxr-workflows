@@ -13,6 +13,7 @@ import groovy.json.JsonOutput
 // {{include:collibra_lookup.groovy}}
 // {{include:dxr_edge_sync.groovy}}
 
+announceDxrVersion('Sync Data X-Ray Classifications')
 def ids = dxrModelIds()
 def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
 if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {

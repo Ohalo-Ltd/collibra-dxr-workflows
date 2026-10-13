@@ -67,6 +67,16 @@ Run **Sync Data X-Ray Classifications** first — it is mandatory in this editio
 - **Latency**: each request through Edge takes roughly one second. Importing 5,000 files is ~100 requests, a couple of minutes.
 - **No results file**: the on-prem edition attaches the full result set as a ZIP'd CSV; the Edge edition shows a preview and imports instead.
 
+## Which version is installed?
+
+Every workflow states the release it came from, as *Data X-Ray workflows vX.Y.Z (onprem)* or *(cloud-edge)*:
+
+- at the end of its description on its overview page (Settings → Workflows → Definitions → select the workflow), also returned by the REST API (`GET /rest/2.0/workflowDefinitions/<id>`);
+- in small print at the bottom of its result, summary and failure tasks;
+- in the first `dgc.log` line of every run, and on the log line of any request that finally failed.
+
+Check all six after an upgrade: a workflow that was not re-imported still shows its old version. (Workflows imported before v2.3.0 show no version.)
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -74,6 +84,8 @@ Run **Sync Data X-Ray Classifications** first — it is mandatory in this editio
 | The workflow instance shows an **error** right after starting and never reaches a task. | The **connection name** does not match an HTTP connection on any Edge site (Collibra rejects the External API task before sending it). | Correct the variable, cancel the errored instance (Settings → Workflows → Instances), start again. |
 | Task **Search Failed** / **Sync Failed** with *Edge request failed* or *HTTP 401/403*. | The Edge site cannot reach Data X-Ray, or the connection's credentials are wrong or the account lacks permissions. | Test the connection in Settings → Edge; check the Edge host's network path; check the Data X-Ray account. |
 | *… is not visible to Data X-Ray through this connection …* | The classification was synced with a different Data X-Ray account (another organisational unit) or its Data X-Ray ID is stale. | Run **Sync Data X-Ray Classifications** through this connection, then search again. |
+| `dgc.log` shows *HTTP server error: status 500* for the External API task, and a search or rerun was retried with fewer results per request. | Collibra refused a Data X-Ray response that was too large for it and reported this as an HTTP 500 with no body (Data X-Ray itself answered normally). From v2.3.0 the workflow treats it like any oversized page and carries on with fewer results per request. | Nothing, unless it happens on every run: then lower **Data X-Ray results per request** to save the extra requests. |
+| Task **Search Failed**, or a rerun aborted, with *Even a one-file request to Data X-Ray failed … not a response-size problem*. | Even the smallest possible request failed, so Data X-Ray or the Edge connection is unavailable. | Check that Data X-Ray is up and test the HTTP connection in Settings → Edge; run the search again later. |
 | An import or rerun summary counts *failed* files, and `dgc.log` has *skipped result N (Data X-Ray file …) — on its own it is larger than Collibra allows* | That file's search result alone exceeds 100 KB, so Collibra cannot receive it through Edge. It is skipped; everything else is imported. An existing asset for it is left as it was and is not retired. | Contact Ohalo support with the file id from the log. |
 | *Cannot search: … was deleted in Data X-Ray (its Collibra asset is retired).* | A classification picked in the form was deleted in Data X-Ray; the sync marked its Collibra asset Obsolete, but the pickers still offer it (they cannot filter by status). | Remove it from the search. |
 | *Cannot search: … has no Data X-Ray Index ID in Collibra.* | The classification has no numeric index id yet: the classification sync has not run through Edge, or the standalone script ran without `--stamp-index-ids`. | Run **Sync Data X-Ray Classifications**, or re-run the standalone script with `--stamp-index-ids` (it updates the existing assets in place), then search again. |

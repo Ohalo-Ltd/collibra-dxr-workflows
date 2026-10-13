@@ -40,6 +40,7 @@ import com.collibra.dgc.workflow.api.exception.WorkflowException
 // {{include:collibra_lookup.groovy}}
 // {{include:worklist.groovy}}
 
+announceDxrVersion('Search Data X-Ray import')
 def ids = dxrModelIds()
 
 // --- Inputs from earlier tasks ------------------------------------------------

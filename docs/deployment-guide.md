@@ -189,6 +189,16 @@ everything without being added to these roles.
 - A test run of **Search Data X-Ray** completes without a "connection not set"
   error (i.e. Step 4 was done), and its results task offers the import controls.
 
+## Which version is installed?
+
+Every workflow states the release it came from, as *Data X-Ray workflows vX.Y.Z (onprem)* or *(cloud-edge)*:
+
+- at the end of its description on its overview page (Settings → Workflows → Definitions → select the workflow), also returned by the REST API (`GET /rest/2.0/workflowDefinitions/<id>`);
+- in small print at the bottom of its result, summary and failure tasks;
+- in the first `dgc.log` line of every run, and on the log line of any request that finally failed.
+
+Check all six after an upgrade: a workflow that was not re-imported still shows its old version. (Workflows imported before v2.3.0 show no version.)
+
 ## Updating the workflows
 
 To update a workflow later, simply **re-import** its new ZIP (Steps 1). Because

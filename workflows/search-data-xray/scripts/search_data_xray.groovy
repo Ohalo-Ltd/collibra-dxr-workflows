@@ -68,6 +68,7 @@ import java.util.zip.ZipOutputStream
 // {{include:collibra_lookup.groovy}}
 // {{include:search_common.groovy}}
 
+announceDxrVersion('Search Data X-Ray')
 def ids = dxrModelIds()
 
 // --- Read & validate workflow configuration variables -----------------------

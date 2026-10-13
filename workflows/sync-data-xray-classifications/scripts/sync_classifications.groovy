@@ -29,6 +29,7 @@ import com.collibra.dgc.workflow.api.exception.WorkflowException
 
 // --- Read & validate workflow configuration variables -----------------------
 
+announceDxrVersion('Sync Data X-Ray Classifications')
 def cfg = readRequiredConfig([
     dataxrayUrl      : 'Data X-Ray Base URL',
     dataxrayAuthToken: 'Data X-Ray Auth Token (Bearer)',

@@ -14,6 +14,7 @@ import groovy.json.JsonOutput
 // {{include:collibra_lookup.groovy}}
 // {{include:dxr_edge_sync.groovy}}
 
+announceDxrVersion('Sync Data X-Ray Classification (Nightly)')
 def ids = dxrModelIds()
 def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
 execution.setVariable('syncSkip', false)

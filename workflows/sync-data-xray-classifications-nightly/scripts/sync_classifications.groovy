@@ -28,6 +28,7 @@
 
 // --- Read & validate workflow configuration variables -----------------------
 
+announceDxrVersion('Sync Data X-Ray Classification (Nightly)')
 def cfg = readRequiredConfig([
     dataxrayUrl      : 'Data X-Ray Base URL',
     dataxrayAuthToken: 'Data X-Ray Auth Token (Bearer)',

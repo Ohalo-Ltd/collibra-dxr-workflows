@@ -16,6 +16,7 @@ import groovy.json.JsonOutput
 // {{include:collibra_lookup.groovy}}
 // {{include:dxr_edge.groovy}}
 
+announceDxrVersion('Search Data X-Ray import')
 def ids = dxrModelIds()
 
 def queryAssetId = string2Uuid((execution.getVariable('queryAssetId') ?: '').toString())
