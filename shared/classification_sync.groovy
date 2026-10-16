@@ -9,13 +9,16 @@
 //   – Upsert by Data X-Ray ID. Each Collibra asset carries a "Data X-Ray ID"
 //     attribute that stores the remote id; we match on that, so a Data X-Ray-side
 //     rename updates the existing asset rather than spawning a duplicate.
-//   – Name fallback: if no ID match is found but an asset with the same name
-//     already exists in the domain (e.g. created by an older name-based sync,
-//     so it has no Data X-Ray ID attribute), we adopt that asset and stamp the
-//     ID onto it instead of attempting a create Collibra rejects with
-//     termAlreadyExists. The next run then matches it by ID. Each existing
-//     asset is adopted at most once, so two remote items sharing a name surface
-//     the second as a normal per-item failure rather than colliding silently.
+//   – No name fallback: an item without an ID match is always a NEW asset,
+//     even when a same-named asset exists. A label deleted in Data X-Ray and
+//     re-created under the same name gets a new Data X-Ray ID, so it must not
+//     revive the old (retired) asset with its history and links.
+//   – Freeing a name: Collibra enforces full-name uniqueness per domain, so a
+//     create or rename onto a name held by an asset whose Data X-Ray ID is no
+//     longer in the catalogue (retired, or about to be retired by this run)
+//     first renames that asset to "<name> (retired <id fragment>)". A name held
+//     by a current item or by an asset without a Data X-Ray ID (added by hand)
+//     is never taken over — the item fails with a message naming the clash.
 //   – Name disambiguation: Collibra enforces full-name uniqueness per domain.
 //     When one name is used by more than one Data X-Ray resource (e.g. two
 //     annotators both named "VAT Number", one Named Entity and one Regular
@@ -69,7 +72,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
     def existingById = fetchAllAssetsInDomain(ids.classificationsDomainId)
     loggerApi.info("Found ${existingById.size()} existing asset(s) in classifications domain")
 
-    // Name → asset index for the name-based adoption fallback below. Collibra
+    // Name → asset index, for detecting name clashes (freeName below). Collibra
     // enforces full-name uniqueness per domain (the source of termAlreadyExists),
     // so within this domain getName() is effectively a unique key.
     def existingByName = [:]
@@ -78,6 +81,30 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
     // Map Data X-Ray ID → Collibra asset UUID, restricted to assets in this domain.
     def assetIdByDataxrayId = fetchAssetIdsByDataxrayId(ids.dataxrayIdAttrTypeId, existingById.keySet())
     loggerApi.info("Indexed ${assetIdByDataxrayId.size()} asset(s) with a Data X-Ray ID attribute")
+    def dataxrayIdByAssetId = [:]
+    assetIdByDataxrayId.each { dxrId, aid -> dataxrayIdByAssetId[aid] = dxrId }
+    def currentDataxrayIds = classifications.findAll { it?.id != null }.collect { it.id.toString().trim() } as Set
+
+    // Make `wanted` available for `forAssetId` (null = a create). Returns true
+    // when the name is free (or already this asset's). A holder whose Data X-Ray
+    // ID has left the catalogue is renamed out of the way; any other holder is
+    // left alone and the caller reports the clash.
+    def freeName = { String wanted, UUID forAssetId ->
+        def holder = existingByName[wanted]
+        if (holder == null || holder.getId() == forAssetId) { return true }
+        def holderDxrId = dataxrayIdByAssetId[holder.getId()]
+        if (!holderDxrId || currentDataxrayIds.contains(holderDxrId)) { return false }
+        def retiredName = "${wanted} (retired ${holderDxrId.replaceAll('-', '').take(8)})".toString()
+        assetApi.changeAsset(com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest.builder()
+            .id(holder.getId())
+            .name(retiredName)
+            .displayName(retiredName)
+            .build())
+        existingByName.remove(wanted)
+        existingByName[retiredName] = holder
+        loggerApi.info("Renamed asset [${holder.getId()}] '${wanted}' → '${retiredName}': its Data X-Ray ID ${holderDxrId} is no longer in the catalogue and the name is needed")
+        return true
+    }
 
     // --- Disambiguate colliding asset names --------------------------------------
 
@@ -158,8 +185,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             // termAlreadyExists; otherwise the bare Data X-Ray name is used.
             def assetName = (dataxrayId && disambiguatedName.containsKey(dataxrayId)) ? disambiguatedName[dataxrayId] : name.toString()
 
-            // Resolution: match by Data X-Ray ID, else adopt a same-named asset
-            // already in the domain, else create a new asset.
+            // Resolution: match by Data X-Ray ID, else create a new asset.
             UUID assetId = null
             boolean isUpdate = false
             String previousName = null
@@ -173,23 +199,10 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
                 wasRetired = existingById[idMatch]?.getStatus()?.getId() == ids.obsoleteStatusId
             }
 
-            // Fallback: a same-named asset already exists in the domain but has no
-            // Data X-Ray ID attribute (e.g. created by an older name-based sync).
-            // Adopt it rather than attempting a create Collibra would reject with
-            // termAlreadyExists; the ID attribute is stamped below, so the next run
-            // matches it by ID directly. Guard on touchedAssetIds so each existing
-            // asset is adopted at most once.
             if (assetId == null) {
-                def nameMatch = existingByName[assetName]
-                if (nameMatch && !touchedAssetIds.contains(nameMatch.getId())) {
-                    assetId = nameMatch.getId()
-                    isUpdate = true
-                    previousName = nameMatch.getName()
-                    wasRetired = nameMatch.getStatus()?.getId() == ids.obsoleteStatusId
+                if (!freeName(assetName, null)) {
+                    throw new IllegalStateException("the name '${assetName}' is already used by asset ${existingByName[assetName].getId()}, which is not a retired Data X-Ray classification".toString())
                 }
-            }
-
-            if (assetId == null) {
                 def asset = assetApi.addAsset(com.collibra.dgc.core.api.dto.instance.asset.AddAssetRequest.builder()
                     .name(assetName)
                     .displayName(assetName)
@@ -197,6 +210,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
                     .typeId(assetTypeId)
                     .build())
                 assetId = asset.getId()
+                existingByName[assetName] = asset
             }
 
             // Rename if the desired (possibly type-suffixed) name has diverged from
@@ -207,6 +221,10 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             def needsRename = isUpdate && previousName != null && previousName != assetName
             if (needsRename || wasRetired) {
                 try {
+                    if (needsRename && freeName(assetName, assetId)) {
+                        existingByName.remove(previousName)
+                        existingByName[assetName] = existingById[assetId]
+                    }
                     def change = com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest.builder().id(assetId)
                     if (needsRename) { change.name(assetName).displayName(assetName) }
                     if (wasRetired)  { change.statusId(ids.candidateStatusId) }

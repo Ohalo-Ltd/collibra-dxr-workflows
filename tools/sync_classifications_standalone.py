@@ -9,8 +9,10 @@ rerun and nightly workflows keep working against them:
   - reads GET /api/v1/classifications from Data X-Ray (Bearer token)
   - maps LABEL / ANNOTATOR / EXTRACTOR / CLASSIFICATION to the pack's asset types;
     ANNOTATOR_DOMAIN (data categories) is skipped, exactly like the workflow
-  - UPSERTS by the "Data X-Ray ID" attribute (the public UUID); adopts a same-named
-    untagged asset once; disambiguates colliding names with the subtype
+  - UPSERTS by the "Data X-Ray ID" attribute (the public UUID) only — never by name, so a
+    label re-created in Data X-Ray under an old name gets a new asset; a name still held
+    by an asset whose Data X-Ray ID left the catalogue is freed by renaming that asset
+    "<name> (retired <id fragment>)"; disambiguates colliding names with the subtype
   - renames when the Data X-Ray name changed; reactivates a retired asset that came back
   - tags every asset "dataxray-classification-sync"
   - sets Data X-Ray ID, Description, Link, Search Link, Sub Type (links prefixed with
@@ -333,6 +335,25 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
                 continue
             asset_by_dxr_id[v] = aid
     log(f"Domain has {len(existing)} asset(s), {len(asset_by_dxr_id)} with a Data X-Ray ID")
+    dxr_id_by_asset = {aid: v for v, aid in asset_by_dxr_id.items()}
+    current_dxr_ids = {str(it["id"]).strip() for it in items if it.get("id") is not None}
+
+    def free_name(wanted: str, for_asset_id: str | None) -> bool:
+        """Make `wanted` available for `for_asset_id` (None = a create); mirrors freeName in
+        classification_sync.groovy. Only a holder whose Data X-Ray ID left the catalogue is
+        renamed out of the way; any other holder is left alone and the caller reports it."""
+        holder = existing_by_name.get(wanted)
+        if holder is None or holder["id"] == for_asset_id:
+            return True
+        holder_dxr_id = dxr_id_by_asset.get(holder["id"])
+        if not holder_dxr_id or holder_dxr_id in current_dxr_ids:
+            return False
+        retired_name = f"{wanted} (retired {holder_dxr_id.replace('-', '')[:8]})"
+        collibra.change_asset(holder["id"], name=retired_name, displayName=retired_name)
+        del existing_by_name[wanted]
+        existing_by_name[retired_name] = holder
+        log(f"  renamed [{holder['id']}] '{wanted}' -> '{retired_name}': its Data X-Ray ID {holder_dxr_id} is no longer in the catalogue and the name is needed")
+        return True
 
     names = disambiguate(items)
     if names:
@@ -362,16 +383,18 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
                 asset_id = asset_by_dxr_id[dxr_id]
                 is_update, previous_name = True, existing[asset_id]["name"]
                 was_retired = existing[asset_id]["status"]["id"] == STATUS_OBSOLETE
-            elif asset_name in existing_by_name and existing_by_name[asset_name]["id"] not in touched:
-                # adopt a same-named asset without a Data X-Ray ID (older name-based sync), once
-                a = existing_by_name[asset_name]
-                asset_id, is_update, previous_name = a["id"], True, a["name"]
-                was_retired = a["status"]["id"] == STATUS_OBSOLETE
             if asset_id is None:
+                if not free_name(asset_name, None):
+                    raise RuntimeError(f"the name '{asset_name}' is already used by asset {existing_by_name[asset_name]['id']}, "
+                                       "which is not a retired Data X-Ray classification")
                 asset_id = collibra.add_asset(asset_name, CLASSIFICATIONS_DOMAIN_ID, type_id)
+                existing_by_name[asset_name] = {"id": asset_id, "name": asset_name}
 
             change = {}
             if is_update and previous_name is not None and previous_name != asset_name:
+                if free_name(asset_name, asset_id):
+                    existing_by_name.pop(previous_name, None)
+                    existing_by_name[asset_name] = existing[asset_id]
                 change.update(name=asset_name, displayName=asset_name)
             if was_retired:
                 change["statusId"] = STATUS_CANDIDATE
