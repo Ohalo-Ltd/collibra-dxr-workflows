@@ -4,8 +4,9 @@
 // run by an admin from the + Create menu.
 //
 // What it does:
-//   1. Ensures the community, domains, asset types, attribute types and the
-//      "returns / returned by" relation type the Data X-Ray sync, search,
+//   1. Ensures the community, domains, asset types, attribute types, the
+//      "returns", "formerly returns" and "formerly groups" relation types and
+//      the 'Not in any search' status the Data X-Ray sync, search,
 //      import and rerun workflows depend on all exist — creating any
 //      that are missing with FIXED canonical UUIDs. Those UUIDs are the same
 //      ones hardcoded as constants in the sync/search scripts and baked into
@@ -72,6 +73,7 @@ import com.collibra.dgc.core.api.dto.meta.assettype.AddAssetTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AddAttributeTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AttributeKind
 import com.collibra.dgc.core.api.dto.meta.relationtype.AddRelationTypeRequest
+import com.collibra.dgc.core.api.dto.meta.status.AddStatusRequest
 import com.collibra.dgc.core.api.dto.assignment.AddAssignmentRequest
 import com.collibra.dgc.core.api.dto.assignment.ChangeAssignmentRequest
 import com.collibra.dgc.core.api.dto.assignment.CharacteristicTypeAssignmentReference
@@ -134,6 +136,21 @@ def RETURNS_RELTYPE_ID    = '019e9210-f180-79dc-b5a0-6c31e94f82d5'
 // scope the phrase (OR-ed among themselves). The rerun rebuilds the phrase
 // clause from these relations, so annotator renames flow through.
 def TEXT_FILTER_RELTYPE_ID = '019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'
+
+// "formerly returns / formerly returned by" — a query→file link the rerun
+// swaps in when the query stops returning the file (and swaps back if it
+// returns it again), so the change stays visible instead of the link vanishing.
+def FORMERLY_RETURNS_RELTYPE_ID = '019e9212-1b22-7d4f-8c3a-6e5f7a8b9c01'
+
+// "formerly groups / formerly grouped by" — the same for a file→classification
+// link Data X-Ray no longer finds evidence for. Mirrors the system "groups"
+// type (Data Asset → Data Asset) on the target side.
+def FORMERLY_GROUPS_RELTYPE_ID  = '019e9212-2c33-7e50-9d4b-7f6a8b9c0d12'
+
+// Custom status 'Not in any search' — set on a file asset no saved search
+// returns any more (it used to become Obsolete). Added to the File assignment.
+def NOT_IN_SEARCH_STATUS_ID     = '019e9212-0a11-7c3e-9b2f-5d4e6f7a8b90'
+def NOT_IN_SEARCH_STATUS_NAME   = 'Not in any search'
 
 // System "groups / is grouped by" relation type — present on every instance.
 // query→classification and file→classification links use it.
@@ -233,11 +250,14 @@ def assignmentDefs = [
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID]],
     [assetTypeId: '01922a69-e7a0-7ac7-a581-c9ba9286ccf1', name: 'Annotator',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
-     relations: [[id: TEXT_FILTER_RELTYPE_ID, direction: 'TO_SOURCE']]], // text searched by queries
+     relations: [[id: TEXT_FILTER_RELTYPE_ID,     direction: 'TO_SOURCE'],   // text searched by queries
+                 [id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]], // formerly grouped by files
     [assetTypeId: '019c9fbd-a91b-7242-9451-79ab632163a3', name: 'Extractor',
-     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID]],
+     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
+     relations: [[id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]],
     [assetTypeId: '019c9fbe-25c3-71b7-90ac-057dd582fa1e', name: 'Label',
-     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID]],
+     customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
+     relations: [[id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]],
     // relations: relation types surfaced on the asset page (the page only
     // renders characteristics that are IN the assignment — relations written
     // via the API exist regardless, but stay invisible without this).
@@ -248,6 +268,7 @@ def assignmentDefs = [
                    QUERY_ATTR_ID, FILTER_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,      direction: 'TO_TARGET'],   // groups classifications
                  [id: RETURNS_RELTYPE_ID,     direction: 'TO_TARGET'],   // returns files
+                 [id: FORMERLY_RETURNS_RELTYPE_ID, direction: 'TO_TARGET'], // formerly returns files
                  [id: TEXT_FILTER_RELTYPE_ID, direction: 'TO_TARGET']]], // searches text in annotators
     // descriptionMin 0: imported file assets carry no Description, so a
     // mandatory Description would flag every one of them as incomplete.
@@ -255,7 +276,10 @@ def assignmentDefs = [
      customAttrs: [FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
                    DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
-                 [id: RETURNS_RELTYPE_ID, direction: 'TO_SOURCE']]], // returned by queries
+                 [id: RETURNS_RELTYPE_ID, direction: 'TO_SOURCE'],   // returned by queries
+                 [id: FORMERLY_GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],  // formerly groups classifications
+                 [id: FORMERLY_RETURNS_RELTYPE_ID, direction: 'TO_SOURCE']], // formerly returned by queries
+     extraStatusIds: [NOT_IN_SEARCH_STATUS_ID]],
 ]
 
 // Standard out-of-the-box statuses, Candidate first (it becomes the default).
@@ -418,6 +442,58 @@ try {
     loggerApi.error("ensure text-filter relation type failed: ${e.message}")
 }
 
+// "formerly returns / formerly returned by" and "formerly groups / formerly
+// grouped by": the rerun swaps a link to these when it stops applying.
+[
+    [id: FORMERLY_RETURNS_RELTYPE_ID, source: QUERY_TYPE_ID, role: 'formerly returns',
+     target: FILE_TYPE_ID, coRole: 'formerly returned by'],
+    [id: FORMERLY_GROUPS_RELTYPE_ID, source: FILE_TYPE_ID, role: 'formerly groups',
+     target: DATA_ASSET_TYPE_ID, coRole: 'formerly grouped by'],
+].each { rt ->
+    def label = "Relation type '${rt.role} / ${rt.coRole}'"
+    try {
+        def rtid = string2Uuid(rt.id)
+        if (relationTypeApi.exists(rtid)) {
+            skipped << label
+        } else {
+            relationTypeApi.addRelationType(AddRelationTypeRequest.builder()
+                .id(rtid)
+                .sourceTypeId(string2Uuid(rt.source))
+                .role(rt.role)
+                .targetTypeId(string2Uuid(rt.target))
+                .coRole(rt.coRole)
+                .build())
+            created << label
+            loggerApi.info("Created relation type ${rt.role}/${rt.coRole} [${rt.id}]")
+        }
+    } catch (Exception e) {
+        failed << "${label}: ${e.message}"
+        loggerApi.error("ensure relation type ${rt.role} failed: ${e.message}")
+    }
+}
+
+// --- Phase 4c: status ----------------------------------------------------------
+
+// 'Not in any search': the status a file asset gets when no saved search
+// returns it any more. Fixed canonical UUID like everything else.
+try {
+    def sid = string2Uuid(NOT_IN_SEARCH_STATUS_ID)
+    if (statusApi.exists(sid)) {
+        skipped << "Status '${NOT_IN_SEARCH_STATUS_NAME}'"
+    } else {
+        statusApi.addStatus(AddStatusRequest.builder()
+            .id(sid)
+            .name(NOT_IN_SEARCH_STATUS_NAME)
+            .description('Set by the Data X-Ray workflows on a file asset that no saved search returns any more. The file still exists in Data X-Ray; a search that matches it again sets it back to Candidate. A status set by a person is never changed by the workflows.')
+            .build())
+        created << "Status '${NOT_IN_SEARCH_STATUS_NAME}'"
+        loggerApi.info("Created status ${NOT_IN_SEARCH_STATUS_NAME} [${NOT_IN_SEARCH_STATUS_ID}]")
+    }
+} catch (Exception e) {
+    failed << "Status '${NOT_IN_SEARCH_STATUS_NAME}': ${e.message} (a status with this name may already exist under another id — rename it and re-run)"
+    loggerApi.error("ensure status failed: ${e.message}")
+}
+
 // --- Phase 5: assignments (best-effort, never disturb existing) -------------
 
 // Resolve the standard statuses once; only keep those that exist here.
@@ -434,7 +510,7 @@ def statusUuids = STANDARD_STATUS_IDS
 // changeAssignment replaces those lists too, and wiping hand-tuned rules is
 // worse than an attribute not showing on the asset page (the workflows write
 // attributes via the API regardless of assignment).
-def augmentOwnedAssignment = { own, spec, List missingAttrUuids, List missingRelSpecs ->
+def augmentOwnedAssignment = { own, spec, List missingAttrUuids, List missingRelSpecs, List missingStatusUuids ->
     if (!(own.getArticulationRules() ?: []).isEmpty() || !(own.getValidationRules() ?: []).isEmpty()) {
         skipped << "Assignment for '${spec.name}' (has hand-tuned rules — add the new characteristic(s) in the UI)"
         loggerApi.warn("Assignment for ${spec.name} carries articulation/validation rules; not auto-augmenting")
@@ -477,13 +553,13 @@ def augmentOwnedAssignment = { own, spec, List missingAttrUuids, List missingRel
     }
     def changeReq = ChangeAssignmentRequest.builder()
         .assignmentId(own.getId())
-        .statusIds(own.getStatuses().collect { it.getId() })
+        .statusIds(own.getStatuses().collect { it.getId() } + missingStatusUuids)
         .characteristicTypes(refs)
     def domainTypeIds = (own.getDomainTypes() ?: []).collect { it.getId() }
     if (!domainTypeIds.isEmpty()) { changeReq.domainTypeIds(domainTypeIds) }
     assignmentApi.changeAssignment(changeReq.build())
-    created << "Assignment for '${spec.name}' — surfaced ${missingAttrUuids.size()} attribute / ${missingRelSpecs.size()} relation type(s)"
-    loggerApi.info("Augmented assignment for ${spec.name}: +${missingAttrUuids.size()} attribute, +${missingRelSpecs.size()} relation type(s)")
+    created << "Assignment for '${spec.name}' — surfaced ${missingAttrUuids.size()} attribute / ${missingRelSpecs.size()} relation type(s) / ${missingStatusUuids.size()} status(es)"
+    loggerApi.info("Augmented assignment for ${spec.name}: +${missingAttrUuids.size()} attribute, +${missingRelSpecs.size()} relation type(s), +${missingStatusUuids.size()} status(es)")
 }
 
 assignmentDefs.each { spec ->
@@ -505,10 +581,13 @@ assignmentDefs.each { spec ->
             }
             def missingOnOwn = spec.customAttrs.collect { string2Uuid(it) }.findAll { !ownAttrIds.contains(it) }
             def missingRels = (spec.relations ?: []).findAll { !ownRelIds.contains(string2Uuid(it.id)) }
-            if (missingOnOwn.isEmpty() && missingRels.isEmpty()) {
+            def ownStatusIds = own.getStatuses().collect { it.getId() } as Set
+            def missingStatuses = (spec.extraStatusIds ?: []).collect { string2Uuid(it) }
+                .findAll { !ownStatusIds.contains(it) && statusApi.exists(it) }
+            if (missingOnOwn.isEmpty() && missingRels.isEmpty() && missingStatuses.isEmpty()) {
                 skipped << "Assignment for '${spec.name}' (already has its own)"
             } else {
-                augmentOwnedAssignment(own, spec, missingOnOwn, missingRels)
+                augmentOwnedAssignment(own, spec, missingOnOwn, missingRels, missingStatuses)
             }
             return
         }
@@ -560,7 +639,7 @@ assignmentDefs.each { spec ->
 
         assignmentApi.addAssignment(AddAssignmentRequest.builder()
             .assetTypeId(tid)
-            .statusIds(statusUuids)
+            .statusIds(statusUuids + (spec.extraStatusIds ?: []).collect { string2Uuid(it) }.findAll { statusApi.exists(it) })
             .characteristicTypes(refs)
             .build())
         created << "Assignment for '${spec.name}'"

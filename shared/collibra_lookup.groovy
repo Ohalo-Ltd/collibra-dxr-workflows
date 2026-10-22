@@ -96,10 +96,11 @@ def buildClassificationIndex(UUID classificationsDomainId, UUID dataxrayIdAttrTy
     return [byDxrId: byDxrId, byName: byName]
 }
 
-// Map of far-end asset id → relation id for an asset's relations of one type:
-// pass sourceId to walk targets, or targetId to walk sources.
-def relationIdsByFarEnd(UUID relationTypeId, UUID sourceId, UUID targetId) {
-    def ids = [:]
+// Map of far-end asset id → [id: relation id, createdBy: user id] for an
+// asset's relations of one type: pass sourceId to walk targets, or targetId to
+// walk sources.
+def relationsByFarEnd(UUID relationTypeId, UUID sourceId, UUID targetId) {
+    def out = [:]
     def cursor = ''
     while (true) {
         def builder = com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest.builder()
@@ -110,12 +111,65 @@ def relationIdsByFarEnd(UUID relationTypeId, UUID sourceId, UUID targetId) {
         if (targetId != null) { builder.targetId(targetId) }
         def page = relationApi.findRelations(builder.build())
         page.getResults().each { rel ->
-            ids[sourceId != null ? rel.getTarget().getId() : rel.getSource().getId()] = rel.getId()
+            out[sourceId != null ? rel.getTarget().getId() : rel.getSource().getId()] =
+                [id: rel.getId(), createdBy: rel.getCreatedBy()]
         }
         cursor = page.getNextCursor()
         if (!cursor) break
     }
-    return ids
+    return out
+}
+
+// Map of far-end asset id → relation id (see relationsByFarEnd).
+def relationIdsByFarEnd(UUID relationTypeId, UUID sourceId, UUID targetId) {
+    return relationsByFarEnd(relationTypeId, sourceId, targetId).collectEntries { k, v -> [(k): v.id] }
+}
+
+// The users whose relations count as the integration's own: Collibra's
+// workflow user (what async tasks run as) and whoever this task runs as.
+def integrationIdentityIds() {
+    def out = [dxrWorkflowUserId()] as Set
+    try {
+        def me = userApi.getCurrentUser()
+        if (me?.isPresent()) { out << me.get().getId() }
+    } catch (Exception meEx) {
+        loggerApi.debug("Could not read the current user: ${meEx.message}")
+    }
+    return out
+}
+
+// Every Data X-Ray File asset on the instance, wherever it has been moved —
+// cursor-paged by asset type, not domain. Calls `visit` with each asset.
+def eachFileAsset(Map ids, Closure visit) {
+    def cursor = ''
+    while (true) {
+        def page = assetApi.findAssets(com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest.builder()
+            .typeIds([ids.fileTypeId])
+            .limit(1000)
+            .cursor(cursor)
+            .build())
+        page.getResults().each { visit(it) }
+        cursor = page.getNextCursor()
+        if (!cursor) break
+    }
+}
+
+// The file-asset population the 25,000 cap applies to: every Data X-Ray File
+// asset on the instance, including ones moved out of the Files domain.
+def countFileAssets(Map ids) {
+    int count = 0
+    eachFileAsset(ids) { count++ }
+    return count
+}
+
+// Tag names on an asset ([] when they can't be read).
+def assetTagNames(UUID assetId) {
+    try {
+        return assetApi.getAssetTags(assetId).collect { it.getName() }
+    } catch (Exception tagEx) {
+        loggerApi.warn("Could not read tags of asset ${assetId}: ${tagEx.message}")
+        return []
+    }
 }
 
 // The single (first) value of an attribute type on an asset, '' when absent.
@@ -145,6 +199,21 @@ def addAssetTagQuietly(UUID assetId, String tagName, String successNote) {
         return true
     } catch (Exception tagEx) {
         loggerApi.warn("Failed to tag asset ${assetId} with ${tagName}: ${tagEx.message}")
+        return false
+    }
+}
+
+// Remove a tag from an asset, logging (not throwing) on failure.
+def removeAssetTagQuietly(UUID assetId, String tagName, String successNote) {
+    try {
+        assetApi.removeAssetTags(com.collibra.dgc.core.api.dto.instance.asset.RemoveAssetTagsRequest.builder()
+            .assetId(assetId)
+            .tagNames([tagName])
+            .build())
+        if (successNote) { loggerApi.info(successNote) }
+        return true
+    } catch (Exception tagEx) {
+        loggerApi.warn("Failed to remove tag ${tagName} from asset ${assetId}: ${tagEx.message}")
         return false
     }
 }

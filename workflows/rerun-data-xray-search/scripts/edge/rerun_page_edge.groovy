@@ -26,6 +26,7 @@ def conditionName = (execution.getVariable('conditionName') ?: '').toString()
 def classIndex = readJsonVariable('classIndex', [byDxrId: [:], byName: [:]])
 def previousFileIds = readJsonVariable('previousFileIds', [])
 int filesDomainCount = (execution.getVariable('filesDomainCount') ?: 0) as int
+boolean noAutoImport = execution.getVariable('rerunNoAutoImport') == true
 
 def opts = [
     label       : 'Import batch',
@@ -34,6 +35,7 @@ def opts = [
     pageSize    : edgePageSize(execution.getVariable('dataxrayPageSize')),
     index       : classIndex,
     classIndex  : classIndex,
+    createNew   : !noAutoImport,
     onPageZero  : { Map page ->
         if (page.total > page.maxResultWindow) {
             return "Rerun of '${conditionName}' refused: it matches ${page.total} file(s), more than the ${page.maxResultWindow} results Data X-Ray can page through in one query.".toString()
@@ -42,9 +44,11 @@ def opts = [
         // files grow the domain. Without the full row set up front, bound the
         // growth optimistically here; processFileBatch never creates beyond
         // what each page actually holds.
-        int projected = filesDomainCount + Math.max(0, page.total - previousFileIds.size())
+        // Tagged dataxray-no-auto-import: no new assets, so no growth.
+        int growth = noAutoImport ? 0 : Math.max(0, page.total - previousFileIds.size())
+        int projected = filesDomainCount + growth
         if (projected > dxrMaxTotalFileAssets()) {
-            return "Rerun of '${conditionName}' refused: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this rerun could add up to ${Math.max(0, page.total - previousFileIds.size())} more — the projected ${projected} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.".toString()
+            return "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this rerun could add up to ${growth} more — the projected ${projected} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.".toString()
         }
         return null
     },

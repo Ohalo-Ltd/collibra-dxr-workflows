@@ -390,6 +390,7 @@ def zeroEdgeImportCounters(int total, int pageSize) {
     execution.setVariable('importRelationCount', 0)
     execution.setVariable('importRelationsRemovedCount', 0)
     execution.setVariable('importSkippedClassifications', 0)
+    execution.setVariable('importSkippedNewCount', 0)
 }
 
 // --- The files loop: one page per External API task, plus datasource lookups ---
@@ -536,7 +537,8 @@ def processEdgePage(Map page, Map dsNames, Map opts) {
 }
 
 // The import/rerun page handler: upsert the page as one batch and keep counters.
-// opts additionally: queryAssetId (UUID), classIndex (Map byDxrId/byName → asset ids).
+// opts additionally: queryAssetId (UUID), classIndex (Map byDxrId/byName → asset ids),
+// createNew (default true; false = refresh existing file assets only).
 def importEdgePage(Map opts, Map page, List tuples) {
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
     int pageSize = edgeCurrentPageSize(opts.pageSize as int)
@@ -548,10 +550,11 @@ def importEdgePage(Map opts, Map page, List tuples) {
     execution.setVariable('importSkippedClassifications',
         ((execution.getVariable('importSkippedClassifications') ?: 0) as int) + unresolved)
     def res = tuples.isEmpty()
-        ? [created: 0, updated: 0, failed: 0, relationsAdded: 0, relationsRemoved: 0]
-        : processFileBatch(tuples, opts.queryAssetId, "${opts.label} ${pageNo + 1}/${batchCount}".toString())
+        ? [created: 0, updated: 0, failed: 0, relationsAdded: 0, relationsRemoved: 0, skippedNew: 0]
+        : processFileBatch(tuples, opts.queryAssetId, "${opts.label} ${pageNo + 1}/${batchCount}".toString(),
+                           [createNew: opts.createNew != false])
     accumulateBatchCounters(res)
     if (opts.afterPage) { opts.afterPage(tuples, pageNo) }
-    loggerApi.info("${opts.label} ${pageNo + 1}/${batchCount}: +${res.created} created, +${res.updated} updated, +${res.failed} failed, +${res.relationsAdded}/-${res.relationsRemoved} relation(s); ${Math.min((pageNo + 1) * pageSize, page.total)}/${page.total} done")
+    loggerApi.info("${opts.label} ${pageNo + 1}/${batchCount}: +${res.created} created, +${res.updated} updated, +${res.failed} failed, ${res.skippedNew} not imported, +${res.relationsAdded}/-${res.relationsRemoved} relation(s); ${Math.min((pageNo + 1) * pageSize, page.total)}/${page.total} done")
     return true
 }

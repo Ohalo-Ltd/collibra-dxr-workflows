@@ -64,6 +64,7 @@ def abort = { String title, String message ->
     execution.setVariable('previousFileIds', '[]')
     execution.setVariable('rerunRetiredCount', 0)
     execution.setVariable('rerunUnlinkedCount', 0)
+    execution.setVariable('rerunNoAutoImport', false)
     if (!headless) {
         def wf = new WorkflowException(message)
         wf.setTitleMessage(title)
@@ -85,6 +86,15 @@ if (!cfg.missing.isEmpty()) {
 }
 def dataxrayUrl       = normalizeBaseUrl(cfg.config.dataxrayUrl)
 def dataxrayAuthToken = cfg.config.dataxrayAuthToken
+
+// The 'Not in any search' status and the "formerly returns" relation type
+// come from Configure Data X-Ray Workflows (v2.4+): refuse to run without them
+// rather than half-apply the new lifecycle.
+def modelGap = rerunModelGap(ids)
+if (modelGap) {
+    abort('Rerun Data X-Ray Search — run Configure first', modelGap)
+    return
+}
 
 // --- The query asset ---------------------------------------------------------------
 
@@ -110,6 +120,11 @@ if (queryAsset.getType()?.getId() != ids.queryAssetTypeId) {
 def conditionName = queryAsset.getName()
 execution.setVariable('conditionName', conditionName)
 execution.setVariable('queryAssetId', queryId.toString())
+
+// Tagged dataxray-no-auto-import: refresh the file assets already in Collibra
+// and create none for new matching files.
+boolean noAutoImport = assetTagNames(queryId).contains(dxrNoAutoImportTag())
+execution.setVariable('rerunNoAutoImport', noAutoImport)
 
 // --- Rebuild the criteria from relations + the stored filter -------------------------
 
@@ -176,11 +191,12 @@ int alreadyOurs = 0
 workItems.each { tuple ->
     if (previousFileIds.contains(deterministicFileAssetId(tuple[0]).toString())) { alreadyOurs++ }
 }
-int filesDomainCount = countAssetsInDomain(ids.filesDomainId)
-int projectedTotal = filesDomainCount + (workItems.size() - alreadyOurs)
+int filesDomainCount = countFileAssets(ids)
+int newFiles = noAutoImport ? 0 : workItems.size() - alreadyOurs
+int projectedTotal = filesDomainCount + newFiles
 if (projectedTotal > dxrMaxTotalFileAssets()) {
     abort('Rerun Data X-Ray Search refused',
-        "Rerun of '${conditionName}' refused: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this rerun would add ${workItems.size() - alreadyOurs} more — the projected ${projectedTotal} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.")
+        "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this rerun would add ${newFiles} more — the projected ${projectedTotal} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.")
     return
 }
 

@@ -84,10 +84,10 @@ if (skippedNoId > 0) {
 
 // --- Re-check the instance-wide cap -------------------------------------------
 
-int filesDomainCount = countAssetsInDomain(ids.filesDomainId)
+int filesDomainCount = countFileAssets(ids)
 int projectedTotal = filesDomainCount + workItems.size()
 if (projectedTotal > dxrMaxTotalFileAssets()) {
-    def msg = "Import refused: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this search matched ${workItems.size()} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
+    def msg = "Import refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this search matched ${workItems.size()} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
     loggerApi.error(msg)
     def wf = new WorkflowException(msg)
     wf.setTitleMessage('Data X-Ray import refused')

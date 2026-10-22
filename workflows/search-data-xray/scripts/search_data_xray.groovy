@@ -197,9 +197,9 @@ addAttributeQuietly(queryId, ids.filesAttrTypeId, renderPreviewHtml(shown, total
 
 int filesDomainCount = 0
 try {
-    filesDomainCount = countAssetsInDomain(ids.filesDomainId)
+    filesDomainCount = countFileAssets(ids)
 } catch (Exception countEx) {
-    loggerApi.warn("Could not count assets in the Data X-Ray Files domain: ${countEx.message}")
+    loggerApi.warn("Could not count the Data X-Ray file assets: ${countEx.message}")
 }
 def feasibility = computeImportFeasibility(total, filesDomainCount, totalDisplay)
 

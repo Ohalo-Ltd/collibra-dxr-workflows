@@ -29,10 +29,10 @@ int pageSize     = Math.min(configuredPageSize, edgeCurrentPageSize(configuredPa
 
 // --- Re-check the instance-wide cap -------------------------------------------
 
-int filesDomainCount = countAssetsInDomain(ids.filesDomainId)
+int filesDomainCount = countFileAssets(ids)
 int projectedTotal = filesDomainCount + total
 if (projectedTotal > dxrMaxTotalFileAssets()) {
-    def msg = "Import refused: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this search matched ${total} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
+    def msg = "Import refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this search matched ${total} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
     loggerApi.error(msg)
     def wf = new WorkflowException(msg)
     wf.setTitleMessage('Data X-Ray import refused')

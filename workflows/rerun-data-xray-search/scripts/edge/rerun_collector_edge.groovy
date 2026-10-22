@@ -39,6 +39,7 @@ def abort = { String title, String message ->
     execution.setVariable('previousFileIds', '[]')
     execution.setVariable('rerunRetiredCount', 0)
     execution.setVariable('rerunUnlinkedCount', 0)
+    execution.setVariable('rerunNoAutoImport', false)
     if (!headless) {
         def wf = new WorkflowException(message)
         wf.setTitleMessage(title)
@@ -61,6 +62,14 @@ execution.setVariable('dataxrayUrl', dataxrayUrl)
 int pageSize = edgePageSize(execution.getVariable('dataxrayPageSize'))
 execution.setVariable('dataxrayPageSize', pageSize.toString())
 
+// The 'Not in any search' status and the "formerly" relation types come from
+// Configure Data X-Ray Workflows (v2.4+): refuse to run without them.
+def modelGap = rerunModelGap(ids)
+if (modelGap) {
+    abort('Rerun Data X-Ray Search — run Configure first', modelGap)
+    return
+}
+
 // --- The query asset ---------------------------------------------------------------
 
 def queryId = item?.getId()
@@ -77,6 +86,11 @@ if (queryAsset.getType()?.getId() != ids.queryAssetTypeId) {
 def conditionName = queryAsset.getName()
 execution.setVariable('conditionName', conditionName)
 execution.setVariable('queryAssetId', queryId.toString())
+
+// Tagged dataxray-no-auto-import: refresh the file assets already in Collibra
+// and create none for new matching files.
+boolean noAutoImport = assetTagNames(queryId).contains(dxrNoAutoImportTag())
+execution.setVariable('rerunNoAutoImport', noAutoImport)
 
 // --- Rebuild the criteria from relations + the stored filter -------------------------
 
@@ -116,7 +130,7 @@ execution.setVariable('dxrQueryItems', JsonOutput.toJson(q.items))
 
 def previousFileIds = collectPreviousFileIds(queryId, ids)
 execution.setVariable('previousFileIds', JsonOutput.toJson(previousFileIds as List))
-execution.setVariable('filesDomainCount', countAssetsInDomain(ids.filesDomainId))
+execution.setVariable('filesDomainCount', countFileAssets(ids))
 
 // --- Counters + kick off the results loop ----------------------------------------------
 

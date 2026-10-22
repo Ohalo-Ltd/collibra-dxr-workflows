@@ -25,6 +25,8 @@ def dxrModelIds() {
         groupsRelationTypeId   : string2Uuid('00000000-0000-0000-0000-000000007017'),  // groups (query→classification, file→classification)
         returnsRelationTypeId  : string2Uuid('019e9210-f180-79dc-b5a0-6c31e94f82d5'),  // returns / returned by (query→file)
         textFilterRelTypeId    : string2Uuid('019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'),  // searches text in (query→Annotator)
+        formerlyReturnsRelationTypeId: string2Uuid('019e9212-1b22-7d4f-8c3a-6e5f7a8b9c01'), // formerly returns (query→file): the query stopped returning the file
+        formerlyGroupsRelationTypeId : string2Uuid('019e9212-2c33-7e50-9d4b-7f6a8b9c0d12'), // formerly groups (file→classification): Data X-Ray no longer finds it on the file
         // Attribute types
         descriptionAttrTypeId  : string2Uuid('00000000-0000-0000-0000-000000003114'),  // Collibra system Description
         filesAttrTypeId        : string2Uuid('019e2736-8bd0-727a-b4ab-6899517a3e73'),  // Files (HTML preview table)
@@ -42,6 +44,8 @@ def dxrModelIds() {
         // Standard statuses (same UUIDs on every instance)
         obsoleteStatusId       : string2Uuid('00000000-0000-0000-0000-000000005011'),
         candidateStatusId      : string2Uuid('00000000-0000-0000-0000-000000005008'),
+        // Custom status created by configure: a file asset no saved search returns any more
+        notInAnySearchStatusId : string2Uuid('019e9212-0a11-7c3e-9b2f-5d4e6f7a8b90'),
     ]
 }
 
@@ -80,5 +84,40 @@ def announceDxrVersion(String workflowName) {
 // Tag on a query asset that opts it into the nightly file sync.
 def dxrKeepInSyncTag() { return 'dataxray-keep-in-sync' }
 
+// Tag on a query asset that stops reruns (manual or nightly) creating assets
+// for NEW matching files: they refresh the file assets already in Collibra only.
+def dxrNoAutoImportTag() { return 'dataxray-no-auto-import' }
+
+// Collibra's built-in workflow user. Asynchronous script tasks run as this
+// user, so every asset and relation the integration writes records it as
+// createdBy. Relations created by anyone else were made by a person (or
+// another process) and the integration never removes or changes them.
+def dxrWorkflowUserId() { return string2Uuid('00000000-0000-0000-0000-000000900003') }
+
+// File-asset statuses the integration manages. Any other status on a file asset
+// was set by a person (Accepted, Under Review, …) and is never changed by a sync.
+def isIntegrationOwnedFileStatus(UUID statusId, Map ids) {
+    return statusId == null || statusId == ids.candidateStatusId ||
+        statusId == ids.notInAnySearchStatusId || statusId == ids.obsoleteStatusId
+}
+
+// Statuses a sync flips back to Candidate when a search matches the file again:
+// 'Not in any search', and Obsolete (what releases before v2.4 used).
+def isParkedFileStatus(UUID statusId, Map ids) {
+    return statusId == ids.notInAnySearchStatusId || statusId == ids.obsoleteStatusId
+}
+
 // Tag stamped on every classification asset written by the classification sync.
 def dxrClassificationSyncTag() { return 'dataxray-classification-sync' }
+
+// Why a rerun can't run yet, or '' when it can: the v2.4 lifecycle needs the
+// 'Not in any search' status and the "formerly" relation types that
+// Configure Data X-Ray Workflows creates.
+def rerunModelGap(Map ids) {
+    def missing = []
+    if (!statusApi.exists(ids.notInAnySearchStatusId)) { missing << "the status 'Not in any search'" }
+    if (!relationTypeApi.exists(ids.formerlyReturnsRelationTypeId)) { missing << "the relation type 'formerly returns'" }
+    if (!relationTypeApi.exists(ids.formerlyGroupsRelationTypeId)) { missing << "the relation type 'formerly groups'" }
+    if (missing.isEmpty()) { return '' }
+    return "This instance is missing ${missing.join(', ')}. Run Configure Data X-Ray Workflows once (as an admin) after upgrading the Data X-Ray workflows, then rerun.".toString()
+}
