@@ -28,6 +28,8 @@ if (execution.getVariable('searchFailed') == true) {
     execution.setVariable('importAllowed', false)
     execution.setVariable('importDecision', false)
     execution.setVariable('keepInSync', false)
+    execution.setVariable('autoImportNewFiles', false)
+    execution.setVariable('syncOffered', false)
     return
 }
 
@@ -94,5 +96,7 @@ execution.setVariable('importBlockedMessage', feasibility.importBlockedMessage)
 execution.setVariable('filesDomainCount', filesDomainCount)
 execution.setVariable('importDecision', false)
 execution.setVariable('keepInSync', false)
+execution.setVariable('autoImportNewFiles', true)
+execution.setVariable('syncOffered', total > 0)
 
 loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")

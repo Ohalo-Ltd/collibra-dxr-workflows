@@ -20,7 +20,6 @@ announceDxrVersion('Search Data X-Ray import')
 def ids = dxrModelIds()
 
 def queryAssetId = string2Uuid((execution.getVariable('queryAssetId') ?: '').toString())
-def keepInSync   = execution.getVariable('keepInSync') == true
 int total        = (execution.getVariable('resultCount') ?: 0) as int
 // Start no larger than the preview ended up using: if Collibra refused its
 // rows as too large at the configured size, the import pages would be too.
@@ -53,9 +52,3 @@ def items = readJsonVariable('dxrQueryItems', [])
 startEdgeFilesPage(items, 0, pageSize, null)
 loggerApi.info("Import ready: ${total} file(s) in pages of ${pageSize}; files domain currently holds ${filesDomainCount}")
 
-// --- Keep-in-sync flag ----------------------------------------------------------
-
-if (keepInSync) {
-    addAssetTagQuietly(queryAssetId, dxrKeepInSyncTag(),
-        "Tagged query asset ${queryAssetId} with ${dxrKeepInSyncTag()} — the nightly file sync will rerun this search")
-}

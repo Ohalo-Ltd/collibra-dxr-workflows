@@ -50,7 +50,6 @@ def dataxrayAuthToken = (execution.getVariable('dataxrayAuthToken') ?: '').toStr
 def queryString       = (execution.getVariable('queryString') ?: '').toString()
 if (queryString == '(all files)') { queryString = '' }
 def queryAssetId      = string2Uuid((execution.getVariable('queryAssetId') ?: '').toString())
-def keepInSync        = execution.getVariable('keepInSync') == true
 
 // --- Stream the query results into the work list ------------------------------
 
@@ -108,9 +107,3 @@ if (unresolvedClassifications > 0) {
 int batchCount = publishWorkList(workItems, unresolvedClassifications)
 loggerApi.info("Import collector ready: ${workItems.size()} file(s) in ${batchCount} batch(es) of ${dxrBatchSize()}; files domain currently holds ${filesDomainCount}")
 
-// --- Keep-in-sync flag ----------------------------------------------------------
-
-if (keepInSync) {
-    addAssetTagQuietly(queryAssetId, dxrKeepInSyncTag(),
-        "Tagged query asset ${queryAssetId} with ${dxrKeepInSyncTag()} — the nightly file sync will rerun this search")
-}

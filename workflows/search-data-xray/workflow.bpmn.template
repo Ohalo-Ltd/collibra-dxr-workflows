@@ -7,6 +7,7 @@
     startEvent (form: searchDataXrayForm — rendered as the + Create dialog)
       → searchDataXrayTask (script)
       → resultsTask (user form: searchResultsForm — results + "import?" decision)
+      → queryFlagsTask (script: tags the query — keep in sync / no automatic import)
       → decideImportGateway
           ├─ importDecision unticked → endEvent
           └─ importDecision ticked   → importCollectorTask (script, sync:
@@ -90,6 +91,19 @@
       </extensionElements>
     </exclusiveGateway>
 
+    <!-- Records the results task's sync options on the query asset as tags
+         (keep in sync nightly / no automatic import of new files), whether or
+         not the user imports now. -->
+    <scriptTask id="queryFlagsTask"
+                name="Apply Sync Options"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:apply_query_flags.groovy}}</script>
+    </scriptTask>
+
     <scriptTask id="importCollectorTask"
                 name="Collect Import Work List"
                 scriptFormat="groovy"
@@ -152,7 +166,12 @@
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow3" sourceRef="resultsTask" targetRef="decideImportGateway">
+    <sequenceFlow id="flow3" sourceRef="resultsTask" targetRef="queryFlagsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowFlags" sourceRef="queryFlagsTask" targetRef="decideImportGateway">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
@@ -215,6 +234,10 @@
         <omgdc:Bounds x="400" y="230" width="120" height="80"/>
       </bpmndi:BPMNShape>
 
+      <bpmndi:BPMNShape bpmnElement="queryFlagsTask" id="BPMNShape_queryFlagsTask">
+        <omgdc:Bounds x="400" y="100" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
       <bpmndi:BPMNShape bpmnElement="decideImportGateway" id="BPMNShape_decideImportGateway">
         <omgdc:Bounds x="570" y="250" width="40" height="40"/>
         <bpmndi:BPMNLabel>
@@ -264,7 +287,13 @@
         <omgdi:waypoint x="400" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
-        <omgdi:waypoint x="520" y="270"/>
+        <omgdi:waypoint x="460" y="230"/>
+        <omgdi:waypoint x="460" y="180"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowFlags" id="BPMNEdge_flowFlags">
+        <omgdi:waypoint x="520" y="140"/>
+        <omgdi:waypoint x="545" y="140"/>
+        <omgdi:waypoint x="545" y="270"/>
         <omgdi:waypoint x="570" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowSkipImport" id="BPMNEdge_flowSkipImport">

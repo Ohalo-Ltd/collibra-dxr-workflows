@@ -224,6 +224,8 @@ execution.setVariable('filesDomainCount', filesDomainCount)
 // overwrites them.
 execution.setVariable('importDecision', false)
 execution.setVariable('keepInSync', false)
+execution.setVariable('autoImportNewFiles', true)
+execution.setVariable('syncOffered', total > 0)
 
 loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, attachment=${attachmentName ?: '(none)'}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")
 
