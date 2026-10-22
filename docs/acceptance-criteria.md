@@ -8,8 +8,9 @@ written as Given / When / Then and carries a status:
   Data X-Ray instance (August 2026). Rows for the v2.4 file lifecycle (the
   *Not in any search* status, *formerly* links, links and statuses set by
   people, the `dataxray-no-auto-import` tag) were verified on 22 October 2026
-  with the on-prem edition only; the Cloud + Edge edition has not yet been
-  verified for them.
+  in both editions (on-prem, and Cloud + Edge through an Edge HTTP
+  connection). The one-off Obsolete → *Not in any search* migration (NIGHT-7)
+  was verified once; it runs identically in both editions.
 - 🔹 **Implemented** — behavior is coded and reviewed but has not been
   individually demonstrated.
 - ⚠️ **Decision needed** — a gap or product decision, listed in
