@@ -3,7 +3,7 @@
 This document explains how the Data X-Ray workflows turn search results into
 **Data X-Ray File** assets in Collibra and what happens to those assets over
 time: how they are created, how many there can be, how they are kept in sync,
-how they become orphaned and retired, and what — if anything — ever deletes
+how they drop out of every search, and what — if anything — ever deletes
 them. It is written for Collibra administrators and Data X-Ray Admins who
 operate the integration; the companion [deployment guide](deployment-guide.md)
 covers installation.
@@ -15,8 +15,11 @@ Terminology used throughout:
 | **File asset** | An asset of type **Data X-Ray File**, created in the **Data X-Ray Files** domain. One per file in Data X-Ray. |
 | **Query asset** | An asset of type **Unstructured Data Query** in the **Data X-Ray Custom Queries** domain. Created by **Search Data X-Ray**; one per saved search. |
 | **Returns** | The relation from a query asset to each file asset its search currently matches (*query* **returns** *file* / *file* **returned by** *query*). This is the integration's record of "which searches this file belongs to". |
-| **Retired** | Collibra status **Obsolete**. The asset and everything attached to it (attributes, relations, comments, attachments, history) is kept. |
-| **Active** | Collibra status **Candidate** — the status every file asset is created with and reactivated to. |
+| **Formerly returns** | The relation a *returns* link becomes when the search stops matching the file (*query* **formerly returns** *file* / *file* **formerly returned by** *query*). It is a record only: it never counts as the file being returned. |
+| **Formerly groups** | The same for a classification link: when Data X-Ray no longer finds a label, extractor or annotator on a file, the file's *groups* link to it becomes *file* **formerly groups** *classification* / *classification* **formerly grouped by** *file*. |
+| **Active** | Collibra status **Candidate** — the status every file asset is created with and set back to when a search matches it again. |
+| **Not in any search** | A status created by **Configure Data X-Ray Workflows** for file assets that no saved search returns any more. The asset and everything attached to it (attributes, relations, comments, attachments, history) is kept. Releases before v2.4 used **Obsolete** for this. |
+| **Status set by a person** | Any status other than Candidate, Not in any search and Obsolete (for example Accepted, Under Review or Approval Pending). The integration never changes it. |
 | **Rerun** | A run of **Rerun Data X-Ray Search** for one query asset, started by a user from the asset's page or headlessly by **Sync Data X-Ray Files (Nightly)**. |
 
 Where everything lives: **Configure Data X-Ray Workflows** creates one
@@ -29,35 +32,42 @@ Name** attribute.
 ## The lifecycle at a glance
 
 ```
-              Search Data X-Ray                       Rerun (manual or nightly)
-   (import ticked on the results task)         (file still matches the query)
-                     │                                          │
-                     ▼                                          ▼
-   ┌──────────────────────────────┐   rename/attributes/   ┌──────────────┐
-   │ created — status Candidate   │ ───── relations ─────▶ │   updated    │
-   │ linked: query ──returns──▶ file │       refreshed        │ (same asset) │
-   └──────────────────────────────┘                        └──────────────┘
-                     │                                          ▲
-   file no longer matches this query (rerun)                    │
-   or the query asset was deleted (nightly sweep)     file matches any query again
-                     │                                  (rerun or new import)
-                     ▼                                          │
-   ┌──────────────────────────────┐                             │
-   │ unlinked from that query     │                             │
-   └──────────────────────────────┘                             │
-                     │  no query returns it any more            │
-                     ▼                                          │
-   ┌──────────────────────────────┐   reactivated (Candidate)   │
-   │ retired — status Obsolete    │ ────────────────────────────┘
-   │ (kept, never deleted)        │
-   └──────────────────────────────┘
-                     │
-                     ▼   only by a human — bulk delete in the Files domain
-                  deleted
+       Search Data X-Ray ("Import now"),             Rerun (manual or nightly):
+       or a rerun that finds a new match *           the file still matches
+                   │                                            │
+                   ▼                                            ▼
+  ┌──────────────────────────────────┐ attributes, links ┌──────────────┐
+  │ created — status Candidate       │ ──── updated ───▶ │   updated    │
+  │ query ──returns──▶ file          │                   │ (same asset) │
+  └──────────────────────────────────┘                   └──────────────┘
+                   │                                            ▲
+     the file no longer matches this query (rerun)              │ a search
+                   │                                            │ matches the
+                   ▼                                            │ file again
+  ┌──────────────────────────────────┐                          │ (rerun or
+  │ the link becomes                 │                          │ import)
+  │ query ──formerly returns──▶ file │                          │
+  └──────────────────────────────────┘                          │
+                   │  no query returns it any more              │
+                   │  (or, after a query asset is deleted,      │
+                   │  the nightly sweep)                        │
+                   ▼                                            │
+  ┌──────────────────────────────────┐  back to Candidate;      │
+  │ status Not in any search         │  "returns" replaces      │
+  │ (kept, never deleted)            │ ─ "formerly returns" ────┘
+  └──────────────────────────────────┘
+                   │
+                   ▼  only by a person: bulk delete, filtered on
+                deleted   status Not in any search
+
+  * not for a query tagged dataxray-no-auto-import
+  A status set by a person (Accepted, Under Review, ...) is never changed by
+  any step above; the links still change.
 ```
 
-The one-sentence version: **the integration creates, updates and retires file
-assets; it never deletes them.**
+The one-sentence version: **the integration creates and updates file assets
+and marks the ones no search returns; it never deletes them, and it never
+changes a status a person set.**
 
 ---
 
@@ -67,14 +77,20 @@ File assets are only ever created by an **import** — either the one offered at
 the end of **Search Data X-Ray**, or a **rerun** of a saved search that finds
 files it did not have before. Running a search on its own creates **no** file
 assets: the results are stored on the query asset (a preview table and an
-attached CSV), and the results task then *offers* the import:
+attached CSV), and the results task then offers three independent options:
 
 ![Search results task offering the import](images/file-lifecycle-import-controls.png)
 
-Ticking **Import all N matching files as assets** and clicking **Send** starts
-the import in the background. Ticking **Keep in sync nightly** as well tags the
-query asset `dataxray-keep-in-sync`, which is what the nightly file sync looks
-for (see [How are file assets kept in sync?](#how-are-file-assets-kept-in-sync)).
+| Option | Effect |
+|---|---|
+| **Import now: create assets for all N matching files** | Starts the import in the background as soon as you click **Send**. |
+| **Keep in sync nightly** | Tags the query asset `dataxray-keep-in-sync`, which is what the nightly file sync looks for (see [How are file assets kept in sync?](#how-are-file-assets-kept-in-sync)). It does not require importing now. |
+| **Create assets for new files found on later reruns** | Ticked by default. Untick it to tag the query asset `dataxray-no-auto-import`: reruns then refresh the file assets that already exist in Collibra but create none for files that only start matching later. |
+
+The two sync options are offered whenever the search matched at least one
+file, and they are saved as tags on the query asset as soon as you click
+**Send**, whatever you chose about importing. You can add or remove either tag
+on the query asset at any time; the change applies from the next rerun.
 
 What the import does, per matching file:
 
@@ -82,7 +98,7 @@ What the import does, per matching file:
    deterministically from the file's Data X-Ray file id. The same Data X-Ray
    file therefore always maps to the *same* Collibra asset, no matter which
    search imports it or how often. If the asset already exists it is updated
-   in place; it is never duplicated.
+   in place, wherever it lives; it is never duplicated.
 2. **Creates the asset** (if it does not exist) in the **Data X-Ray Files**
    domain with type **Data X-Ray File** and status **Candidate**. The asset's
    *display name* is the clean filename (`invoice.pdf`); its *full name* is the
@@ -99,9 +115,11 @@ What the import does, per matching file:
    where the Data X-Ray result carries positive evidence: a label applied to
    the file, an extractor that produced metadata, an annotator with at least
    one hit. An annotator that was *checked* but found nothing is not a match
-   and gets no relation. A classification that has not yet been synced into
-   Collibra is skipped and counted as "unresolved" in the summary; run **Sync
-   Data X-Ray Classifications** and rerun the search to link it.
+   and gets no relation. If a person has already linked the file to that
+   classification, no second link is added. A classification that has not yet
+   been synced into Collibra is skipped and counted as "unresolved" in the
+   summary; run **Sync Data X-Ray Classifications** and rerun the search to
+   link it.
 
 ![A file asset with its attributes, its classification relations and the four queries that return it](images/file-lifecycle-file-asset.png)
 
@@ -115,7 +133,7 @@ who ran the search:
 
 The imported assets appear in the **Data X-Ray Files** domain:
 
-![The Data X-Ray Files domain — a mix of active (Candidate) and retired (Obsolete) file assets](images/file-lifecycle-files-domain.png)
+![The Data X-Ray Files domain with file assets in several statuses](images/file-lifecycle-files-domain.png)
 
 ---
 
@@ -124,8 +142,8 @@ The imported assets appear in the **Data X-Ray Files** domain:
 A file asset follows the file's **Data X-Ray file id**. As long as Data X-Ray
 keeps the id, every sync updates the same asset, whatever else changes. When
 Data X-Ray assigns a new id, Collibra sees a new file: the next rerun of a
-matching search creates a new asset, and the old one is retired (see
-[How are file assets orphaned?](#how-are-file-assets-orphaned)).
+matching search creates a new asset, and the old one drops out of the search
+(see [How are file assets orphaned?](#how-are-file-assets-orphaned)).
 
 Whether a file keeps its id depends on the Data X-Ray connector of its
 datasource:
@@ -144,15 +162,17 @@ another datasource, or when its datasource is deleted and scanned again. A copy
 is a separate file: the original keeps its asset, and the copy gets its own.
 
 A new asset starts clean. Comments, attachments, history and any move to
-another community stay with the old, retired asset.
+another community stay with the old asset.
 
 ---
 
 ## How is the maximum number of file assets controlled?
 
-There is a single **instance-wide cap of 25,000 file assets** in the
-**Data X-Ray Files** domain, with a **warning above 10,000** for any one import.
-The cap exists to keep imports, nightly syncs and the Collibra instance itself
+There is a single **instance-wide cap of 25,000 file assets**, with a
+**warning above 10,000** for any one import. The cap counts every asset of
+type **Data X-Ray File** on the instance, wherever it lives: file assets moved
+out of the **Data X-Ray Files** domain into other communities count too. The
+cap exists to keep imports, nightly syncs and the Collibra instance itself
 responsive; it is a fixed constant in the workflow scripts, not a setting that
 can be changed in the Collibra UI (contact Ohalo if your deployment needs a
 different limit).
@@ -160,20 +180,22 @@ different limit).
 Key facts about how it is applied:
 
 - **It is a total, not a per-import limit.** Before every import or rerun the
-  workflow counts *every* asset currently in the Data X-Ray Files domain and
-  adds the number of new assets the run would create. If that projected total
-  exceeds 25,000, the run is refused and nothing is imported.
-- **Retired file assets count.** The count is of all assets in the domain
-  regardless of status — a file asset retired to Obsolete still occupies one
-  of the 25,000 slots until a human deletes it. See
+  workflow counts *every* Data X-Ray File asset in Collibra and adds the
+  number of new assets the run would create. If that projected total exceeds
+  25,000, the run is refused and nothing is imported.
+- **File assets in every status count.** A file asset with status **Not in
+  any search** (or **Obsolete**, or a status set by a person) still occupies
+  one of the 25,000 slots until a human deletes it. See
   [What to do when you reach the limit](#what-to-do-when-you-reach-the-limit).
 - **The projection is deliberately conservative.** For a new search, the
   projection is *current population + number of matching files* — even though
   some of those files may already exist from other searches (and would only be
   updated). For a rerun, files the query already returns are excluded (they
   are updates), but overlap with *other* queries' files is still counted as
-  new. So the check can refuse slightly early; it never lets the domain go
+  new. So the check can refuse slightly early; it never lets the total go
   over.
+- **A rerun that creates nothing is not refused.** A rerun of a query tagged
+  `dataxray-no-auto-import` adds no new assets, so the cap does not stop it.
 - **It is enforced in the scripts, not just the form.** The results task hides
   the import controls when the cap would be exceeded, but the import job
   re-checks the projection when it starts, so the limit cannot be bypassed by
@@ -183,9 +205,10 @@ What you see when the cap is hit:
 
 | Situation | Behaviour |
 |---|---|
-| A search's results task, and the projected total would exceed 25,000 | The import checkboxes are not shown. Instead the task shows: *"Importing is disabled for this search: the Data X-Ray Files domain holds N file asset(s) and this search matched M file(s) — the projected N+M would exceed the 25000 instance-wide limit. Narrow the query, or retire imported searches you no longer need."* |
+| A search's results task, and the projected total would exceed 25,000 | The import checkbox is not shown. Instead the task shows: *"Importing is disabled for this search: the Data X-Ray Files domain holds N file asset(s) and this search matched M file(s) — the projected N+M would exceed the 25000 instance-wide limit. Narrow the query, or retire imported searches you no longer need."* N is the count of every Data X-Ray File asset, including moved ones. |
 | A search matched more than 10,000 files but is within the cap | Import is offered, with a *"Large import — expect it to run for a while in the background"* warning. |
-| A **manual** rerun (from the query asset's page) would exceed the cap | The rerun stops immediately with an error naming the current population, the number of new files, and the projected total. Nothing is changed. |
+| An import is refused when it starts (for example, another import finished in the meantime) | The import stops with *"Import refused: Collibra holds N Data X-Ray file asset(s) and this search matched M …"*. Nothing is imported. |
+| A **manual** rerun (from the query asset's page) would exceed the cap | The rerun stops immediately with an error (*"Collibra holds N Data X-Ray file asset(s) and this rerun would add M more …"*) naming the projected total. Nothing is changed. |
 | The **nightly** reruns a keep-in-sync query that would exceed the cap | The rerun is refused, logged in `dgc.log`, and ends cleanly. That query's file assets are left exactly as they were; other queries are unaffected. It will be refused again every night until the population is reduced or the query narrowed. |
 
 ---
@@ -214,13 +237,26 @@ results, and then for each matching file:
 | Change in Data X-Ray | Effect on the Collibra file asset |
 |---|---|
 | New file matches the search | A new file asset is created and linked (as in an import). |
+| New file matches the search, and the query is tagged `dataxray-no-auto-import` | No asset is created. The **Rerun complete** task counts it under *Not imported*. If the file already has an asset (another search imported it), that asset is refreshed and linked to this query as usual. |
 | File renamed or moved, and Data X-Ray kept its file id (see [What counts as the same file?](#what-counts-as-the-same-file)) | The **same** asset is renamed; File Path and the other attributes are refreshed. |
-| File renamed or moved, and Data X-Ray assigned a new file id (e.g. on an SMB share) | A **new** asset is created; the old one is unlinked and retired as below. |
+| File renamed or moved, and Data X-Ray assigned a new file id (e.g. on an SMB share) | A **new** asset is created; the old one drops out of the search as described below. |
 | Size / last-modified changed | Attributes refreshed. |
-| A label was added, or an annotator/extractor now has hits | A *groups* relation to that classification is **added**. |
-| A label was removed, or a classification no longer has hits on the file | The stale *groups* relation is **removed** — the asset mirrors exactly what Data X-Ray asserts. |
-| The file was previously retired but matches again | The asset is **reactivated** (status back to Candidate), history intact. |
+| A label was added, or an annotator/extractor now has hits | A *groups* relation to that classification is **added**. If the file had a *formerly groups* link to it, that link is replaced. If a person already linked the file to that classification, nothing is added. |
+| A label was removed, or a classification no longer has hits on the file | The *groups* relation becomes **formerly groups**, so the change stays visible on the file asset. This applies only to links the integration created; see below. |
+| A person linked the file to a classification by hand | The link is never removed or changed, whatever Data X-Ray reports. |
+| The file had status **Not in any search** (or **Obsolete**, from a release before v2.4) and matches again | The status goes back to **Candidate**, history intact, and this query's *formerly returns* link becomes *returns* again. |
+| A person set the file asset's status (Accepted, Under Review, …) | The status is kept. Attributes and relations are still refreshed and links are still swapped. |
 | The file no longer matches this search | See the next section. |
+
+**Which links count as the integration's own.** Collibra records who created
+each relation. The integration's background tasks run as Collibra's built-in
+**Workflow** user, so every *groups* link the integration creates is recorded
+as created by that user, and those are the only file-to-classification links a
+sync ever removes or swaps. A link created by a person (or by any other
+process) is left exactly as it is. One caveat: links created by your **own**
+Collibra workflows are also recorded as created by the Workflow user, so the
+integration cannot tell them apart from its own and may swap them to
+*formerly groups* when Data X-Ray no longer reports the classification.
 
 Controlling the nightly sync per query:
 
@@ -230,9 +266,12 @@ Controlling the nightly sync per query:
   retired query.
 - **Stop**: remove the `dataxray-keep-in-sync` tag from the query asset. Its
   file assets stay exactly as they are (they are still *returned* by the
-  query, so nothing retires them).
+  query, so nothing changes their status).
 - **Start**: add the tag to any query asset — including one whose search was
-  originally imported without the nightly flag.
+  never imported.
+- **Refresh only**: add the `dataxray-no-auto-import` tag. Reruns, manual or
+  nightly, then refresh the file assets that already exist and create none for
+  new matches. Remove the tag to let reruns create assets again.
 
 Because the integration mirrors the source system, Collibra reflects Data X-Ray
 *as of the last sync*. Changes in Data X-Ray appear after Data X-Ray has
@@ -244,66 +283,86 @@ about a day; a manual rerun closes the gap immediately.
 ## How are file assets orphaned?
 
 A file asset is **orphaned** when **no query returns it any more** — it has no
-*returns* relation from any query asset. Orphaned file assets are **retired**
-(status Obsolete). There are two ways this happens.
+*returns* relation from any query asset (*formerly returns* links do not
+count). Orphaned file assets get the status **Not in any search**, unless a
+person set their status, which is kept. There are two ways this happens.
 
 ### 1. A rerun finds the file no longer matches
 
 At the end of every rerun, the query's *previous* set of returned files is
 compared with the *current* results:
 
-1. Each file the query returned last time but not this time is **unlinked** —
-   its *returns* relation from **this** query is removed.
+1. For each file the query returned last time but not this time, the
+   *returns* relation from **this** query is replaced by a **formerly
+   returns** relation. The file asset shows which search used to return it.
 2. The workflow then checks whether **any other** query still returns the
-   file. If one does, the asset is left active: it is still a legitimate
-   result of that other search. If none does, the asset is **retired**.
+   file. If one does, the asset keeps its status (Candidate) and that other
+   query's *returns* link: it is still a legitimate result of that other
+   search. If none does, the asset's status becomes **Not in any search**.
 
-So a file returned by two searches is only retired once **both** stop
-returning it. The summary task reports both numbers separately (*Unlinked* vs
-*Retired*):
+So a file returned by two searches only becomes Not in any search once
+**both** stop returning it; until then only the first search's link is a
+*formerly returns* link. If a search matches the file again later, its
+*formerly returns* link becomes *returns* again and the status goes back to
+Candidate. The summary task reports both numbers separately (*No longer
+returned* vs *In no search*):
 
 | Scenario | Outcome |
 |---|---|
-| File deleted in Data X-Ray | Disappears from every search's results → unlinked from each as they rerun → retired once the last one has rerun. |
-| File changed so it no longer meets the criteria (e.g. a label removed) | Unlinked from that query; retired only if no other query returns it. |
-| Search criteria narrowed (a criterion removed in Data X-Ray is *not* silently dropped — the rerun fails instead, see the deployment guide) | Files outside the new criteria are unlinked, then retired if orphaned. |
-| Data X-Ray re-scanned a datasource and assigned **new file ids** | The new generation is created as new assets; the old generation becomes orphaned and is retired with its history intact. |
-| File renamed or moved on a connector that identifies files by path, or moved to another datasource | The same, for that one file: a new asset for the new file id, the old asset retired. |
-| Datasource deleted in Data X-Ray | Its files disappear from every search's results and are retired as each search reruns. A search that matched *only* that datasource now returns nothing, so the zero-results rule below keeps its files active; delete the query asset to retire them. |
+| File deleted in Data X-Ray | Disappears from every search's results → each search's link becomes *formerly returns* as it reruns → Not in any search once the last one has rerun. |
+| File changed so it no longer meets the criteria (e.g. a label removed) | That query's link becomes *formerly returns*; the status changes only if no other query returns it. |
+| Search criteria narrowed (a criterion removed in Data X-Ray is *not* silently dropped — the rerun fails instead, see the deployment guide) | Files outside the new criteria get *formerly returns* links, then Not in any search if no query returns them. |
+| Data X-Ray re-scanned a datasource and assigned **new file ids** | The new generation is created as new assets; the old generation becomes orphaned and gets Not in any search, with its history intact. |
+| File renamed or moved on a connector that identifies files by path, or moved to another datasource | The same, for that one file: a new asset for the new file id, the old asset Not in any search. |
+| Datasource deleted in Data X-Ray | Its files disappear from every search's results and get Not in any search as each search reruns. A search that matched *only* that datasource now returns nothing, so the zero-results rule below leaves its files as they are; delete the query asset to release them. |
 
 ### 2. The query asset itself was deleted
 
 Deleting an **Unstructured Data Query** asset in Collibra deletes its
-*returns* relations with it. No rerun can ever retire the files it exclusively
+*returns* relations with it. No rerun can ever update the files it exclusively
 returned, because the query that would have done so no longer exists. The
 nightly file sync therefore ends every run with an **orphan sweep**: it lists
-every file asset in the Data X-Ray Files domain that has **no** *returns*
-relation from any query and retires those that are still active. Files other
-queries also return are untouched.
+every Data X-Ray File asset in Collibra, wherever it lives, that has **no**
+*returns* relation from any query and sets those that are still Candidate (or
+Obsolete) to **Not in any search**. Files other queries also return are
+untouched, and so are files whose status a person set.
 
 The sweep only acts on a complete picture: if listing the relations or the
-domain fails part-way, the sweep is skipped for that night and retried the next
-(orphans wait one more night rather than risk retiring on partial data).
+file assets fails part-way, the sweep is skipped for that night and retried the
+next (orphans wait one more night rather than risk changing statuses on
+partial data).
+
+**After upgrading from a release before v2.4**, the first nightly file sync
+also moves every orphaned file asset that an earlier release set to
+**Obsolete** to **Not in any search**. This happens once; from then on
+Obsolete is never set on file assets.
 
 > Deleting a query also discards its attached results CSV and its history. If
 > the aim is only to stop syncing, prefer removing the tag or retiring the
 > query — see [How are file assets kept in sync?](#how-are-file-assets-kept-in-sync).
 
-### Safety rails — when retirement is deliberately skipped
+### Safety rails — when files are deliberately left alone
 
-- **A rerun that returns zero results retires nothing.** An empty answer from
-  Data X-Ray is far more likely to be an outage or truncated response than a
-  search that genuinely matches nothing; retiring a query's whole population on
-  that basis would be wrong. The result set is fetched with up to three
-  attempts, and if all fail the rerun stops with an error and changes nothing.
-  The flip side: a search that genuinely matches nothing any more (for example,
-  its only datasource was deleted in Data X-Ray) keeps its files active until
-  it matches something again or the query asset is deleted.
-- **An aborted rerun retires nothing.** If the run is refused (cap exceeded,
-  connection not configured, a criterion deleted in Data X-Ray, started on the
-  wrong asset type), the unlink/retire pass does not run.
-- **Files already retired are left alone** by both the rerun and the sweep —
-  their status and history are not touched again.
+- **A rerun that returns zero results changes no statuses or links.** An empty
+  answer from Data X-Ray is far more likely to be an outage or truncated
+  response than a search that genuinely matches nothing; marking a query's
+  whole population as no longer returned on that basis would be wrong. The
+  result set is fetched with up to three attempts, and if all fail the rerun
+  stops with an error and changes nothing. The flip side: a search that
+  genuinely matches nothing any more (for example, its only datasource was
+  deleted in Data X-Ray) keeps its files as they are until it matches
+  something again or the query asset is deleted.
+- **An aborted or partial rerun changes nothing.** If the run is refused (cap
+  exceeded, connection not configured, a criterion deleted in Data X-Ray,
+  started on the wrong asset type, Configure not yet re-run after an
+  upgrade), or could not fetch every result, the pass that swaps links and
+  sets Not in any search does not run.
+- **A status set by a person is never changed** by the rerun or the sweep.
+  Only Candidate, Not in any search and Obsolete are managed by the
+  integration. A file asset someone marked Accepted, for example, is never
+  made Not in any search by Data X-Ray.
+- **Files already Not in any search are left alone** by both the rerun and the
+  sweep; their status and history are not touched again.
 
 ---
 
@@ -316,21 +375,30 @@ never moves it back. Two conditions come from Collibra, not the integration:
 the target domain's type must allow the **Data X-Ray File** asset type, and the
 person moving it needs permission on both domains.
 
+Moved file assets keep syncing wherever they are. The integration's background
+tasks run as Collibra's Workflow user, which has no permission restrictions,
+and the check for an existing asset is instance-wide (the asset id is derived
+from the Data X-Ray file id), so a moved asset is updated in place and no
+duplicate is created in the Data X-Ray Files domain.
+
 Things to know before relying on it:
 
 - **A placement lasts as long as the file id.** If Data X-Ray assigns the file a
   new id, for example when it is renamed or moved on an SMB share (see
   [What counts as the same file?](#what-counts-as-the-same-file)), the new asset
-  is created in the **Data X-Ray Files** domain and the moved one is retired
-  where it is.
-- **The 25,000 cap and the nightly orphan sweep only look at the Data X-Ray
-  Files domain.** A moved asset is not counted towards the cap, and if its
-  query asset is deleted, the nightly sweep does not retire it. A rerun that
-  stops returning it still retires it normally.
+  is created in the **Data X-Ray Files** domain and the moved one gets Not in
+  any search where it is.
+- **Moved file assets count towards the 25,000 cap and are included in the
+  nightly orphan sweep.** Both work on every Data X-Ray File asset, wherever
+  it lives.
 - **Deleting the community or domain deletes the asset with it.** If a search
   still matches the file, its next rerun recreates the asset in the **Data X-Ray
   Files** domain. Only that search's *returns* relation comes back at once; the
   others return as each search reruns.
+- **Who can see a moved asset is decided by its new domain.** If the aim is to
+  restrict who sees files, you do not need to move them: view permissions can
+  be set on the Data X-Ray Files domain itself. See *Who can see what* in the
+  [deployment guide](deployment-guide.md#who-can-see-what).
 
 ---
 
@@ -338,23 +406,23 @@ Things to know before relying on it:
 
 **They are not — not by the integration.** No workflow in this bundle deletes
 a file asset (or a classification asset, or a query asset). Every path that
-removes a file from the picture ends in **Obsolete**, so comments, attachments,
-history and the file's classification relations survive as a record.
+removes a file from the picture ends in **Not in any search**, so comments,
+attachments, history and the file's relations survive as a record.
 
 Deletion is a **manual, administrative action**, done in the Collibra UI (or
 via the REST API) by someone who holds a delete-capable responsibility on the
-Data X-Ray Files domain or is a Sysadmin. Collibra's default permission model
-means ordinary users cannot delete assets at all, and the deployment guide asks
-you to keep it that way for the Files and Classifications domains — treat them
-as sync-owned.
+Data X-Ray Files domain (or wherever the asset has been moved) or is a
+Sysadmin. Collibra's default permission model means ordinary users cannot
+delete assets at all, and the deployment guide asks you to keep it that way
+for the Files and Classifications domains — treat them as sync-owned.
 
 What to expect if file assets *are* deleted by hand:
 
 | You delete… | Then… |
 |---|---|
-| A **retired** file asset | Nothing further happens. This is the safe, intended way to reclaim capacity (see below). If the file later matches a search again it is simply created afresh as a new asset (same UUID, but its old history is gone). |
-| An **active** file asset that a search still matches | The next rerun of that search (manual or nightly) **recreates** it — same UUID, same name, fresh attributes and relations — because the deterministic identity means the workflow simply sees a file it has not imported yet. Its comments and history are not restored. |
-| A **query asset** | Its file assets are **not** deleted. Those no other query returns are retired by the next nightly orphan sweep (see above). |
+| A file asset with status **Not in any search** | Nothing further happens. This is the safe, intended way to reclaim capacity (see below). If the file later matches a search again it is simply created afresh as a new asset (same UUID, but its old history is gone). |
+| An **active** file asset that a search still matches | The next rerun of that search (manual or nightly) **recreates** it — same UUID, same name, fresh attributes and relations — because the deterministic identity means the workflow simply sees a file it has not imported yet. Its comments and history are not restored. A query tagged `dataxray-no-auto-import` does not recreate it. |
+| A **query asset** | Its file assets are **not** deleted. Those no other query returns get Not in any search at the next nightly orphan sweep (see above). |
 | A **classification asset** | Not recommended — see the acceptance criteria (CAT-10). The next classification sync recreates it and file assets are relinked as their searches rerun, but saved searches that used it silently lose that criterion. Because criteria are AND-ed, they then return *more* files; a search left with no criteria stops with an error instead. |
 | A **community or domain** containing file assets | Collibra deletes the file assets with it. Each is recreated in the **Data X-Ray Files** domain by the next rerun of a search that still matches it (same UUID, no comments or history). See [Can file assets be moved to another community?](#can-file-assets-be-moved-to-another-community). |
 
@@ -365,34 +433,43 @@ What to expect if file assets *are* deleted by hand:
 You have reached the limit when a search's results task shows *"Importing is
 disabled for this search…"*, a manual rerun stops with *"…would exceed the
 25000 instance-wide limit"*, or `dgc.log` shows nightly reruns being refused
-for the same reason. Because **retired assets still count**, freeing capacity
-always ends with deleting retired file assets; the steps below get you there
-safely.
+for the same reason. Because **file assets in every status count**, freeing
+capacity always ends with deleting file assets that are Not in any search; the
+steps below get you there safely.
 
 ### 1. See where the capacity is going
 
-Open the **Data X-Ray Files** domain and group or filter the asset table by
-**Status**. Two numbers matter: how many assets are **Obsolete** (retired —
-reclaimable immediately) and how many are **Candidate** (active — each is still
-returned by at least one search). Adding the **returned by** relation as a
-column shows which searches account for the active ones.
+Search for assets of type **Data X-Ray File** (or open the **Data X-Ray Files**
+domain, if none have been moved) and group or filter the asset table by
+**Status**. Two numbers matter: how many assets are **Not in any search**
+(reclaimable immediately) and how many are **Candidate** (active — each is
+still returned by at least one search). Adding the **returned by** relation as
+a column shows which searches account for the active ones. File assets with a
+status a person set are outside the integration's lifecycle; decide about
+those separately.
 
-![The Files domain filtered to Status = Obsolete — the 37 retired assets here are reclaimable capacity](images/file-lifecycle-retired-filter.png)
+If you upgraded from a release before v2.4, file assets that an earlier
+release set to **Obsolete** are moved to Not in any search by the first
+nightly file sync after the upgrade. Until that has run, filter on Obsolete as
+well.
 
-### 2. Delete retired file assets
+![The Files domain filtered by status, showing reclaimable file assets](images/file-lifecycle-retired-filter.png)
 
-Retired assets are the integration's "done with this" signal; deleting them
-loses only their history. In the Files domain, filter to **Status = Obsolete**,
-select all, and use Collibra's bulk **Delete**. This is the *only* deletion the
-integration expects, and the safest.
+### 2. Delete file assets that are Not in any search
 
-If you want to keep a record of the retired assets (for example for audit
-purposes), export the filtered table to CSV before deleting. Do not move them
-to another domain instead: the workflows track file assets by UUID, not by
-domain, so a moved asset would be updated and reactivated *where it is* the
-next time the file matches a search.
+Not in any search is the integration's "no search needs this any more"
+signal; deleting these assets loses only their history. Filter to **Status =
+Not in any search**, select all, and use Collibra's bulk **Delete**. This is
+the *only* deletion the integration expects, and the safest.
 
-### 3. Retire the searches you no longer need
+If you want to keep a record of them (for example for audit purposes), export
+the filtered table to CSV before deleting. Do not move them to another domain
+instead: moved file assets still count towards the cap, and the workflows
+track file assets by UUID, not by domain, so a moved asset would be updated
+and set back to Candidate *where it is* the next time the file matches a
+search.
+
+### 3. Release the searches you no longer need
 
 Active file assets can only be reclaimed by first making them orphans. For
 each saved search whose files are no longer wanted:
@@ -400,15 +477,16 @@ each saved search whose files are no longer wanted:
 1. Note which of its files are also returned by other searches (those will
    stay active, correctly).
 2. **Delete the query asset**. Its *returns* relations go with it.
-3. Wait for the nightly file sync (02:30) — its orphan sweep retires every file
-   asset no remaining query returns. (An administrator can also start
-   **Sync Data X-Ray Files (Nightly)** immediately via the REST API,
-   `POST /rest/2.0/workflowInstances`, rather than waiting.)
-4. Delete the newly retired assets as in step 2.
+3. Wait for the nightly file sync (02:30) — its orphan sweep sets every file
+   asset no remaining query returns to Not in any search. (An administrator
+   can also start **Sync Data X-Ray Files (Nightly)** immediately via the
+   REST API, `POST /rest/2.0/workflowInstances`, rather than waiting.)
+4. Delete those file assets as in step 2.
 
 Merely removing the `dataxray-keep-in-sync` tag or retiring the query asset
 does **not** free anything: its file assets remain *returned* by it and stay
-active.
+active. To stop a search adding to the population without releasing what it
+already has, tag it `dataxray-no-auto-import`.
 
 ### 4. Narrow the searches you keep
 
@@ -416,7 +494,8 @@ For searches that are useful but broad, tighten the criteria (all criteria are
 AND-ed, so adding a label, extractor or annotator only ever shrinks the result
 set). Create the narrower search with **Search Data X-Ray**, import it, and
 then delete the broad query asset as in step 3 — files matched by both are
-reused by the new query and stay active; the rest are orphaned and retired.
+reused by the new query and stay active; the rest are orphaned and get Not in
+any search.
 
 ### 5. If the limit itself is the problem
 
@@ -433,13 +512,14 @@ needed).
 
 | Question | Answer |
 |---|---|
-| What creates a file asset? | An import from a search's results task, or a rerun that finds a new match. Never a search on its own. |
+| What creates a file asset? | An import from a search's results task, or a rerun that finds a new match (not for a query tagged `dataxray-no-auto-import`). Never a search on its own. |
 | What is a file asset's identity? | Its Data X-Ray file id — the Collibra UUID is derived from it, so the same file is always the same asset. On path-based connectors (SMB, file shares, S3, Azure Blob, SharePoint on-premises) a rename or move gives the file a new id, and so a new asset. |
 | Which domain / type? | Created in **Data X-Ray Files** / **Data X-Ray File**, status **Candidate** when active. |
-| Can I move one to another community? | Yes; syncs update it where it is. It is not counted by the cap or swept by the nightly, and the placement is lost if Data X-Ray assigns the file a new id. |
-| Maximum number? | **25,000** in the domain in total, retired ones included; warning above **10,000** per import. Fixed in the scripts. |
+| Can I move one to another community? | Yes; syncs update it where it is, and it still counts towards the cap and is included in the nightly sweep. The placement is lost if Data X-Ray assigns the file a new id. |
+| Maximum number? | **25,000** Data X-Ray File assets in total, wherever they live and whatever their status; warning above **10,000** per import. Fixed in the scripts. |
 | What keeps them current? | Manual **Rerun Data X-Ray Search** on the query asset, or the **02:30 nightly** for queries tagged `dataxray-keep-in-sync`. |
-| When is one retired? | When no query returns it any more — after a rerun unlinks it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). |
+| When does one get Not in any search? | When no query returns it any more — after a rerun stops returning it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). Never if a person set its status. |
+| What happens to links that stop applying? | *returns* becomes *formerly returns*, and an integration-made *groups* becomes *formerly groups*. Both swap back if they apply again. Links a person created are never touched. |
 | When is one deleted? | Only by a person. The integration never deletes. |
-| When is a retired one reactivated? | As soon as any search's import or rerun matches it again. |
-| How do I free capacity? | Delete retired assets; to retire active ones, delete their query asset and let the nightly sweep run, then delete. |
+| When does one go back to Candidate? | As soon as any search's import or rerun matches it again, unless a person set its status. |
+| How do I free capacity? | Delete file assets that are Not in any search; to release active ones, delete their query asset and let the nightly sweep run, then delete. |

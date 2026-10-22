@@ -47,7 +47,7 @@ def opts = [
         // Tagged dataxray-no-auto-import: no new assets, so no growth.
         int growth = noAutoImport ? 0 : Math.max(0, page.total - previousFileIds.size())
         int projected = filesDomainCount + growth
-        if (projected > dxrMaxTotalFileAssets()) {
+        if (growth > 0 && projected > dxrMaxTotalFileAssets()) {
             return "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this rerun could add up to ${growth} more — the projected ${projected} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.".toString()
         }
         return null

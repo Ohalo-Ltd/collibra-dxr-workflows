@@ -194,7 +194,7 @@ workItems.each { tuple ->
 int filesDomainCount = countFileAssets(ids)
 int newFiles = noAutoImport ? 0 : workItems.size() - alreadyOurs
 int projectedTotal = filesDomainCount + newFiles
-if (projectedTotal > dxrMaxTotalFileAssets()) {
+if (newFiles > 0 && projectedTotal > dxrMaxTotalFileAssets()) {
     abort('Rerun Data X-Ray Search refused',
         "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this rerun would add ${newFiles} more — the projected ${projectedTotal} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.")
     return

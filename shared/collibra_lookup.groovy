@@ -126,16 +126,11 @@ def relationIdsByFarEnd(UUID relationTypeId, UUID sourceId, UUID targetId) {
 }
 
 // The users whose relations count as the integration's own: Collibra's
-// workflow user (what async tasks run as) and whoever this task runs as.
+// workflow user only. Every relation the integration writes is written by an
+// asynchronous task, which runs as that user; counting whoever a task happens
+// to run as would let a person's own links be treated as the integration's.
 def integrationIdentityIds() {
-    def out = [dxrWorkflowUserId()] as Set
-    try {
-        def me = userApi.getCurrentUser()
-        if (me?.isPresent()) { out << me.get().getId() }
-    } catch (Exception meEx) {
-        loggerApi.debug("Could not read the current user: ${meEx.message}")
-    }
-    return out
+    return [dxrWorkflowUserId()] as Set
 }
 
 // Every Data X-Ray File asset on the instance, wherever it has been moved —
