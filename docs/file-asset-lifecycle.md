@@ -124,7 +124,10 @@ What the import does, per matching file:
    supplies one). These are overwritten on every sync, so they always reflect
    the last run: change them in DataXray, not in Collibra.
    File Size and Last Modified are written for people to read:
-   `27.2 KB (27,885 bytes)` and `10 Apr 2025, 17:22 UTC`.
+   `27.2 KB (27,885 bytes)` and `10 Apr 2025, 17:22 UTC`. If an admin has
+   turned on extractor values, the **DataXray Extracted Values** table is
+   written too (see [Optional: extractor values on file
+   assets](#optional-extractor-values-on-file-assets)).
 4. **Links it to the query** with a *returns* relation — the record that this
    search currently matches this file.
 5. **Links it to the classifications it matched** (labels, extractors and
@@ -153,6 +156,46 @@ The imported assets appear in the **DataXray Files** domain:
 ![The DataXray Files domain with file assets in several statuses](images/file-lifecycle-files-domain.png)
 
 ---
+
+## Optional: extractor values on file assets
+
+DataXray extractors pull values out of files: an invoice number, an amount, a
+yes/no answer. By default Collibra only links a file asset to each extractor
+that produced a value. An admin can also have every sync copy the values
+themselves onto the file asset.
+
+**Off by default, and invisible while off.** Nothing about it appears in
+Collibra until an admin turns it on:
+
+1. Open **Configure DataXray Workflows** on the workflow settings page and set
+   its configuration variable **Sync extractor values to file assets
+   (true/false)** to `true`.
+2. Run **Configure DataXray Workflows**. It creates the **DataXray Extracted
+   Values** attribute and adds it to the **DataXray File** asset type.
+3. From then on every import and rerun (including the nightly ones) writes a
+   table of the file's extractor values into that attribute: one row per
+   extractor, each value on its own line. Text, numbers and yes/no values are
+   all stored as text. Existing file assets get theirs on their next sync.
+
+**Values are kept current.** Like the other file attributes, the table is
+rewritten from DataXray on every sync, and cleared when the file no longer has
+any extractor values. A value typed into it in Collibra is overwritten.
+
+**Size limits.** Each value is cut to 2,000 characters (on-prem edition) or
+500 characters (Cloud + Edge), and a file's values stop at 50,000 characters
+in total (on-prem) or 10,000 (Cloud + Edge). When values are left out, the
+table's last row says how many.
+
+**Turning it off.** Set the variable back to `false` and run **Configure
+DataXray Workflows** again. It deletes the **DataXray Extracted Values**
+attribute type, which removes it from the asset type and deletes every value
+on every file asset. Turning it on again later starts afresh.
+
+> **Extractor values can be the sensitive data itself** (account numbers,
+> national ID numbers). Before turning this on, restrict view permissions on
+> the **DataXray Files** domain (and on any community you have moved file
+> assets to) to the people allowed to see those values. See *Who can see
+> what* in the deployment guide.
 
 ## What counts as the same file?
 

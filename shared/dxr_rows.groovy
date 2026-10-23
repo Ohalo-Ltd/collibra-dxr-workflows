@@ -23,6 +23,8 @@
 //       fileObjectKey() in file_batch.groovy. Only search-index rows (Cloud +
 //       Edge) carry them: /api/v1/files rows have no object id (checked on
 //       demo, Oct 2026), so on-prem rows leave both empty.
+//   [10] extractor values: [extractor name, value text] pairs, bounded by
+//       boundExtractedValues(); always [] unless extractedValuesOn().
 //
 // Hit evidence vs "checked with zero": a result row may list a classification
 // that was checked but produced no hits — that is NOT a match and must not
@@ -55,8 +57,50 @@ def extractFileTuple(row, String baseUrl) {
     classifications.addAll(extractClassifications(row?.labels))
     classifications.addAll(extractClassifications(row?.extractedMetadata))
     classifications.addAll(extractClassifications(row?.annotators))
+    def values = []
+    if (extractedValuesOn()) {
+        (row?.extractedMetadata instanceof Collection ? row.extractedMetadata : []).each { e ->
+            if (e instanceof Map && e.name) {
+                extractedValueTexts(e.value).each { v -> values << [e.name.toString(), v] }
+            }
+        }
+    }
     return [id.toString(), datasource.toString(), path.toString(), fileName.toString(),
-            size.toString(), modified.toString(), deepLink, classifications, '', '']
+            size.toString(), modified.toString(), deepLink, classifications, '', '',
+            boundExtractedValues(values)]
+}
+
+// An extractor's value as text: text, numbers and booleans as they are, each
+// element of a list on its own; empty values dropped.
+def extractedValueTexts(value) {
+    def out = []
+    (value instanceof Collection ? value : [value]).each { v ->
+        def text = v == null ? '' : v.toString().trim()
+        if (!text.isEmpty()) { out << text }
+    }
+    return out
+}
+
+// Sort [name, value] pairs by extractor then value, drop repeats, cut each
+// value to dxrExtractedValueMaxChars() and stop once the file's values reach
+// dxrExtractedValuesMaxChars(); a last ['…', 'N more value(s) not shown'] pair
+// says how many were left out.
+def boundExtractedValues(List pairs) {
+    def sorted = pairs.unique().sort { a, b -> a[0] <=> b[0] ?: a[1] <=> b[1] }
+    def out = []
+    int used = 0
+    int left = 0
+    sorted.each { p ->
+        def value = truncateText(p[1].toString(), dxrExtractedValueMaxChars())
+        if (left > 0 || used + p[0].length() + value.length() > dxrExtractedValuesMaxChars()) {
+            left++
+            return
+        }
+        used += p[0].length() + value.length()
+        out << [p[0].toString(), value]
+    }
+    if (left > 0) { out << ['…', "${left} more value(s) not shown".toString()] }
+    return out
 }
 
 // Map a row's classification entries to [dxrId, name] pairs, keeping only

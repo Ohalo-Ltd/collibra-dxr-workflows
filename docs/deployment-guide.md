@@ -167,6 +167,11 @@ everything without being added to these roles.
   an existing asset covers the whole instance, so no duplicate is created in
   the Files domain. See
   [Can file assets be moved to another community?](file-asset-lifecycle.md#can-file-assets-be-moved-to-another-community).
+- **Extractor values (optional, off by default)** can be the sensitive data
+  itself. If you turn them on (see *Optional: extractor values on file
+  assets* in the file asset lifecycle guide), make sure the **DataXray Files**
+  domain, and any community file assets were moved to, is readable only by
+  the people allowed to see those values.
 
 ---
 
@@ -264,6 +269,14 @@ the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute type
 name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes:
 settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
 (`data-xray` by default) stay as they are.
+
+### Upgrading to v2.8
+
+Re-import the workflows. Nothing else is needed: v2.8 adds one optional
+feature, extractor values on file assets, which is off until an admin sets
+**Configure DataXray Workflows**' new **Sync extractor values to file assets
+(true/false)** variable to `true` and runs it. See *Optional: extractor values
+on file assets* in the file asset lifecycle guide.
 
 ### Upgrading to v2.7
 

@@ -310,17 +310,28 @@ def tupleFromSearchHit(Map hit, Map index, Map dsNames, String baseUrl) {
     (src['dxr#tags'] instanceof List ? src['dxr#tags'] : []).each { t -> ref(index.labelDxrIdByIndexId, t.toString(), 'label') }
     def upc = 'annotation_stats#unique_phrase_count.'
     def ext = 'extracted_metadata#'
+    boolean valuesOn = extractedValuesOn()
+    def values = []
     src.each { k, v ->
         def key = k.toString()
         if (key.startsWith(upc)) {
             def count = v instanceof Number ? v.intValue() : (v != null && v.toString().isInteger() ? v.toString().toInteger() : 0)
             if (count > 0) { ref(index.annotatorDxrIdByIndexId, key.substring(upc.length()), 'annotator') }
         } else if (key.startsWith(ext)) {
-            if (v != null && !v.toString().trim().isEmpty()) { ref(index.extractorDxrIdByIndexId, key.substring(ext.length()), 'extractor') }
+            if (v != null && !v.toString().trim().isEmpty()) {
+                def n = key.substring(ext.length())
+                ref(index.extractorDxrIdByIndexId, n, 'extractor')
+                if (valuesOn) {
+                    def uuid = (index.extractorDxrIdByIndexId ?: [:])[n]
+                    def name = (uuid ? index.nameByDxrId[uuid] : null) ?: "extractor#${n}"
+                    extractedValueTexts(v).each { text -> values << [name.toString(), text] }
+                }
+            }
         }
     }
     def objectId = (src.object_id ?: '').toString()
-    return [id, datasource.toString(), path, fileName, size, modified, '', refs, dsId, objectId]
+    return [id, datasource.toString(), path, fileName, size, modified, '', refs, dsId, objectId,
+            boundExtractedValues(values)]
 }
 
 // Datasource ids in a page that `dsNames` does not know yet.
