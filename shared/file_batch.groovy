@@ -18,7 +18,7 @@
 //     (Accepted, Under Review, …) is never changed.
 //   – Attributes (DataXray ID, File Path, File Size, Last Modified,
 //     Datasource Name, Link) are written with setAssetAttributes (replace-all
-//     per type — idempotent).
+//     per type — idempotent); size and date in readable form (see below).
 //   – Relations: query asset —returns→ file asset (the per-query membership
 //     the rerun workflow diffs against), and file —groups→ each matched
 //     classification. Relations for freshly created assets are added in bulk
@@ -121,8 +121,8 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             def (tuple, assetId) = pair
             setFileAssetAttr(assetId, ids.dataxrayIdAttrTypeId,   tuple[0])
             setFileAssetAttr(assetId, ids.filePathAttrTypeId,     tuple[2])
-            setFileAssetAttr(assetId, ids.fileSizeAttrTypeId,     tuple[4])
-            setFileAssetAttr(assetId, ids.lastModifiedAttrTypeId, tuple[5])
+            setFileAssetAttr(assetId, ids.fileSizeAttrTypeId,     readableFileSize(tuple[4]))
+            setFileAssetAttr(assetId, ids.lastModifiedAttrTypeId, readableTimestamp(tuple[5]))
             setFileAssetAttr(assetId, ids.datasourceAttrTypeId,   tuple[1])
             setFileAssetAttr(assetId, ids.linkAttrTypeId,         tuple[6])
         }
@@ -323,6 +323,47 @@ def fileNameOf(tuple) {
 def uniqueAssetName(String fileName, UUID assetId) {
     def frag = assetId.toString().replaceAll('-', '').take(8)
     return "${fileName.take(200)} [${frag}]".toString()
+}
+
+// File Size for people: "27.2 KB (27,885 bytes)" (1 KB = 1,024 bytes; the exact
+// count stays in brackets). A value that isn't a whole number is kept as is.
+def readableFileSize(value) {
+    def raw = (value == null ? '' : value.toString().trim())
+    if (!raw.isLong()) { return raw }
+    long bytes = raw.toLong()
+    def exact = String.format(Locale.ENGLISH, '%,d', bytes)
+    if (bytes < 1024) { return "${exact} ${bytes == 1L ? 'byte' : 'bytes'}".toString() }
+    def units = ['KB', 'MB', 'GB', 'TB', 'PB']
+    double v = bytes / 1024d
+    int u = 0
+    while (v >= 1024d && u < units.size() - 1) { v = v / 1024d; u++ }
+    return "${String.format(Locale.ENGLISH, '%.1f', v)} ${units[u]} (${exact} bytes)".toString()
+}
+
+// Last Modified for people: "10 Apr 2025, 17:22 UTC". DataXray sends ISO-8601
+// instants (with or without fractional seconds or an offset); a value without
+// a zone is read as UTC, digits alone as epoch seconds or milliseconds.
+// Anything else is kept as is.
+def readableTimestamp(value) {
+    def raw = (value == null ? '' : value.toString().trim())
+    if (raw.isEmpty()) { return raw }
+    java.time.Instant instant = null
+    try {
+        if (raw.isLong()) {
+            long n = raw.toLong()
+            instant = n > 100_000_000_000L ? java.time.Instant.ofEpochMilli(n) : java.time.Instant.ofEpochSecond(n)
+        } else {
+            try {
+                instant = java.time.OffsetDateTime.parse(raw).toInstant()
+            } catch (java.time.format.DateTimeParseException noOffset) {
+                instant = java.time.LocalDateTime.parse(raw).toInstant(java.time.ZoneOffset.UTC)
+            }
+        }
+    } catch (Exception parseEx) {
+        return raw
+    }
+    return java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm 'UTC'", Locale.ENGLISH)
+        .withZone(java.time.ZoneOffset.UTC).format(instant)
 }
 
 def setFileAssetAttr(UUID assetId, UUID typeId, value) {

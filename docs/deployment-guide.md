@@ -177,9 +177,11 @@ everything without being added to these roles.
   **DataXray Admin** (and to admins).
 - **Importing search results as assets** — after a search, the results task
   offers three independent options:
-  - **Import now: create assets for all N matching files** (up to an
-    instance-wide limit of **25,000** DataXray File assets, wherever they
-    live; a warning appears above 10,000).
+  - **Import now: create assets for all N matching files** (up to
+    **10,000** files per search, and an instance-wide limit of **25,000**
+    DataXray File assets, wherever they live; a warning appears above
+    5,000). A search matching more than 10,000 files cannot be imported or
+    kept in sync: refine it first.
   - **Keep in sync nightly** tags the query asset `dataxray-keep-in-sync` for
     the nightly file sync. It does not require importing now.
   - **Create assets for new files found on later reruns** (ticked by default).
@@ -294,7 +296,7 @@ that case, re-enter the token/URL (Step 4) and **run Configure once more** (Step
 | Configure's results list a workflow as **"not deployed yet"**. | That workflow wasn't imported when Configure ran — import it (Steps 1–2) and run Configure again (Step 3). |
 | A user can't see Search/Sync in **+ Create**. | They don't hold **DataXray User** or **DataXray Admin** — assign the role (Step 5). |
 | A user can't edit the Base URL / token. | Editing requires **DataXray Admin** (or Sysadmin / Workflow Administration). |
-| The import controls don't appear on the search results task. | Either the search returned 0 results, or the projected number of DataXray File assets (wherever they live) exceeds the 25,000 cap (the task shows the reason). |
+| The import controls don't appear on the search results task. | Either the search returned 0 results, matched more than 10,000 files, or the projected number of DataXray File assets (wherever they live) exceeds the 25,000 cap (the task shows the reason). |
 | A rerun stops with "This instance is missing the status 'Not in any search' …". | The workflows were upgraded to v2.4 but Configure has not been re-run — run it once (Step 3). |
 | *formerly returns* or *formerly groups* links don't show on an asset page. | Configure left that asset type's assignment alone because it has hand-tuned rules (its results list it). Add the relation types in Settings > Operating model > Asset types > Assignments. |
 | A search is refused with "… was deleted in DataXray (its Collibra asset is retired)". | A classification picked in the form was deleted in DataXray; the sync marked its Collibra asset Obsolete, but the pickers still offer it. Remove it from the search. |

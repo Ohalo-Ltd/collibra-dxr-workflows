@@ -145,6 +145,7 @@ execution.setVariable('filesDomainCount', filesDomainCount)
 execution.setVariable('importDecision', false)
 execution.setVariable('keepInSync', false)
 execution.setVariable('autoImportNewFiles', true)
-execution.setVariable('syncOffered', total > 0)
+// Not above the import limit: the first rerun would have to create them all.
+execution.setVariable('syncOffered', total > 0 && total <= dxrMaxImportFiles())
 
 loggerApi.info("Search DataXray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, resultsFile=${attachmentName ?: fileStatus}${fileSkipped ? " (${fileSkipped} skipped)" : ''}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")

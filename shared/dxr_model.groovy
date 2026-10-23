@@ -60,9 +60,20 @@ def dxrMaxTotalFileAssets() { return 25_000 }
 // lower it further.
 def dxrEdgeResultsFileMaxRows() { return 10_000 }
 
+// No single run creates more file assets than this (either edition): a search
+// matching more cannot be imported (the user is asked to refine it), and a
+// rerun that would add more new files than this is refused. Agreed with TRC on
+// 13 Oct 2026.
+def dxrMaxImportFiles() { return 10_000 }
+
+// The user-facing refusal for a search above dxrMaxImportFiles().
+def dxrTooManyToImportMessage(Object totalDisplay) {
+    return "Importing is disabled for this search: it matched ${totalDisplay} file(s), more than the ${String.format(Locale.ENGLISH, '%,d', dxrMaxImportFiles())} a search can import. Refine the search (add a label, extractor or annotator, or annotated text) and run it again.".toString()
+}
+
 // Above this many files an import is allowed but the results form warns that
 // it will take a while.
-def dxrWarnImportFiles() { return 10_000 }
+def dxrWarnImportFiles() { return 5_000 }
 
 // Work items processed per async batch task execution (one DB transaction).
 def dxrBatchSize() { return 50 }
