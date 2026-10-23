@@ -23,8 +23,10 @@ def queryAssetId = string2Uuid((execution.getVariable('queryAssetId') ?: '').toS
 int total        = (execution.getVariable('resultCount') ?: 0) as int
 // Start no larger than the preview ended up using: if Collibra refused its
 // rows as too large at the configured size, the import pages would be too.
+// (Not dxrPageSizeCur: the results-file pass ran since, with slimmer rows.)
 int configuredPageSize = edgePageSize(execution.getVariable('dataxrayPageSize'))
-int pageSize     = Math.min(configuredPageSize, edgeCurrentPageSize(configuredPageSize))
+def previewSize  = execution.getVariable('dxrPreviewPageSize')
+int pageSize     = Math.min(configuredPageSize, previewSize != null && previewSize.toString().isInteger() ? previewSize.toString().toInteger() : configuredPageSize)
 
 // --- Re-check the instance-wide cap -------------------------------------------
 
@@ -49,6 +51,7 @@ zeroEdgeImportCounters(total, pageSize)
 execution.setVariable('dxrFetchComplete', false)
 execution.setVariable('importAborted', false)
 def items = readJsonVariable('dxrQueryItems', [])
+beginEdgeFilesPass()
 startEdgeFilesPage(items, 0, pageSize, null)
 loggerApi.info("Import ready: ${total} file(s) in pages of ${pageSize}; files domain currently holds ${filesDomainCount}")
 

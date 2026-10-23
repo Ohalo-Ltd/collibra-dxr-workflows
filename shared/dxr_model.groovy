@@ -54,6 +54,12 @@ def dxrModelIds() {
 // exceed it are refused.
 def dxrMaxTotalFileAssets() { return 25_000 }
 
+// Cloud + Edge edition: the most rows a search's results file (ZIP'd CSV) holds.
+// Collecting it takes one External API call per 100 rows, so a larger search
+// gets no file (the results task says so); Data X-Ray's own paging window may
+// lower it further.
+def dxrEdgeResultsFileMaxRows() { return 10_000 }
+
 // Above this many files an import is allowed but the results form warns that
 // it will take a while.
 def dxrWarnImportFiles() { return 10_000 }
