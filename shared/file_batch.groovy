@@ -23,6 +23,8 @@
 //   – Attributes (DataXray ID, DataXray File Name, File Path, File Size, Last
 //     Modified, Datasource Name, Link) are written with setAssetAttributes (replace-all
 //     per type — idempotent); size and date in readable form (see below).
+//     DataXray Extracted Values (optional, extractedValuesOn) is rewritten as a
+//     table of the file's extractor values, or cleared when it has none.
 //   – Relations: query asset —returns→ file asset (the per-query membership
 //     the rerun workflow diffs against), and file —groups→ each matched
 //     classification. Relations for freshly created assets are added in bulk
@@ -128,6 +130,8 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
 
         // --- Attributes (idempotent replace-all per type) ------------------------
 
+        boolean valuesOn = extractedValuesOn()
+
         (newItems + existingItems).each { pair ->
             def (tuple, assetId) = pair
             setFileAssetAttr(assetId, ids.dataxrayIdAttrTypeId,   tuple[0])
@@ -140,6 +144,10 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             if (fileObjectKey(tuple) != null) {
                 setFileAssetAttr(assetId, ids.datasourceIdAttrTypeId, tuple[8])
                 setFileAssetAttr(assetId, ids.objectIdAttrTypeId,     tuple[9])
+            }
+            if (valuesOn) {
+                replaceFileAssetAttr(assetId, ids.extractedValuesAttrTypeId,
+                                     renderExtractedValuesHtml(tuple.size() > 10 ? tuple[10] : []))
             }
         }
 
@@ -495,6 +503,46 @@ def setFileAssetAttr(UUID assetId, UUID typeId, value) {
     } catch (Exception attrEx) {
         loggerApi.warn("setAssetAttributes(${typeId}) on ${assetId} failed: ${attrEx.message}")
     }
+}
+
+// Like setFileAssetAttr, but an empty value clears the attribute (no stale values).
+def replaceFileAssetAttr(UUID assetId, UUID typeId, String value) {
+    try {
+        assetApi.setAssetAttributes(com.collibra.dgc.core.api.dto.instance.asset.SetAssetAttributesRequest.builder()
+            .assetId(assetId)
+            .typeId(typeId)
+            .values((value ? [value] : []) as List<Object>)
+            .build())
+    } catch (Exception attrEx) {
+        loggerApi.warn("setAssetAttributes(${typeId}) on ${assetId} failed: ${attrEx.message}")
+    }
+}
+
+// The DataXray Extracted Values table: one row per extractor, its values one
+// per line. '' when the file has none.
+def renderExtractedValuesHtml(List pairs) {
+    if (!pairs) { return '' }
+    def byExtractor = [:]
+    pairs.each { p -> byExtractor.get(p[0].toString(), []) << p[1].toString() }
+    def writer = new StringWriter()
+    def html = new groovy.xml.MarkupBuilder(new groovy.util.IndentPrinter(writer, '', false))
+    html.table {
+        thead { tr { th('Extractor'); th('Value') } }
+        tbody {
+            byExtractor.each { name, values ->
+                tr {
+                    td(name)
+                    td {
+                        values.eachWithIndex { v, i ->
+                            if (i > 0) { br() }
+                            mkp.yield(v)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return writer.toString()
 }
 
 def removeRelationQuietly(UUID relationId) {

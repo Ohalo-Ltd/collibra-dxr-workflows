@@ -69,10 +69,15 @@ The same guidance as the on-prem edition applies:
 - **Keep the DataXray Classifications domain readable by everyone** who works with file or query assets. A user who cannot view a classification asset cannot see relations to it either (Collibra: "View permissions also impact asset relations"), so classifications moved into a restricted community silently disappear from file assets. Do not move classification assets out of this domain: the classification sync only looks for them there.
 - **File assets and saved searches can be private.** Set view permissions on the **DataXray Files** and **DataXray Sync Filter** domains (view permissions can be set per domain, not only per community); no separate community is needed. Restrict the queries domain as well, because a query's *returns* links list file names. A user who cannot view a file asset does not see it through a query asset's relations either.
 - **Moving file assets to another community is safe.** They keep syncing wherever they are: the integration's background tasks run as Collibra's **Workflow** user, which has no permission restrictions, and the check for an existing asset covers the whole instance, so no duplicate is created in the Files domain. See [Can file assets be moved to another community?](file-asset-lifecycle.md#can-file-assets-be-moved-to-another-community).
+- **Extractor values (optional, off by default)** can be the sensitive data itself. If you turn them on (see [Optional: extractor values on file assets](file-asset-lifecycle.md#optional-extractor-values-on-file-assets)), make sure the **DataXray Files** domain, and any community file assets were moved to, is readable only by the people allowed to see those values.
 
 ## Upgrading from Data X-Ray to DataXray names
 
 Releases before the DataXray rename call the product **Data X-Ray** and the queries domain **Data X-Ray Custom Queries**. After re-importing the workflows, run **Configure DataXray Workflows** once: it renames the community, the three domains (the queries domain becomes **DataXray Sync Filter**), the **DataXray File** asset type, the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute types, the **DataXray Admin** and **DataXray User** roles and the six workflow definitions. It only renames an element that still has its old default name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes: settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name (`data-xray` by default) stay as they are.
+
+## Upgrading to v2.8
+
+Re-import the workflows. Nothing else is needed: v2.8 adds one optional feature, extractor values on file assets, which is off until an admin sets **Configure DataXray Workflows**' new **Sync extractor values to file assets (true/false)** variable to `true` and runs it. See [Optional: extractor values on file assets](file-asset-lifecycle.md#optional-extractor-values-on-file-assets).
 
 ## Upgrading to v2.7
 

@@ -8,7 +8,10 @@
       → resultsTask (user form: results — appears as an inbox task)
       → endEvent
 
-  This workflow has NO configuration variables of its own. Everything it needs
+  One configuration variable: syncExtractorValues (default false). Set to true
+  and run this workflow to add the optional DataXray Extracted Values attribute
+  to DataXray File assets; set back to false and run it again to remove the
+  attribute type and every value. Everything else it needs
   (the canonical UUIDs of the elements to create, and the process IDs of the
   workflows to configure) is baked into the script. It creates elements with
   fixed UUIDs that match the defaults already shipped in the sync/search BPMNs
@@ -43,6 +46,7 @@
 
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="startConfigureForm">
       <extensionElements>
+        <flowable:formProperty id="syncExtractorValues" name="Sync extractor values to file assets (true/false)" type="string" variable="syncExtractorValues" default="false" readable="false" required="true"/>
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>
     </startEvent>

@@ -41,6 +41,7 @@ def dxrModelIds() {
         datasourceIdAttrTypeId : string2Uuid('019e9212-3d44-7f61-8e5c-8a9b0c1d2e23'),  // DataXray Datasource ID (file assets; Cloud + Edge)
         objectIdAttrTypeId     : string2Uuid('019e9212-4e55-7072-9f6d-9b0c1d2e3f34'),  // DataXray Object ID (file assets; Cloud + Edge)
         fileNameAttrTypeId     : string2Uuid('019e9212-5f66-7183-a07e-ac1d2e3f4a45'),  // DataXray File Name (file assets: DataXray's name, kept in sync; the asset name is the user's)
+        extractedValuesAttrTypeId: string2Uuid('019e9212-7b88-73a5-a2c0-ce2f4a5b6c67'), // DataXray Extracted Values (optional, see extractedValuesOn)
         linkAttrTypeId         : string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba'),
         searchLinkAttrTypeId   : string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254'),
         subtypeAttrTypeId      : string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad'),
@@ -137,6 +138,31 @@ def isParkedFileStatus(UUID statusId, Map ids) {
 // 200 keeps both the request and the answer (~250 bytes per file found, only
 // datasource_id and object_id returned) well under Edge's 100 KB limit.
 def dxrExistsCheckBatchSize() { return 200 }
+
+// Optional extractor values (v2.8, off by default). The switch is Configure's
+// syncExtractorValues variable: true creates the DataXray Extracted Values
+// attribute type, false deletes it, which removes every value with it. A sync
+// writes values only while the attribute type exists, so with the switch off
+// nothing about the feature shows in Collibra. Checked once per process and
+// cached in dxrExtractedValuesOn.
+def extractedValuesOn() {
+    def cached = execution.getVariable('dxrExtractedValuesOn')
+    if (cached != null) { return cached.toString() == 'true' }
+    boolean on = false
+    try {
+        on = attributeTypeApi.exists(dxrModelIds().extractedValuesAttrTypeId)
+    } catch (Exception lookupEx) {
+        loggerApi.warn("Could not check for the DataXray Extracted Values attribute type: ${lookupEx.message}")
+    }
+    execution.setVariable('dxrExtractedValuesOn', on.toString())
+    return on
+}
+
+// Extractor values kept per file: each value is cut to dxrExtractedValueMaxChars()
+// and a file's values stop at dxrExtractedValuesMaxChars() in total. The Cloud +
+// Edge edition keeps less: its values travel in 100 KB External API pages.
+def dxrExtractedValueMaxChars() { return dxrPackEdition() == 'cloud-edge' ? 500 : 2_000 }
+def dxrExtractedValuesMaxChars() { return dxrPackEdition() == 'cloud-edge' ? 10_000 : 50_000 }
 
 // Tag stamped on every classification asset written by the classification sync.
 def dxrClassificationSyncTag() { return 'dataxray-classification-sync' }

@@ -54,6 +54,11 @@
 // there are NO configuration variables to write — the admin only sets each
 // workflow's DataXray connection settings by hand.
 //
+// Its one configuration variable, syncExtractorValues (default false), switches
+// the optional DataXray Extracted Values attribute on file assets: true creates
+// the attribute type and adds it to the DataXray File assignment, false deletes
+// it (and with it every value) if it exists.
+//
 // Idempotent: anything that already exists is left untouched. Safe to re-run.
 //
 // Operating-model elements are created/looked up via the meta APIs
@@ -132,6 +137,12 @@ def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
 // DataXray's own name for the file, refreshed on every sync. The asset's name
 // is set from it once, when the asset is created, and is the user's after that.
 def FILE_NAME_ATTR_ID     = '019e9212-5f66-7183-a07e-ac1d2e3f4a45'
+// DataXray Extracted Values (v2.8, optional): the extractor values of each file,
+// as a table. Exists only while this workflow's syncExtractorValues variable
+// is true; the syncs write it only while it exists (extractedValuesOn).
+def EXTRACTED_VALUES_ATTR_ID = '019e9212-7b88-73a5-a2c0-ce2f4a5b6c67'
+def EXTRACTED_VALUES_ATTR_NAME = 'DataXray Extracted Values'
+def syncExtractorValues = (execution.getVariable('syncExtractorValues') ?: 'false').toString().trim().equalsIgnoreCase('true')
 
 // "returns / returned by" — links a DataXray Sync Filter asset (source) to
 // each DataXray File asset (target) it currently returns. Deliberately NOT
@@ -265,6 +276,9 @@ def attrTypeDefs = [
     [id: QUERY_ATTR_ID,         name: 'DataXray Query',        stringType: 'PLAIN_TEXT'],
     [id: FILTER_ATTR_ID,        name: 'Annotated Text Filter', stringType: 'PLAIN_TEXT'],
 ]
+if (syncExtractorValues) {
+    attrTypeDefs << [id: EXTRACTED_VALUES_ATTR_ID, name: EXTRACTED_VALUES_ATTR_NAME, stringType: 'RICH_TEXT']
+}
 
 // Which custom attribute types each asset type should surface on its page.
 def assignmentDefs = [
@@ -297,7 +311,7 @@ def assignmentDefs = [
     [assetTypeId: FILE_TYPE_ID, name: 'DataXray File', descriptionMin: 0,
      customAttrs: [FILE_NAME_ATTR_ID, FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
                    DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID,
-                   DATASOURCE_ID_ATTR_ID, OBJECT_ID_ATTR_ID],
+                   DATASOURCE_ID_ATTR_ID, OBJECT_ID_ATTR_ID] + (syncExtractorValues ? [EXTRACTED_VALUES_ATTR_ID] : []),
      relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
                  [id: RETURNS_RELTYPE_ID, direction: 'TO_SOURCE'],   // returned by queries
                  [id: FORMERLY_GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],  // formerly groups classifications
@@ -415,6 +429,24 @@ attrTypeDefs.each { a ->
     } catch (Exception e) {
         failed << "Attribute type '${a.name}': ${e.message}"
         loggerApi.error("ensure attribute type ${a.name} failed: ${e.message}")
+    }
+}
+
+// --- Phase 4a: extractor values switched off ----------------------------------
+
+// Deleting the attribute type removes every value with it and takes it off the
+// DataXray File assignment (verified on ohalo.collibra.com, 23 Oct 2026).
+if (!syncExtractorValues) {
+    try {
+        def eid = string2Uuid(EXTRACTED_VALUES_ATTR_ID)
+        if (attributeTypeApi.exists(eid)) {
+            attributeTypeApi.removeAttributeType(eid)
+            created << "Extractor values switched off: attribute type '${EXTRACTED_VALUES_ATTR_NAME}' and all its values removed"
+            loggerApi.info("syncExtractorValues is false: removed attribute type ${EXTRACTED_VALUES_ATTR_NAME} [${EXTRACTED_VALUES_ATTR_ID}]")
+        }
+    } catch (Exception e) {
+        failed << "Removing attribute type '${EXTRACTED_VALUES_ATTR_NAME}': ${e.message}"
+        loggerApi.error("remove attribute type ${EXTRACTED_VALUES_ATTR_NAME} failed: ${e.message}")
     }
 }
 
