@@ -9,7 +9,7 @@
 // The results file: search_page_edge.groovy collected every matching file's
 // datasource and path as CSV chunks (resultsFileChunk_<n>); they are zipped
 // into the same results.csv the on-prem edition attaches. None is attached when
-// the search matched more than dxrEdgeResultsFileMaxRows() files (or Data X-Ray's
+// the search matched more than dxrEdgeResultsFileMaxRows() files (or DataXray's
 // paging window) or when collecting failed; the results task says which.
 // Importing is not affected either way.
 
@@ -108,22 +108,22 @@ if (total > shown.size()) {
 }
 addAttributeQuietly(queryId, ids.filesAttrTypeId, renderPreviewHtml(shown, totalDisplay, moreNote))
 
-// --- Import feasibility (instance-wide cap + Data X-Ray paging window) -----------
+// --- Import feasibility (instance-wide cap + DataXray paging window) -----------
 
 int filesDomainCount = 0
 try {
     filesDomainCount = countFileAssets(ids)
 } catch (Exception countEx) {
-    loggerApi.warn("Could not count the Data X-Ray file assets: ${countEx.message}")
+    loggerApi.warn("Could not count the DataXray file assets: ${countEx.message}")
 }
 def feasibility = computeImportFeasibility(total, filesDomainCount, totalDisplay)
 if (feasibility.importAllowed && total > maxResultWindow) {
-    // The Data X-Ray search API pages with from/size and cannot reach past its
+    // The DataXray search API pages with from/size and cannot reach past its
     // max_result_window; a bigger result set cannot be walked page by page.
     feasibility.importAllowed = false
     feasibility.importWarn = false
     feasibility.importBlocked = true
-    feasibility.importBlockedMessage = "Importing is disabled for this search: it matched ${totalDisplay} file(s), more than the ${maxResultWindow} results Data X-Ray can page through in one query. Narrow the query (add a label or annotator, or split it per datasource) and search again.".toString()
+    feasibility.importBlockedMessage = "Importing is disabled for this search: it matched ${totalDisplay} file(s), more than the ${maxResultWindow} results DataXray can page through in one query. Narrow the query (add a label or annotator, or split it per datasource) and search again.".toString()
 }
 
 // --- Publish process variables for the results form -------------------------
@@ -147,4 +147,4 @@ execution.setVariable('keepInSync', false)
 execution.setVariable('autoImportNewFiles', true)
 execution.setVariable('syncOffered', total > 0)
 
-loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, resultsFile=${attachmentName ?: fileStatus}${fileSkipped ? " (${fileSkipped} skipped)" : ''}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")
+loggerApi.info("Search DataXray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, resultsFile=${attachmentName ?: fileStatus}${fileSkipped ? " (${fileSkipped} skipped)" : ''}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")

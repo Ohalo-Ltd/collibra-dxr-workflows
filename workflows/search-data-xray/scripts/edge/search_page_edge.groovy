@@ -111,7 +111,7 @@ handleEdgeFilesPage([
     pageSize   : configuredPageSize,
     index      : emptyIndex,
     onFatal    : { String msg ->
-        loggerApi.error("Search Data X-Ray failed: ${msg}")
+        loggerApi.error("Search DataXray failed: ${msg}")
         execution.setVariable('searchFailed', true)
         execution.setVariable('dxrErrorMessage', msg)
         execution.setVariable('hasMoreWork', false)
@@ -121,7 +121,7 @@ handleEdgeFilesPage([
         execution.setVariable('resultCount', page.total)
         execution.setVariable('dxrMaxResultWindow', page.maxResultWindow)
         execution.setVariable('dxrPreviewPitId', page.pitId ?: '')
-        loggerApi.info("Data X-Ray returned ${page.total} file(s); preview holds ${tuples.size()} (max_result_window ${page.maxResultWindow})")
+        loggerApi.info("DataXray returned ${page.total} file(s); preview holds ${tuples.size()} (max_result_window ${page.maxResultWindow})")
         return false   // preview only: one page
     },
 ])

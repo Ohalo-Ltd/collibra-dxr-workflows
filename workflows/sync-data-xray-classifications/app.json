@@ -1,14 +1,14 @@
 {
   "key": "syncDataXrayClassifications",
-  "name": "Sync Data X-Ray Classifications",
-  "description": "Sync the Data X-Ray classification catalog into Collibra and show what changed. Data X-Ray workflows {{pack:version}} ({{pack:variant}}).",
+  "name": "Sync DataXray Classifications",
+  "description": "Sync the DataXray classification catalog into Collibra and show what changed. DataXray workflows {{pack:version}} ({{pack:variant}}).",
   "theme": "theme-1",
   "icon": "glyphicon-refresh",
   "businessItemResourceType": "GLOBAL",
   "globalCreate": true,
   "variants": {
     "edge": {
-      "description": "Sync the Data X-Ray classification catalog into Collibra and show what changed. Collibra Cloud + Edge edition: Data X-Ray is reached through an Edge HTTP connection. Data X-Ray workflows {{pack:version}} ({{pack:variant}})."
+      "description": "Sync the DataXray classification catalog into Collibra and show what changed. Collibra Cloud + Edge edition: DataXray is reached through an Edge HTTP connection. DataXray workflows {{pack:version}} ({{pack:variant}})."
     }
   }
 }

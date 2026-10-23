@@ -4,14 +4,14 @@
 //
 // The saved criteria are NOT a frozen query string: the query is REBUILT from
 //   – the query asset's "groups" relations to classification assets, using
-//     their CURRENT names (so a Data X-Ray-side rename never breaks a saved
+//     their CURRENT names (so a DataXray-side rename never breaks a saved
 //     search — the classification sync keeps those names up to date), and
 //   – the "Annotated Text Filter" attribute stored at search time, scoped to the
 //     annotators linked by the query's "searches text in" relations.
 //
 // Classification lifecycle:
-//   – renamed in Data X-Ray → handled automatically (rebuilt from current names)
-//   – deleted in Data X-Ray → its Collibra asset is Obsolete (the sync retires,
+//   – renamed in DataXray → handled automatically (rebuilt from current names)
+//   – deleted in DataXray → its Collibra asset is Obsolete (the sync retires,
 //     never deletes). A retired criterion is reported in `deadCriteria` and the
 //     caller must FAIL the rerun — silently dropping an AND criterion would
 //     broaden the search and import files the user never asked for.
@@ -22,14 +22,14 @@
 //   [labelNames:, extractorNames:, annotatorNames:, filter:, filterAnnotatorNames:,
 //    labelDxrIds:, extractorDxrIds:, annotatorDxrIds:, filterAnnotatorDxrIds:,
 //    deadCriteria: [String], ignoredCriteria: int, hasCriteria: boolean]
-// The *DxrIds lists carry each criterion's Data X-Ray ID attribute ('' when the
+// The *DxrIds lists carry each criterion's DataXray ID attribute ('' when the
 // asset has none) in the same order as the corresponding names.
 def rebuildQueryCriteria(UUID queryId, Map ids) {
     def out = [labelNames: [], extractorNames: [], annotatorNames: [], filter: '', filterAnnotatorNames: [],
                labelDxrIds: [], extractorDxrIds: [], annotatorDxrIds: [], filterAnnotatorDxrIds: [],
                labelIndexIds: [], extractorIndexIds: [], annotatorIndexIds: [], filterAnnotatorIndexIds: [],
                deadCriteria: [], ignoredCriteria: 0, hasCriteria: false]
-    // Data X-Ray Index ID is only stamped by the Edge-edition sync; '' on on-prem installs.
+    // DataXray Index ID is only stamped by the Edge-edition sync; '' on on-prem installs.
     def indexIdOf = { UUID assetId -> ids.dataxrayIndexIdAttrTypeId ? readSingleAttribute(assetId, ids.dataxrayIndexIdAttrTypeId) : '' }
 
     relationIdsByFarEnd(ids.groupsRelationTypeId, queryId, null).keySet().each { targetId ->
@@ -41,7 +41,7 @@ def rebuildQueryCriteria(UUID queryId, Map ids) {
             return
         }
         if (target.getStatus()?.getId() == ids.obsoleteStatusId) {
-            out.deadCriteria << "'${target.getName()}' was deleted in Data X-Ray (its Collibra asset is retired)".toString()
+            out.deadCriteria << "'${target.getName()}' was deleted in DataXray (its Collibra asset is retired)".toString()
             return
         }
         def typeId = target.getType()?.getId()
@@ -76,7 +76,7 @@ def rebuildQueryCriteria(UUID queryId, Map ids) {
                 return
             }
             if (target.getStatus()?.getId() == ids.obsoleteStatusId) {
-                out.deadCriteria << "annotated-text annotator '${target.getName()}' was deleted in Data X-Ray (its Collibra asset is retired)".toString()
+                out.deadCriteria << "annotated-text annotator '${target.getName()}' was deleted in DataXray (its Collibra asset is retired)".toString()
                 return
             }
             out.filterAnnotatorNames << target.getName()
@@ -101,7 +101,7 @@ def recordQueryAttribute(UUID queryId, Map ids, String queryDisplay) {
             .values([queryDisplay] as List<Object>)
             .build())
     } catch (Exception attrEx) {
-        loggerApi.warn("Could not update the Data X-Ray Query attribute on ${queryId}: ${attrEx.message}")
+        loggerApi.warn("Could not update the DataXray Query attribute on ${queryId}: ${attrEx.message}")
     }
 }
 

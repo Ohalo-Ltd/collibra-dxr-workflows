@@ -1,4 +1,4 @@
-// dxr_http_direct.groovy — direct HTTPS transport to the Data X-Ray API.
+// dxr_http_direct.groovy — direct HTTPS transport to the DataXray API.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
 // ON-PREM VARIANT ONLY: the Collibra Cloud + Edge variant never opens HTTP
@@ -35,7 +35,7 @@ def openDxrGet(String url, String authToken, int readTimeoutMs) {
         } catch (Exception ignored) {
             // best-effort
         }
-        throw new RuntimeException("Data X-Ray API returned HTTP ${code}: ${truncateText(errBody, 500)}")
+        throw new RuntimeException("DataXray API returned HTTP ${code}: ${truncateText(errBody, 500)}")
     }
     return conn
 }
@@ -52,7 +52,7 @@ def streamDxrNdjson(String url, String authToken, int readTimeoutMs, Closure per
             perRow(reader.nextValue())
         }
     } catch (Exception parseEx) {
-        throw new RuntimeException("Data X-Ray API response could not be parsed as JSON: ${parseEx.message}")
+        throw new RuntimeException("DataXray API response could not be parsed as JSON: ${parseEx.message}")
     } finally {
         try { input.close() } catch (Exception ignored) { /* best-effort */ }
         conn.disconnect()
@@ -70,7 +70,7 @@ def fetchDxrText(String url, String authToken, int readTimeoutMs) {
 }
 
 // Run `attempt` up to `attempts` times, sleeping `sleepMs` between failures.
-// Data X-Ray can transiently stall an NDJSON stream mid-response (observed
+// DataXray can transiently stall an NDJSON stream mid-response (observed
 // live: a query that normally streams in seconds hung after a fraction of its
 // rows, then the connection died with "Premature EOF"); a fresh attempt
 // usually succeeds. The last failure is rethrown for the caller to report.

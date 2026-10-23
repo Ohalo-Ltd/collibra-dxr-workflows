@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-Standalone equivalent of the "Sync Data X-Ray Classifications" workflow.
+Standalone equivalent of the "Sync DataXray Classifications" workflow.
 
 Mirrors shared/classification_sync.groovy over the Collibra REST API so that the
 assets it writes are indistinguishable from the workflow's — the search, import,
 rerun and nightly workflows keep working against them:
 
-  - reads GET /api/v1/classifications from Data X-Ray (Bearer token)
+  - reads GET /api/v1/classifications from DataXray (Bearer token)
   - maps LABEL / ANNOTATOR / EXTRACTOR / CLASSIFICATION to the pack's asset types;
     ANNOTATOR_DOMAIN (data categories) is skipped, exactly like the workflow
-  - UPSERTS by the "Data X-Ray ID" attribute (the public UUID) only — never by name, so a
-    label re-created in Data X-Ray under an old name gets a new asset; a name still held
-    by an asset whose Data X-Ray ID left the catalogue is freed by renaming that asset
+  - UPSERTS by the "DataXray ID" attribute (the public UUID) only — never by name, so a
+    label re-created in DataXray under an old name gets a new asset; a name still held
+    by an asset whose DataXray ID left the catalogue is freed by renaming that asset
     "<name> (retired <id fragment>)"; disambiguates colliding names with the subtype
-  - renames when the Data X-Ray name changed; reactivates a retired asset that came back
+  - renames when the DataXray name changed; reactivates a retired asset that came back
   - tags every asset "dataxray-classification-sync"
-  - sets Data X-Ray ID, Description, Link, Search Link, Sub Type (links prefixed with
-    the Data X-Ray base URL); optionally the numeric "Data X-Ray Index ID" the Edge
-    edition of search/rerun needs (--stamp-index-ids, uses Data X-Ray's internal
+  - sets DataXray ID, Description, Link, Search Link, Sub Type (links prefixed with
+    the DataXray base URL); optionally the numeric "DataXray Index ID" the Edge
+    edition of search/rerun needs (--stamp-index-ids, uses DataXray's internal
     /api/tags, /api/data-classes and /api/metadata-extractors)
   - RETIRES (status Obsolete, never deletes) tagged assets no longer in the catalogue;
     skipped entirely when the catalogue comes back empty
@@ -31,7 +31,7 @@ are supplied as environment variables (or a `.env` file next to the script):
   COLLIBRA_URL        https://<tenant>.collibra.com
   DXR_BASE_URL        https://<data-x-ray-host>   (also the prefix of the Link
                       / Search Link attributes unless --link-base is given)
-  DXR_API_KEY         Data X-Ray Bearer token (same kind of token the on-prem
+  DXR_API_KEY         DataXray Bearer token (same kind of token the on-prem
                       workflow edition uses)
 
   Collibra authentication — pick ONE of the three (COLLIBRA_AUTH selects it
@@ -40,7 +40,7 @@ are supplied as environment variables (or a `.env` file next to the script):
 
   basic   COLLIBRA_USER + COLLIBRA_PASSWORD
           a Collibra user with a LOCAL password, allowed to create/edit/tag
-          assets in the "Data X-Ray Classifications" domain
+          assets in the "DataXray Classifications" domain
   jwt     COLLIBRA_JWT
           a JSON Web Token issued by the identity provider the Collibra admin
           registered under Settings > Security > JWT; sent as
@@ -102,15 +102,15 @@ except ImportError:  # pragma: no cover
 # CANONICAL IDS — DO NOT EDIT. Must match configure_data_xray.groovy exactly.
 # (right-hand comment = the name in configure_data_xray.groovy)
 # =============================================================================
-CLASSIFICATIONS_DOMAIN_ID = "019c9fbf-622c-76f4-9dd6-2a9730a11515"  # domainDefs: 'Data X-Ray Classifications'
-ASSET_TYPE_BY_DXR_TYPE = {                                            # assetTypeDefs (Data X-Ray type -> Collibra asset type)
+CLASSIFICATIONS_DOMAIN_ID = "019c9fbf-622c-76f4-9dd6-2a9730a11515"  # domainDefs: 'DataXray Classifications'
+ASSET_TYPE_BY_DXR_TYPE = {                                            # assetTypeDefs (DataXray type -> Collibra asset type)
     "CLASSIFICATION": "01965d43-235d-796b-be49-078f91d7472a",        #   'Classification'
     "ANNOTATOR":      "01922a69-e7a0-7ac7-a581-c9ba9286ccf1",        #   'Annotator'
     "EXTRACTOR":      "019c9fbd-a91b-7242-9451-79ab632163a3",        #   'Extractor'
     "LABEL":          "019c9fbe-25c3-71b7-90ac-057dd582fa1e",        #   'Label'
 }
-ATTR_DXR_ID       = "019e73ae-1aa8-700c-8086-626326822c22"  # DXID_ATTR_ID        'Data X-Ray ID' — the upsert key every other workflow reads
-ATTR_DXR_INDEX_ID = "019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41"  # INDEX_ID_ATTR_ID    'Data X-Ray Index ID' (Cloud + Edge edition)
+ATTR_DXR_ID       = "019e73ae-1aa8-700c-8086-626326822c22"  # DXID_ATTR_ID        'DataXray ID' — the upsert key every other workflow reads
+ATTR_DXR_INDEX_ID = "019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41"  # INDEX_ID_ATTR_ID    'DataXray Index ID' (Cloud + Edge edition)
 ATTR_DESCRIPTION  = "00000000-0000-0000-0000-000000003114"  # DESCRIPTION_ATTR_ID Collibra system 'Description'
 ATTR_LINK         = "019c9fc5-aa4c-72af-8918-caa54fe61eba"  # LINK_ATTR_ID        'Link'
 ATTR_SEARCH_LINK  = "019c9fc5-8ff5-77a7-962d-4b6b05c69254"  # SEARCH_LINK_ATTR_ID 'Search Link'
@@ -122,7 +122,7 @@ SYNC_TAG          = "dataxray-classification-sync"          # dxrClassificationS
 
 PAGE = 1000
 
-NO_INDEX_IDS_NOTE = ("NOTE: running without --stamp-index-ids, so no Data X-Ray Index ID is written. That is fine for the "
+NO_INDEX_IDS_NOTE = ("NOTE: running without --stamp-index-ids, so no DataXray Index ID is written. That is fine for the "
                      "on-prem edition; the Collibra Cloud + Edge edition's Search and Rerun refuse any classification "
                      "without one. Re-run with --stamp-index-ids for that edition (existing assets are updated in place).")
 
@@ -254,15 +254,15 @@ class Collibra:
 def fetch_catalogue(dxr_base: str, token: str) -> list[dict]:
     r = requests.get(dxr_base.rstrip("/") + "/api/v1/classifications", headers={"Authorization": f"Bearer {token}"}, timeout=120)
     if not r.ok:
-        raise RuntimeError(f"Data X-Ray /api/v1/classifications: HTTP {r.status_code} {r.text[:300]}")
+        raise RuntimeError(f"DataXray /api/v1/classifications: HTTP {r.status_code} {r.text[:300]}")
     data = r.json().get("data")
     if not isinstance(data, list):
-        raise RuntimeError("Data X-Ray response has no 'data' list")
+        raise RuntimeError("DataXray response has no 'data' list")
     return data
 
 
 def fetch_index_ids(dxr_base: str, token: str) -> dict[str, str]:
-    """Public UUID -> numeric search-index id, from Data X-Ray's internal catalogue endpoints."""
+    """Public UUID -> numeric search-index id, from DataXray's internal catalogue endpoints."""
     h = {"Authorization": f"Bearer {token}"}
     out: dict[str, str] = {}
     base = dxr_base.rstrip("/")
@@ -293,7 +293,7 @@ def type_label(t: str | None) -> str:
 
 
 def disambiguate(items: list[dict]) -> dict[str, str]:
-    """Data X-Ray id -> Collibra name, for names used by more than one item."""
+    """DataXray id -> Collibra name, for names used by more than one item."""
     by_name: dict[str, list[dict]] = defaultdict(list)
     for it in items:
         if it.get("name") and it.get("id"):
@@ -319,7 +319,7 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
     failures: list[str] = []
 
     if not items:
-        log("Data X-Ray returned 0 classifications — nothing synced and NO retirement (guard against a broken response)")
+        log("DataXray returned 0 classifications — nothing synced and NO retirement (guard against a broken response)")
         return {"counts": counts, "failures": ["empty catalogue"], "aborted": True}
 
     # Existing state of the domain
@@ -331,16 +331,16 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
         if aid in existing and attr.get("value"):
             v = str(attr["value"]).strip()
             if v in asset_by_dxr_id and asset_by_dxr_id[v] != aid:
-                log(f"WARN: Data X-Ray ID {v} is on two assets ({asset_by_dxr_id[v]}, {aid}); keeping the first")
+                log(f"WARN: DataXray ID {v} is on two assets ({asset_by_dxr_id[v]}, {aid}); keeping the first")
                 continue
             asset_by_dxr_id[v] = aid
-    log(f"Domain has {len(existing)} asset(s), {len(asset_by_dxr_id)} with a Data X-Ray ID")
+    log(f"Domain has {len(existing)} asset(s), {len(asset_by_dxr_id)} with a DataXray ID")
     dxr_id_by_asset = {aid: v for v, aid in asset_by_dxr_id.items()}
     current_dxr_ids = {str(it["id"]).strip() for it in items if it.get("id") is not None}
 
     def free_name(wanted: str, for_asset_id: str | None) -> bool:
         """Make `wanted` available for `for_asset_id` (None = a create); mirrors freeName in
-        classification_sync.groovy. Only a holder whose Data X-Ray ID left the catalogue is
+        classification_sync.groovy. Only a holder whose DataXray ID left the catalogue is
         renamed out of the way; any other holder is left alone and the caller reports it."""
         holder = existing_by_name.get(wanted)
         if holder is None or holder["id"] == for_asset_id:
@@ -352,7 +352,7 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
         collibra.change_asset(holder["id"], name=retired_name, displayName=retired_name)
         del existing_by_name[wanted]
         existing_by_name[retired_name] = holder
-        log(f"  renamed [{holder['id']}] '{wanted}' -> '{retired_name}': its Data X-Ray ID {holder_dxr_id} is no longer in the catalogue and the name is needed")
+        log(f"  renamed [{holder['id']}] '{wanted}' -> '{retired_name}': its DataXray ID {holder_dxr_id} is no longer in the catalogue and the name is needed")
         return True
 
     names = disambiguate(items)
@@ -386,7 +386,7 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
             if asset_id is None:
                 if not free_name(asset_name, None):
                     raise RuntimeError(f"the name '{asset_name}' is already used by asset {existing_by_name[asset_name]['id']}, "
-                                       "which is not a retired Data X-Ray classification")
+                                       "which is not a retired DataXray classification")
                 asset_id = collibra.add_asset(asset_name, CLASSIFICATIONS_DOMAIN_ID, type_id)
                 existing_by_name[asset_name] = {"id": asset_id, "name": asset_name}
 
@@ -423,7 +423,7 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
             failures.append(f"{name}: {exc}")
             log(f"FAILED '{name}': {exc}")
 
-    # Retire tagged assets that vanished from Data X-Ray (never delete)
+    # Retire tagged assets that vanished from DataXray (never delete)
     tagged = collibra.page_all("/assets", domainId=CLASSIFICATIONS_DOMAIN_ID, tagNames=SYNC_TAG)
     for a in tagged:
         if a["id"] in touched or a["status"]["id"] == STATUS_OBSOLETE:
@@ -431,7 +431,7 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
         try:
             collibra.change_asset(a["id"], statusId=STATUS_OBSOLETE)
             counts["retired"] += 1
-            log(f"Retired '{a['name']}' [{a['id']}] — no longer in Data X-Ray")
+            log(f"Retired '{a['name']}' [{a['id']}] — no longer in DataXray")
         except Exception as exc:
             counts["failed"] += 1
             failures.append(f"retire {a['name']}: {exc}")
@@ -443,9 +443,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--collibra-url", default=os.environ.get("COLLIBRA_URL"))
     ap.add_argument("--collibra-user", default=os.environ.get("COLLIBRA_USER"), help="Basic-auth user (see the docstring for jwt / oauth2 modes)")
-    ap.add_argument("--dxr-url", default=os.environ.get("DXR_BASE_URL"), help="Data X-Ray base URL (also the prefix for links unless --link-base is given)")
+    ap.add_argument("--dxr-url", default=os.environ.get("DXR_BASE_URL"), help="DataXray base URL (also the prefix for links unless --link-base is given)")
     ap.add_argument("--link-base", help="Base URL to prefix Link / Search Link with (default: --dxr-url)")
-    ap.add_argument("--stamp-index-ids", action="store_true", help="Also write the numeric Data X-Ray Index ID (needed by the Cloud + Edge edition of search/rerun)")
+    ap.add_argument("--stamp-index-ids", action="store_true", help="Also write the numeric DataXray Index ID (needed by the Cloud + Edge edition of search/rerun)")
     ap.add_argument("--dry-run", action="store_true", help="Read everything, write nothing")
     args = ap.parse_args()
 
@@ -466,7 +466,7 @@ def main() -> int:
     link_base = (args.link_base or dxr_url).rstrip("/")
 
     items = fetch_catalogue(dxr_url, token)
-    print(f"Data X-Ray catalogue: {len(items)} item(s) {dict(Counter(i.get('type') for i in items))}{' [DRY RUN]' if args.dry_run else ''}")
+    print(f"DataXray catalogue: {len(items)} item(s) {dict(Counter(i.get('type') for i in items))}{' [DRY RUN]' if args.dry_run else ''}")
     index_ids = fetch_index_ids(dxr_url, token) if args.stamp_index_ids else None
     if index_ids is None:
         print(NO_INDEX_IDS_NOTE)

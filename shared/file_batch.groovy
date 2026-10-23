@@ -1,4 +1,4 @@
-// file_batch.groovy — upserting one batch of Data X-Ray file assets, and
+// file_batch.groovy — upserting one batch of DataXray file assets, and
 // retiring the files a query no longer returns.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
@@ -6,9 +6,9 @@
 // edge: straight from each fetched page) and the rerun's retire pass.
 //
 // Per work item (tuple layout in dxr_rows.groovy):
-//   – Deterministic asset UUID from the Data X-Ray file id, so the same file
+//   – Deterministic asset UUID from the DataXray file id, so the same file
 //     always maps to the same Collibra asset: upsert is assetApi.exists().
-//   – Missing assets are bulk-created (addAssets) in the Data X-Ray Files
+//   – Missing assets are bulk-created (addAssets) in the DataXray Files
 //     domain. The full name carries a short UUID-derived suffix (Collibra
 //     names are unique per domain; 10k files WILL repeat "invoice.pdf");
 //     the display name is the clean filename.
@@ -16,7 +16,7 @@
 //     reactivated (status Candidate) if a previous sync parked them as
 //     'Not in any search' (or Obsolete, before v2.4). A status a person set
 //     (Accepted, Under Review, …) is never changed.
-//   – Attributes (Data X-Ray ID, File Path, File Size, Last Modified,
+//   – Attributes (DataXray ID, File Path, File Size, Last Modified,
 //     Datasource Name, Link) are written with setAssetAttributes (replace-all
 //     per type — idempotent).
 //   – Relations: query asset —returns→ file asset (the per-query membership
@@ -172,7 +172,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             // state, so the desired set is the same whichever query syncs the
             // file. Missing links are added (or swapped back from "formerly");
             // a link the integration made that no longer applies is swapped to
-            // "formerly groups" — a label deleted or unassigned in Data X-Ray
+            // "formerly groups" — a label deleted or unassigned in DataXray
             // stays visible as history instead of vanishing. Links a person
             // created are never removed, and a person's link to a classification
             // the file matches means nothing is added.

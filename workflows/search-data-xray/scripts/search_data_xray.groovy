@@ -1,6 +1,6 @@
-// search_data_xray.groovy  (on-prem variant: direct HTTPS to Data X-Ray)
+// search_data_xray.groovy  (on-prem variant: direct HTTPS to DataXray)
 //
-// Builds a Data X-Ray search query from a set of Collibra classification
+// Builds a DataXray search query from a set of Collibra classification
 // assets, then previews the matching files.
 //
 // Flow:
@@ -12,10 +12,10 @@
 //   3. Create a search-query asset in the configured domain.
 //   4. Link that asset to each chosen classification via the configured
 //      relation type, resolving each classification's name along the way.
-//   5. Compose the equivalent Data X-Ray query string from those names plus the
+//   5. Compose the equivalent DataXray query string from those names plus the
 //      phrase filter (a "contains" match scoped to the picked annotators), and
 //      store it on the asset as its Description.
-//   6. Call the Data X-Ray files API with that query, streaming every matching
+//   6. Call the DataXray files API with that query, streaming every matching
 //      file into a CSV that is compressed on the fly into a ZIP, and keep the
 //      first `maxResults` rows for an inline HTML preview.
 //   7. Attach the results ZIP to the asset, store the HTML preview table, and
@@ -29,8 +29,8 @@
 //
 // Process variables produced (for the results form / audit):
 //   conditionName  (String)  – the search name the user entered
-//   queryString    (String)  – the composed Data X-Ray query, or "(all files)"
-//   searchUrl      (String)  – the full Data X-Ray files API URL that was called
+//   queryString    (String)  – the composed DataXray query, or "(all files)"
+//   searchUrl      (String)  – the full DataXray files API URL that was called
 //   resultCount        (Integer) – total matching files (exact)
 //   resultCountDisplay (String)  – resultCount as text
 //   shownCount         (Integer) – rows shown in the inline preview table (≤ maxResults)
@@ -39,13 +39,13 @@
 //   zipCapped          (Boolean) – true if the ZIP was truncated at the 25 MB size cap
 //   queryAssetId       (String)  – UUID of the created search-query asset
 //   importAllowed      (Boolean) – results may be imported as file assets (> 0 results
-//                                  and the projected Data X-Ray Files domain population
+//                                  and the projected DataXray Files domain population
 //                                  stays within the instance-wide 25k cap)
 //   importWarn         (Boolean) – import allowed but large (> 10k files): the results
 //                                  form shows a duration warning
 //   importBlocked      (Boolean) – results exist but importing would exceed the cap
 //   importBlockedMessage (String) – human-readable refusal, '' unless importBlocked
-//   filesDomainCount   (Integer) – current Data X-Ray Files domain population
+//   filesDomainCount   (Integer) – current DataXray Files domain population
 //   importDecision / keepInSync (Boolean) – defaults (false) for the results form's
 //                                  decision fields; the form overwrites them
 //
@@ -68,20 +68,20 @@ import java.util.zip.ZipOutputStream
 // {{include:collibra_lookup.groovy}}
 // {{include:search_common.groovy}}
 
-announceDxrVersion('Search Data X-Ray')
+announceDxrVersion('Search DataXray')
 def ids = dxrModelIds()
 
 // --- Read & validate workflow configuration variables -----------------------
 
 def cfg = readRequiredConfig([
-    dataxrayUrl      : 'Data X-Ray Base URL',
-    dataxrayAuthToken: 'Data X-Ray Auth Token (Bearer)',
+    dataxrayUrl      : 'DataXray Base URL',
+    dataxrayAuthToken: 'DataXray Auth Token (Bearer)',
 ])
 if (!cfg.missing.isEmpty()) {
-    def detailMsg = "Cannot run Search Data X-Ray — the following workflow configuration variable(s) are not set:${missingConfigBullets(cfg.missing)}\n\nOpen the workflow's settings page and provide a value for each, then start the workflow again."
+    def detailMsg = "Cannot run Search DataXray — the following workflow configuration variable(s) are not set:${missingConfigBullets(cfg.missing)}\n\nOpen the workflow's settings page and provide a value for each, then start the workflow again."
     loggerApi.error(detailMsg)
     def wf = new WorkflowException(detailMsg)
-    wf.setTitleMessage('Search Data X-Ray misconfigured')
+    wf.setTitleMessage('Search DataXray misconfigured')
     wf.setUserMessage(detailMsg)
     throw wf
 }
@@ -97,7 +97,7 @@ def conditionName = (execution.getVariable('conditionName') ?: '').toString().tr
 if (conditionName.isEmpty()) {
     def msg = 'A name for the search query is required.'
     def wf = new WorkflowException(msg)
-    wf.setTitleMessage('Search Data X-Ray')
+    wf.setTitleMessage('Search DataXray')
     wf.setUserMessage(msg)
     throw wf
 }
@@ -115,7 +115,7 @@ def retiredMsg = retiredPicksMessage([label: labelIds, extractor: extractorIds, 
 if (retiredMsg) {
     loggerApi.error(retiredMsg)
     def wf = new WorkflowException(retiredMsg)
-    wf.setTitleMessage('Search Data X-Ray')
+    wf.setTitleMessage('Search DataXray')
     wf.setUserMessage(retiredMsg)
     throw wf
 }
@@ -136,17 +136,17 @@ if (filter.isEmpty() && !filterAnnotatorIds.isEmpty()) {
     loggerApi.warn("Ignoring ${filterAnnotatorIds.size()} annotated-text annotator(s): no annotated text was entered")
 }
 
-// --- Compose the Data X-Ray query string ------------------------------------
+// --- Compose the DataXray query string ------------------------------------
 
 def queryString = composeDxrQuery(labelNames, extractorNames, annotatorNames, filter, filterAnnotatorNames)
 if (queryString.isEmpty()) {
     loggerApi.warn('No annotators, extractors, labels or filter selected — querying all files')
 }
-loggerApi.info("Composed Data X-Ray query: ${displayQuery(queryString)}")
+loggerApi.info("Composed DataXray query: ${displayQuery(queryString)}")
 
 writeQueryAttributes(queryId, ids, description, queryString, filter)
 
-// --- Call the Data X-Ray files API ------------------------------------------
+// --- Call the DataXray files API ------------------------------------------
 
 def searchUrl = dxrFilesUrl(dataxrayUrl, queryString)
 
@@ -154,16 +154,16 @@ def MAX_ZIP_BYTES  = 25 * 1024 * 1024  // 25 MB cap on the attached results ZIP
 def FETCH_ATTEMPTS = 3
 def result
 try {
-    result = withDxrRetries(FETCH_ATTEMPTS, 5000, 'Data X-Ray fetch') {
+    result = withDxrRetries(FETCH_ATTEMPTS, 5000, 'DataXray fetch') {
         fetchAndArchive(searchUrl, dataxrayAuthToken, maxResults, MAX_ZIP_BYTES)
     }
 } catch (Exception fetchEx) {
-    loggerApi.error("Failed to fetch files from Data X-Ray after ${FETCH_ATTEMPTS} attempts: ${fetchEx.message}")
-    def wf = new WorkflowException("Data X-Ray file search failed: ${fetchEx.message}", fetchEx)
-    wf.setTitleMessage('Search Data X-Ray failed')
+    loggerApi.error("Failed to fetch files from DataXray after ${FETCH_ATTEMPTS} attempts: ${fetchEx.message}")
+    def wf = new WorkflowException("DataXray file search failed: ${fetchEx.message}", fetchEx)
+    wf.setTitleMessage('Search DataXray failed')
     // NOTE: this exception rolls the whole task back — the query asset
     // created above does NOT survive, so tell the user the truth.
-    wf.setUserMessage("Fetching matching files from Data X-Ray failed after ${FETCH_ATTEMPTS} attempts (${fetchEx.message}). Nothing was saved — this is usually a transient Data X-Ray stall; start the search again.")
+    wf.setUserMessage("Fetching matching files from DataXray failed after ${FETCH_ATTEMPTS} attempts (${fetchEx.message}). Nothing was saved — this is usually a transient DataXray stall; start the search again.")
     throw wf
 }
 
@@ -173,7 +173,7 @@ boolean zipCapped = result.zipCapped
 def zipBytes = result.zipBytes
 def totalDisplay = total.toString()
 
-loggerApi.info("Data X-Ray returned ${total} file(s); ZIP is ${zipBytes.length} byte(s)${zipCapped ? ' (capped at 25 MB)' : ''}, preview shows ${shown.size()}")
+loggerApi.info("DataXray returned ${total} file(s); ZIP is ${zipBytes.length} byte(s)${zipCapped ? ' (capped at 25 MB)' : ''}, preview shows ${shown.size()}")
 
 // --- Attach the full results as a ZIP'd CSV to the search-query asset ---------
 
@@ -199,7 +199,7 @@ int filesDomainCount = 0
 try {
     filesDomainCount = countFileAssets(ids)
 } catch (Exception countEx) {
-    loggerApi.warn("Could not count the Data X-Ray file assets: ${countEx.message}")
+    loggerApi.warn("Could not count the DataXray file assets: ${countEx.message}")
 }
 def feasibility = computeImportFeasibility(total, filesDomainCount, totalDisplay)
 
@@ -227,11 +227,11 @@ execution.setVariable('keepInSync', false)
 execution.setVariable('autoImportNewFiles', true)
 execution.setVariable('syncOffered', total > 0)
 
-loggerApi.info("Search Data X-Ray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, attachment=${attachmentName ?: '(none)'}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")
+loggerApi.info("Search DataXray complete: asset=${queryId}, total=${totalDisplay}, shown=${shown.size()}, attachment=${attachmentName ?: '(none)'}, importAllowed=${feasibility.importAllowed} (files domain holds ${filesDomainCount})")
 
 // --- Helpers ----------------------------------------------------------------
 
-// Stream the Data X-Ray files endpoint: every row is written to a CSV that is
+// Stream the DataXray files endpoint: every row is written to a CSV that is
 // compressed on the fly into a single-entry ZIP (results.csv) held in a
 // ByteArrayOutputStream — so only *compressed* bytes accumulate in memory. The
 // first `keepLimit` rows are also retained for the inline preview table.

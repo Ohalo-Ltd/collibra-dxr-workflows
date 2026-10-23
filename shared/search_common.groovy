@@ -1,4 +1,4 @@
-// search_common.groovy — helpers for the Search Data X-Ray workflow (both variants).
+// search_common.groovy — helpers for the Search DataXray workflow (both variants).
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
 
@@ -41,7 +41,7 @@ def relateAssets(UUID sourceId, List<UUID> targetIds, UUID relationTypeId) {
 }
 
 // A picked classification whose asset is retired (status Obsolete) was deleted in
-// Data X-Ray: the sync retires, never deletes, and the form pickers cannot filter
+// DataXray: the sync retires, never deletes, and the form pickers cannot filter
 // on status, so it stays pickable. Same rule as a rerun (rebuildQueryCriteria):
 // refuse rather than drop it — dropping an AND criterion broadens the search.
 // pickedIdsByKind: [label: [id, …], extractor: […], …] (kind is used in the message).
@@ -62,7 +62,7 @@ def retiredPicksMessage(Map pickedIdsByKind, UUID obsoleteStatusId) {
     }
     if (retired.isEmpty()) { return '' }
     def one = retired.size() == 1
-    return "Cannot search: ${retired.join(', ')} ${one ? 'was' : 'were'} deleted in Data X-Ray (${one ? 'its' : 'their'} Collibra asset is retired). Remove ${one ? 'it' : 'them'} from the search and try again.".toString()
+    return "Cannot search: ${retired.join(', ')} ${one ? 'was' : 'were'} deleted in DataXray (${one ? 'its' : 'their'} Collibra asset is retired). Remove ${one ? 'it' : 'them'} from the search and try again.".toString()
 }
 
 // Look up each asset by ID, relate it to the query asset, and return the names.
@@ -86,7 +86,7 @@ def createQueryAsset(String conditionName, Map ids) {
     } catch (Exception createEx) {
         loggerApi.error("Failed to create search-query asset '${conditionName}': ${createEx.message}")
         def wf = new com.collibra.dgc.workflow.api.exception.WorkflowException("Could not create the search-query asset: ${createEx.message}", createEx)
-        wf.setTitleMessage('Search Data X-Ray failed')
+        wf.setTitleMessage('Search DataXray failed')
         wf.setUserMessage("Could not create the search-query asset '${conditionName}': ${createEx.message}")
         throw wf
     }
@@ -107,7 +107,7 @@ def addAttributeQuietly(UUID assetId, UUID typeId, String value) {
 }
 
 // Write the query asset's Description ("<user text>\n\nThe query is: …"), the
-// Data X-Ray Query record and, when present, the Annotated Text Filter.
+// DataXray Query record and, when present, the Annotated Text Filter.
 def writeQueryAttributes(UUID queryId, Map ids, String description, String queryString, String filter) {
     def descParts = []
     if (description) descParts << description
@@ -115,7 +115,7 @@ def writeQueryAttributes(UUID queryId, Map ids, String description, String query
     addAttributeQuietly(queryId, ids.descriptionAttrTypeId, descParts.join('\n\n'))
     // Structured criteria for the rerun workflow. The classification criteria are
     // already recoverable from the query asset's "groups" relations (rebuilt from
-    // CURRENT names at rerun time, so Data X-Ray renames don't break saved
+    // CURRENT names at rerun time, so DataXray renames don't break saved
     // queries) and the phrase's annotators from its "searches text in" relations;
     // the free-text phrase has no relation, so it gets its own attribute. The
     // composed query string is stored too — as a human-readable record of what
@@ -173,7 +173,7 @@ def renderPreviewHtml(List shown, String totalDisplay, String moreNote) {
 }
 
 // Import feasibility against the INSTANCE-WIDE cap. The cap applies to the
-// TOTAL population of the Data X-Ray Files domain, not to this result set
+// TOTAL population of the DataXray Files domain, not to this result set
 // alone; for a fresh query the projection is current population + result
 // count — conservative when results overlap files another query already
 // imported (those would be updates, not new assets).
@@ -184,7 +184,7 @@ def computeImportFeasibility(int total, int filesDomainCount, String totalDispla
     boolean importWarn    = importAllowed && total > dxrWarnImportFiles()
     boolean importBlocked = total > 0 && !importAllowed
     def importBlockedMessage = importBlocked
-        ? "Importing is disabled for this search: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this search matched ${totalDisplay} file(s) — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit. Narrow the query, or retire imported searches you no longer need.".toString()
+        ? "Importing is disabled for this search: Collibra holds ${filesDomainCount} DataXray file asset(s) and this search matched ${totalDisplay} file(s) — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit. Narrow the query, or retire imported searches you no longer need.".toString()
         : ''
     return [importAllowed: importAllowed, importWarn: importWarn, importBlocked: importBlocked,
             importBlockedMessage: importBlockedMessage, projectedTotal: projectedTotal]
@@ -200,8 +200,8 @@ def csvEscape(value) {
     return s
 }
 
-// Look up each picked classification asset and its "Data X-Ray ID" attribute
-// (the UUID Data X-Ray's public catalogue uses). Returns
+// Look up each picked classification asset and its "DataXray ID" attribute
+// (the UUID DataXray's public catalogue uses). Returns
 // [[id: UUID, name: String, dxrId: String], …]; unresolvable ids are skipped
 // with a warning, an asset without the attribute gets dxrId ''.
 def resolvePickedClassifications(List ids, UUID dataxrayIdAttrTypeId, UUID indexIdAttrTypeId = null) {

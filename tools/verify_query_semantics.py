@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Differential check of the Data X-Ray query semantics the workflows rely on.
+"""Differential check of the DataXray query semantics the workflows rely on.
 
 The search / rerun scripts compose `/api/v1/files?q=` queries as:
 

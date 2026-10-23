@@ -1,14 +1,14 @@
-// dxr_rows.groovy — Data X-Ray result-row parsing and the work-item tuple.
+// dxr_rows.groovy — DataXray result-row parsing and the work-item tuple.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
 //
-// This is the ONE place that knows the shape of a Data X-Ray file row. Every
+// This is the ONE place that knows the shape of a DataXray file row. Every
 // transport (direct /api/v1/files NDJSON on-prem, paged internal search via
-// Collibra Edge) funnels rows through here, so a Data X-Ray field rename is a
+// Collibra Edge) funnels rows through here, so a DataXray field rename is a
 // one-file fix.
 //
 // Work-item tuple (positional, to keep the JSON compact):
-//   [0] Data X-Ray file id (String — basis of the deterministic asset UUID)
+//   [0] DataXray file id (String — basis of the deterministic asset UUID)
 //   [1] datasource name    (String)
 //   [2] full path          (String)
 //   [3] file name          (String)
@@ -22,8 +22,8 @@
 // Hit evidence vs "checked with zero": a result row may list a classification
 // that was checked but produced no hits — that is NOT a match and must not
 // become a relation. extractClassifications() therefore requires positive
-// evidence per entry kind. Row shape verified against a live Data X-Ray
-// /api/v1/files NDJSON response (Data X-Ray demo instance, 2026-08):
+// evidence per entry kind. Row shape verified against a live DataXray
+// /api/v1/files NDJSON response (DataXray demo instance, 2026-08):
 //   { datasource: {id, name, connector}, fileName, fileId, path, size,
 //     mimeType, createdAt, lastModifiedAt, contentSha256, scanDepth,
 //     labels: [{id, name}],
@@ -43,7 +43,7 @@ def extractFileTuple(row, String baseUrl) {
     def size = row?.size == null ? '' : row.size
     def modified = firstNonEmpty(row?.lastModifiedAt, row?.modifiedAt, row?.lastModified)
     // File rows carry no UI link field today; keep the extraction so a future
-    // Data X-Ray that adds one gets deep links for free. Never fabricate URLs.
+    // DataXray that adds one gets deep links for free. Never fabricate URLs.
     def link = firstNonEmpty(row?.link, row?.url)
     def deepLink = link ? (link.toString().startsWith('http') ? link.toString() : baseUrl + link) : ''
     def classifications = []
@@ -90,7 +90,7 @@ def extractClassifications(entries) {
 }
 
 // Replace every tuple's [dxrId, name] classification refs with the matching
-// Collibra asset UUID strings (by Data X-Ray ID first, then by name). Returns
+// Collibra asset UUID strings (by DataXray ID first, then by name). Returns
 // the number of refs that could not be resolved. `classIndex` comes from
 // buildClassificationIndex() (collibra_lookup.groovy).
 def resolveTupleClassifications(List workItems, Map classIndex) {
@@ -111,7 +111,7 @@ def resolveTupleClassifications(List workItems, Map classIndex) {
     return unresolved
 }
 
-// Same file, same asset — forever. The UUID is derived from the Data X-Ray
+// Same file, same asset — forever. The UUID is derived from the DataXray
 // file id, so upsert needs no lookup index and reruns/imports from any query
 // converge on the same asset.
 def deterministicFileAssetId(fileId) {
@@ -125,11 +125,11 @@ def parseClassificationsBody(String body) {
     try {
         parsed = new groovy.json.JsonSlurper().parseText(body)
     } catch (Exception parseEx) {
-        throw new RuntimeException("Data X-Ray API returned non-JSON body: ${parseEx.message}")
+        throw new RuntimeException("DataXray API returned non-JSON body: ${parseEx.message}")
     }
     def data = parsed?.data
     if (!(data instanceof List)) {
-        throw new RuntimeException("Data X-Ray API response missing 'data' array; got keys: ${parsed?.keySet()}")
+        throw new RuntimeException("DataXray API response missing 'data' array; got keys: ${parsed?.keySet()}")
     }
     return data
 }

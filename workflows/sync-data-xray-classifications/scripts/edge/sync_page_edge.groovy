@@ -9,7 +9,7 @@
 // {{include:dxr_edge_sync.groovy}}
 
 handleEdgeSyncPage(readJsonVariable('classIndex', [:])) { String msg ->
-    loggerApi.error("Data X-Ray sync failed: ${msg}")
+    loggerApi.error("DataXray sync failed: ${msg}")
     execution.setVariable('syncFailed', true)
     execution.setVariable('dxrErrorMessage', msg)
     execution.setVariable('syncFailuresDisplay', msg)

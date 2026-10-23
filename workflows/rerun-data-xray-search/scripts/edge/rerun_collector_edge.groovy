@@ -1,8 +1,8 @@
 // rerun_collector_edge.groovy  (Collibra Cloud + Edge variant)
 //
-// First, SYNCHRONOUS task of "Rerun Data X-Ray Search". Same guards and
+// First, SYNCHRONOUS task of "Rerun DataXray Search". Same guards and
 // criteria rebuild as the on-prem script (shared/rerun_common.groovy); instead
-// of fetching, it translates the criteria into a Data X-Ray query (numeric
+// of fetching, it translates the criteria into a DataXray query (numeric
 // index ids stamped on the classification assets by the Edge-edition sync),
 // snapshots the previously returned files, builds the classification index
 // from Collibra and arms page 0 of the results (rerun_page_edge.groovy).
@@ -21,7 +21,7 @@ import groovy.json.JsonOutput
 // {{include:rerun_common.groovy}}
 // {{include:dxr_edge.groovy}}
 
-announceDxrVersion('Rerun Data X-Ray Search')
+announceDxrVersion('Rerun DataXray Search')
 def ids = dxrModelIds()
 
 // --- Headless normalization ----------------------------------------------------
@@ -30,7 +30,7 @@ boolean headless = (execution.getVariable('headless') ?: 'false').toString().tri
 execution.setVariable('headless', headless ? 'true' : 'false')
 
 def abort = { String title, String message ->
-    loggerApi.error("Rerun Data X-Ray Search aborted: ${message}")
+    loggerApi.error("Rerun DataXray Search aborted: ${message}")
     execution.setVariable('rerunAborted', true)
     execution.setVariable('rerunAbortReason', message)
     zeroEdgeImportCounters(0, dxrEdgeDefaultPageSize())
@@ -52,8 +52,8 @@ def abort = { String title, String message ->
 
 def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
 if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {
-    abort('Rerun Data X-Ray Search misconfigured',
-        "The 'Edge HTTP connection name (Data X-Ray)' configuration variable is not set on this workflow. Open its settings page and provide it.")
+    abort('Rerun DataXray Search misconfigured',
+        "The 'Edge HTTP connection name (DataXray)' configuration variable is not set on this workflow. Open its settings page and provide it.")
     return
 }
 def dataxrayUrl = normalizeBaseUrl(execution.getVariable('dataxrayUrl'))
@@ -63,10 +63,10 @@ int pageSize = edgePageSize(execution.getVariable('dataxrayPageSize'))
 execution.setVariable('dataxrayPageSize', pageSize.toString())
 
 // The 'Not in any search' status and the "formerly" relation types come from
-// Configure Data X-Ray Workflows (v2.4+): refuse to run without them.
+// Configure DataXray Workflows (v2.4+): refuse to run without them.
 def modelGap = rerunModelGap(ids)
 if (modelGap) {
-    abort('Rerun Data X-Ray Search — run Configure first', modelGap)
+    abort('Rerun DataXray Search — run Configure first', modelGap)
     return
 }
 
@@ -74,13 +74,13 @@ if (modelGap) {
 
 def queryId = item?.getId()
 if (queryId == null) {
-    abort('Rerun Data X-Ray Search', 'No query asset — this workflow must be started from an Unstructured Data Query asset.')
+    abort('Rerun DataXray Search', 'No query asset — this workflow must be started from an Unstructured Data Query asset.')
     return
 }
 def queryAsset = assetApi.getAsset(queryId)
 if (queryAsset.getType()?.getId() != ids.queryAssetTypeId) {
-    abort('Rerun Data X-Ray Search',
-        "'${queryAsset.getName()}' is a ${queryAsset.getType()?.getName()} asset — this workflow can only rerun an Unstructured Data Query asset (a saved search created by Search Data X-Ray).")
+    abort('Rerun DataXray Search',
+        "'${queryAsset.getName()}' is a ${queryAsset.getType()?.getName()} asset — this workflow can only rerun an Unstructured Data Query asset (a saved search created by Search DataXray).")
     return
 }
 def conditionName = queryAsset.getName()
@@ -99,19 +99,19 @@ if (criteria.ignoredCriteria > 0) {
     loggerApi.warn("Rerun of '${conditionName}': ignoring ${criteria.ignoredCriteria} related asset(s) that are not Label/Extractor/Annotator classifications")
 }
 if (!criteria.deadCriteria.isEmpty()) {
-    abort('Rerun Data X-Ray Search — criterion no longer exists',
-        "Cannot rerun '${conditionName}': ${criteria.deadCriteria.join('; ')}. Rerunning without it would broaden the search and import files you never asked for. Recreate the classification in Data X-Ray (and run Sync Data X-Ray Classifications), or create a new search.")
+    abort('Rerun DataXray Search — criterion no longer exists',
+        "Cannot rerun '${conditionName}': ${criteria.deadCriteria.join('; ')}. Rerunning without it would broaden the search and import files you never asked for. Recreate the classification in DataXray (and run Sync DataXray Classifications), or create a new search.")
     return
 }
 if (!criteria.hasCriteria) {
-    abort('Rerun Data X-Ray Search — no saved criteria',
+    abort('Rerun DataXray Search — no saved criteria',
         "Cannot rerun '${conditionName}': it has no linked classifications and no annotated-text filter, so its criteria cannot be reconstructed. Create a new search instead.")
     return
 }
 
 def queryString = composeDxrQuery(criteria.labelNames, criteria.extractorNames, criteria.annotatorNames,
                                   criteria.filter, criteria.filterAnnotatorNames)
-loggerApi.info("Rerun of '${conditionName}' — rebuilt Data X-Ray query: ${displayQuery(queryString)}")
+loggerApi.info("Rerun of '${conditionName}' — rebuilt DataXray query: ${displayQuery(queryString)}")
 recordQueryAttribute(queryId, ids, displayQuery(queryString))
 
 // --- Classification index from Collibra; translate the criteria ----------------------
@@ -121,7 +121,7 @@ execution.setVariable('classIndex', JsonOutput.toJson(classIndex))
 
 def q = composeEdgeQueryItems(criteria, classIndex.annotatorIndexIds)
 if (!q.unresolved.isEmpty()) {
-    abort('Rerun Data X-Ray Search', edgeUnresolvedMessage("rerun '${conditionName}'".toString(), q.unresolved))
+    abort('Rerun DataXray Search', edgeUnresolvedMessage("rerun '${conditionName}'".toString(), q.unresolved))
     return
 }
 execution.setVariable('dxrQueryItems', JsonOutput.toJson(q.items))

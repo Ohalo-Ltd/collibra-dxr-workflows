@@ -1,7 +1,7 @@
 {
   "key": "syncDataXrayFilesNightly",
-  "name": "Sync Data X-Ray Files (Nightly)",
-  "description": "Rerun every Data X-Ray search flagged 'keep in sync' each night, re-syncing its imported file assets automatically. Data X-Ray workflows {{pack:version}} ({{pack:variant}}).",
+  "name": "Sync DataXray Files (Nightly)",
+  "description": "Rerun every DataXray search flagged 'keep in sync' each night, re-syncing its imported file assets automatically. DataXray workflows {{pack:version}} ({{pack:variant}}).",
   "theme": "theme-1",
   "icon": "glyphicon-refresh",
   "businessItemResourceType": "GLOBAL"

@@ -1,15 +1,15 @@
 // search_prepare_edge.groovy  (Collibra Cloud + Edge variant)
 //
-// First, SYNCHRONOUS task of Search Data X-Ray: everything that can fail with a
+// First, SYNCHRONOUS task of Search DataXray: everything that can fail with a
 // message the user sees in the start dialog happens here — configuration,
-// inputs, resolving the picked classifications to their Data X-Ray ids and
+// inputs, resolving the picked classifications to their DataXray ids and
 // composing the query. Nothing is written to Collibra yet (the External API
 // tasks that follow are asynchronous, so a failure after them cannot roll back
 // into the user's dialog; the query asset is created in
 // search_finalize_edge.groovy once the results are in).
 //
-// The query needs each criterion's numeric Data X-Ray index id, which the
-// Edge-edition classification sync stamps on the Collibra asset ("Data X-Ray
+// The query needs each criterion's numeric DataXray index id, which the
+// Edge-edition classification sync stamps on the Collibra asset ("DataXray
 // Index ID"). A criterion without one fails the search here, with a message
 // telling the user to run that sync first.
 //
@@ -27,7 +27,7 @@ import groovy.json.JsonOutput
 // {{include:search_common.groovy}}
 // {{include:dxr_edge.groovy}}
 
-announceDxrVersion('Search Data X-Ray')
+announceDxrVersion('Search DataXray')
 def ids = dxrModelIds()
 
 def failNow = { String title, String msg ->
@@ -42,8 +42,8 @@ def failNow = { String title, String msg ->
 
 def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
 if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {
-    failNow('Search Data X-Ray misconfigured',
-        "Cannot run Search Data X-Ray — the 'Edge HTTP connection name (Data X-Ray)' configuration variable is not set.\n\nOpen the workflow's settings page and enter the name of the HTTP connection to Data X-Ray on your Edge site, then start the workflow again.")
+    failNow('Search DataXray misconfigured',
+        "Cannot run Search DataXray — the 'Edge HTTP connection name (DataXray)' configuration variable is not set.\n\nOpen the workflow's settings page and enter the name of the HTTP connection to DataXray on your Edge site, then start the workflow again.")
 }
 def dataxrayUrl = normalizeBaseUrl(execution.getVariable('dataxrayUrl'))
 if (isPlaceholderValue(dataxrayUrl)) { dataxrayUrl = '' }
@@ -54,7 +54,7 @@ execution.setVariable('dataxrayPageSize', edgePageSize(execution.getVariable('da
 
 def conditionName = (execution.getVariable('conditionName') ?: '').toString().trim()
 if (conditionName.isEmpty()) {
-    failNow('Search Data X-Ray', 'A name for the search query is required.')
+    failNow('Search DataXray', 'A name for the search query is required.')
 }
 def filter      = (execution.getVariable('filter') ?: '').toString().trim()
 def description = (execution.getVariable('description') ?: '').toString().trim()
@@ -65,7 +65,7 @@ def retiredMsg = retiredPicksMessage([label: toIdList(execution.getVariable('lab
                                       'annotated-text annotator': filter.isEmpty() ? [] : filterAnnotatorIds],
                                      ids.obsoleteStatusId)
 if (retiredMsg) {
-    failNow('Search Data X-Ray', retiredMsg)
+    failNow('Search DataXray', retiredMsg)
 }
 
 def labels     = resolvePickedClassifications(toIdList(execution.getVariable('label')),     ids.dataxrayIdAttrTypeId, ids.dataxrayIndexIdAttrTypeId)
@@ -80,9 +80,9 @@ def queryString = composeDxrQuery(labels*.name, extractors*.name, annotators*.na
 if (queryString.isEmpty()) {
     loggerApi.warn('No annotators, extractors, labels or filter selected — querying all files')
 }
-loggerApi.info("Composed Data X-Ray query: ${displayQuery(queryString)}")
+loggerApi.info("Composed DataXray query: ${displayQuery(queryString)}")
 
-// --- Translate the criteria into a Data X-Ray query ------------------------------
+// --- Translate the criteria into a DataXray query ------------------------------
 
 // A phrase with no picked annotators is searched in every annotator Collibra knows.
 def allAnnotatorIndexIds = (!filter.isEmpty() && filterAnnotators.isEmpty())
@@ -96,7 +96,7 @@ def q = composeEdgeQueryItems([
     filterAnnotatorIndexIds: filterAnnotators*.indexId, filterAnnotatorNames: filterAnnotators*.name,
 ], allAnnotatorIndexIds)
 if (!q.unresolved.isEmpty()) {
-    failNow('Search Data X-Ray', edgeUnresolvedMessage('search', q.unresolved))
+    failNow('Search DataXray', edgeUnresolvedMessage('search', q.unresolved))
 }
 
 def asJson = { List picked -> picked.collect { [id: it.id.toString(), name: it.name, dxrId: it.dxrId, indexId: it.indexId] } }
@@ -119,4 +119,4 @@ execution.setVariable('dxrFetchComplete', false)
 execution.setVariable('dxrSearchPhase', 'preview')
 beginEdgeFilesPass()
 startEdgeFilesPage(q.items, 0, edgePageSize(execution.getVariable('dataxrayPageSize')), null)
-loggerApi.info("Search Data X-Ray via Edge connection '${connectionName}': preview page armed (${q.items.size()} query item(s))")
+loggerApi.info("Search DataXray via Edge connection '${connectionName}': preview page armed (${q.items.size()} query item(s))")

@@ -1,4 +1,4 @@
-name: Bundle Data X-Ray Workflow ZIPs
+name: Bundle DataXray Workflow ZIPs
 
 on:
   release:

@@ -1,4 +1,4 @@
-// import_collector.groovy  (on-prem variant: direct HTTPS to Data X-Ray)
+// import_collector.groovy  (on-prem variant: direct HTTPS to DataXray)
 //
 // First stage of the gated asset import: runs synchronously after the user
 // accepts "Import all N results as assets?" on the search results form.
@@ -7,8 +7,8 @@
 //   1. Re-check the instance-wide import cap (the form's visibility rules can
 //      be bypassed by completing the task via the REST API, so the script is
 //      the enforcement point).
-//   2. Re-run the Data X-Ray query (streaming NDJSON, exactly like the search
-//      task). The preview/import gap can drift a little if Data X-Ray changed
+//   2. Re-run the DataXray query (streaming NDJSON, exactly like the search
+//      task). The preview/import gap can drift a little if DataXray changed
 //      in between; the import summary reports what was actually imported.
 //   3. Distill every matching file into a compact work-item tuple
 //      (shared/dxr_rows.groovy) and store the whole list gzip+Base64-encoded in
@@ -17,7 +17,7 @@
 //      an integer cursor — the blob itself is written once, here, and never
 //      rewritten.
 //   4. Resolve each file's matched classifications to Collibra asset UUIDs up
-//      front (by Data X-Ray ID first, then by asset name), so the batch task
+//      front (by DataXray ID first, then by asset name), so the batch task
 //      does no lookups at all.
 //   5. Tag the query asset 'dataxray-keep-in-sync' when the user ticked
 //      "keep in sync" (the nightly file sync picks flagged queries up).
@@ -40,7 +40,7 @@ import com.collibra.dgc.workflow.api.exception.WorkflowException
 // {{include:collibra_lookup.groovy}}
 // {{include:worklist.groovy}}
 
-announceDxrVersion('Search Data X-Ray import')
+announceDxrVersion('Search DataXray import')
 def ids = dxrModelIds()
 
 // --- Inputs from earlier tasks ------------------------------------------------
@@ -59,7 +59,7 @@ def FETCH_ATTEMPTS = 3
 def workItems = []
 int skippedNoId = 0
 try {
-    def collected = withDxrRetries(FETCH_ATTEMPTS, 5000, 'Data X-Ray fetch') {
+    def collected = withDxrRetries(FETCH_ATTEMPTS, 5000, 'DataXray fetch') {
         def items = []
         int skipped = 0
         streamDxrNdjson(searchUrl, dataxrayAuthToken, 120_000) { row ->
@@ -71,10 +71,10 @@ try {
     workItems = collected.items
     skippedNoId = collected.skipped
 } catch (Exception fetchEx) {
-    loggerApi.error("Import aborted — could not fetch results from Data X-Ray after ${FETCH_ATTEMPTS} attempts: ${fetchEx.message}")
-    def wf = new WorkflowException("Data X-Ray file import failed while fetching results: ${fetchEx.message}", fetchEx)
-    wf.setTitleMessage('Data X-Ray import failed')
-    wf.setUserMessage("Could not fetch the search results from Data X-Ray to import them (${FETCH_ATTEMPTS} attempts): ${fetchEx.message}")
+    loggerApi.error("Import aborted — could not fetch results from DataXray after ${FETCH_ATTEMPTS} attempts: ${fetchEx.message}")
+    def wf = new WorkflowException("DataXray file import failed while fetching results: ${fetchEx.message}", fetchEx)
+    wf.setTitleMessage('DataXray import failed')
+    wf.setUserMessage("Could not fetch the search results from DataXray to import them (${FETCH_ATTEMPTS} attempts): ${fetchEx.message}")
     throw wf
 }
 if (skippedNoId > 0) {
@@ -86,10 +86,10 @@ if (skippedNoId > 0) {
 int filesDomainCount = countFileAssets(ids)
 int projectedTotal = filesDomainCount + workItems.size()
 if (projectedTotal > dxrMaxTotalFileAssets()) {
-    def msg = "Import refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this search matched ${workItems.size()} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
+    def msg = "Import refused: Collibra holds ${filesDomainCount} DataXray file asset(s) and this search matched ${workItems.size()} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
     loggerApi.error(msg)
     def wf = new WorkflowException(msg)
-    wf.setTitleMessage('Data X-Ray import refused')
+    wf.setTitleMessage('DataXray import refused')
     wf.setUserMessage(msg)
     throw wf
 }
@@ -99,7 +99,7 @@ if (projectedTotal > dxrMaxTotalFileAssets()) {
 def classIndex = buildClassificationIndex(ids.classificationsDomainId, ids.dataxrayIdAttrTypeId)
 int unresolvedClassifications = resolveTupleClassifications(workItems, classIndex)
 if (unresolvedClassifications > 0) {
-    loggerApi.warn("Import: ${unresolvedClassifications} classification reference(s) could not be resolved to Collibra assets (run Sync Data X-Ray Classifications and re-import to link them)")
+    loggerApi.warn("Import: ${unresolvedClassifications} classification reference(s) could not be resolved to Collibra assets (run Sync DataXray Classifications and re-import to link them)")
 }
 
 // --- Store the work list -------------------------------------------------------

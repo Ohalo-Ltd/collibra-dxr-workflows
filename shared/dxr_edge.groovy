@@ -1,4 +1,4 @@
-// dxr_edge.groovy — the Collibra Cloud + Edge transport to Data X-Ray.
+// dxr_edge.groovy — the Collibra Cloud + Edge transport to DataXray.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
 // EDGE VARIANT ONLY. No HTTP is opened from Groovy: every call is a Collibra
@@ -10,7 +10,7 @@
 // Facts verified on Collibra Cloud 2026.09 / Edge 2026.6 (Sept 2026):
 //   - <design:http-connection-name>${dataxrayConnectionName}</…> resolves an
 //     expression to a connection on the Edge site; Basic auth on the connection
-//     authenticates to Data X-Ray.
+//     authenticates to DataXray.
 //   - requestUrl is a RELATIVE path appended to the connection's Host; method,
 //     headers, path and body all accept expressions.
 //   - The response body lands in <responseVariableName> as a String; with
@@ -29,7 +29,7 @@
 //     alone, every field excluded) and skipped (skipEdgeRow).
 //   - One round trip costs ~0.5–2 s.
 //
-// Data X-Ray side: the pack uses DXR's internal search API,
+// DataXray side: the pack uses DXR's internal search API,
 // POST /api/indexed-files/search, because the public /api/v1/files endpoint
 // streams the whole index and cannot be paged. Contract verified against
 // demo.dataxray.io (Sept 2026) — see the pack CLAUDE.md "Edge edition" section.
@@ -37,8 +37,8 @@
 // Classification ids: the index stores labels as numeric tag ids (dxr#tags),
 // annotator hits under annotation_stats#unique_phrase_count.<numericId> and
 // extractor output under extracted_metadata#<numericId>. Collibra holds the
-// mapping numeric id → public UUID → asset in the "Data X-Ray Index ID" and
-// "Data X-Ray ID" attributes, stamped by the Edge-edition classification sync
+// mapping numeric id → public UUID → asset in the "DataXray Index ID" and
+// "DataXray ID" attributes, stamped by the Edge-edition classification sync
 // (dxr_edge_sync.groovy). Search and rerun therefore need NO catalogue calls.
 
 // {{include:dxr_model.groovy}}
@@ -83,10 +83,10 @@ def readEdgeResponse() {
     if (code != 200) {
         def detail = truncateText(text, 300)
         return [ok: false, status: code, body: text,
-                error: "Data X-Ray API returned HTTP ${code}${reason ? ' ' + reason : ''}${detail ? ': ' + detail : ''}".toString()]
+                error: "DataXray API returned HTTP ${code}${reason ? ' ' + reason : ''}${detail ? ': ' + detail : ''}".toString()]
     }
     if (text.trim().isEmpty()) {
-        return [ok: false, status: code, body: text, error: 'Data X-Ray API returned an empty body']
+        return [ok: false, status: code, body: text, error: 'DataXray API returned an empty body']
     }
     return [ok: true, status: code, body: text, error: '']
 }
@@ -198,16 +198,16 @@ def isEdgeResponseTooLarge(String error) {
     return (error ?: '').contains('exceeds the allowed limit')
 }
 
-// Collibra refused to hand over Data X-Ray's answer. Its explicit form is the
+// Collibra refused to hand over DataXray's answer. Its explicit form is the
 // "exceeds the allowed limit" error; it also arrives as an HTTP 5xx with an
-// EMPTY body while Data X-Ray itself answered 200 (TRC, 2026-10-09: three 190 KB
-// pages logged 200 by Data X-Ray's nginx, seen by the workflow as status 500).
-// A real Data X-Ray error always carries a JSON body, so it is not mistaken for this.
+// EMPTY body while DataXray itself answered 200 (TRC, 2026-10-09: three 190 KB
+// pages logged 200 by DataXray's nginx, seen by the workflow as status 500).
+// A real DataXray error always carries a JSON body, so it is not mistaken for this.
 def isEdgeRefusal(Map r) {
     return isEdgeResponseTooLarge(r.error) || (r.status >= 500 && (r.body ?: '').trim().isEmpty())
 }
 
-// A smaller page size that can continue from row `offset`: Data X-Ray pages
+// A smaller page size that can continue from row `offset`: DataXray pages
 // from pageNumber × pageSize, so the new size must divide the offset. The
 // largest such size up to half the current one; 1 always qualifies.
 def smallerEdgePageSize(int current, int offset) {
@@ -254,7 +254,7 @@ def armEdgeSkipProbe() {
 // towards the largest page size that has worked this run (else the configured one). The next request is made even past
 // the last row: its (empty) answer ends the loop through the normal path.
 def skipEdgeRow(int offset, String fileId, Map opts) {
-    loggerApi.warn("${opts.label}: skipped result ${offset + 1}${fileId ? " (Data X-Ray file ${fileId})" : ' (its Data X-Ray file id could not be read)'} — on its own it is larger than Collibra allows for one External API response (100 KB)")
+    loggerApi.warn("${opts.label}: skipped result ${offset + 1}${fileId ? " (DataXray file ${fileId})" : ' (its DataXray file id could not be read)'} — on its own it is larger than Collibra allows for one External API response (100 KB)")
     def skipped = readJsonVariable('dxrSkippedFiles', [])
     skipped << [offset: offset, fileId: fileId]
     execution.setVariable('dxrSkippedFiles', groovy.json.JsonOutput.toJson(skipped))
@@ -272,7 +272,7 @@ def parseEdgeSearchPage(String body) {
     def parsed = new groovy.json.JsonSlurper().parseText(body)
     def hits = parsed?.hits?.hits
     if (!(parsed instanceof Map) || !(hits instanceof List)) {
-        throw new RuntimeException("Data X-Ray search response has no hits array; keys: ${parsed instanceof Map ? parsed.keySet() : parsed?.getClass()?.getSimpleName()}")
+        throw new RuntimeException("DataXray search response has no hits array; keys: ${parsed instanceof Map ? parsed.keySet() : parsed?.getClass()?.getSimpleName()}")
     }
     def totalNode = parsed.hits.total
     int total = totalNode instanceof Map ? ((totalNode.value ?: 0) as int) : ((totalNode ?: 0) as int)
@@ -396,7 +396,7 @@ def edgeQueryItem(String parameter, Object value, String type, String matchStrat
 
 // The user-facing explanation when a criterion has no numeric index id.
 def edgeUnresolvedMessage(String verb, List unresolved) {
-    return "Cannot ${verb}: ${unresolved.join(', ')} ${unresolved.size() == 1 ? 'has' : 'have'} no Data X-Ray Index ID in Collibra. Run Sync Data X-Ray Classifications (Collibra Cloud + Edge edition) first — or, if classifications are synced with the standalone script, re-run it with --stamp-index-ids — then try again.".toString()
+    return "Cannot ${verb}: ${unresolved.join(', ')} ${unresolved.size() == 1 ? 'has' : 'have'} no DataXray Index ID in Collibra. Run Sync DataXray Classifications (Collibra Cloud + Edge edition) first — or, if classifications are synced with the standalone script, re-run it with --stamp-index-ids — then try again.".toString()
 }
 
 // Zero every import counter the page loop advances (the edge equivalent of
@@ -448,7 +448,7 @@ def handleEdgeFilesPage(Map opts) {
             def parsed = new groovy.json.JsonSlurper().parseText(r.body)
             dsNames[dsId] = ((parsed instanceof Map ? parsed.name : null) ?: dsId).toString()
         } else {
-            if (edgeRetry("Data X-Ray datasource ${dsId} lookup", r.error)) { return }
+            if (edgeRetry("DataXray datasource ${dsId} lookup", r.error)) { return }
             loggerApi.warn("Datasource ${dsId} could not be resolved (${r.error}); file assets will show the id")
             dsNames[dsId] = dsId
         }
@@ -478,10 +478,10 @@ def handleEdgeFilesPage(Map opts) {
             }
         } else {
             // The lookup asks for the row's _id only (~400 bytes): if even that
-            // fails, Data X-Ray or the connection is down — skipping row after row
+            // fails, DataXray or the connection is down — skipping row after row
             // would only hide an outage. Retry, then give up on the run.
             if (edgeRetry("${opts.label} result ${pageNo + 1} id lookup".toString(), r.error)) { return }
-            opts.onFatal("Even a one-file request to Data X-Ray failed (${r.error}), so this is not a response-size problem: Data X-Ray or its connection is unavailable. Try again later.".toString())
+            opts.onFatal("Even a one-file request to DataXray failed (${r.error}), so this is not a response-size problem: DataXray or its connection is unavailable. Try again later.".toString())
             return
         }
         skipEdgeRow(pageNo, fileId, opts)
@@ -506,7 +506,7 @@ def handleEdgeFilesPage(Map opts) {
         page = parseEdgeSearchPage(r.body)
     } catch (Exception parseEx) {
         if (edgeRetry(what, parseEx.message)) { return }
-        opts.onFatal("Data X-Ray search response could not be parsed: ${parseEx.message}".toString())
+        opts.onFatal("DataXray search response could not be parsed: ${parseEx.message}".toString())
         return
     }
     edgeResetRetries()

@@ -33,7 +33,7 @@ if (execution.getVariable('rerunRetireUnsafe') == true) {
 }
 int total = (execution.getVariable('importTotal') ?: 0) as int
 if (total == 0) {
-    loggerApi.warn('Retire pass skipped: the rerun returned 0 results — not retiring anything in case Data X-Ray answered incompletely')
+    loggerApi.warn('Retire pass skipped: the rerun returned 0 results — not retiring anything in case DataXray answered incompletely')
     return
 }
 

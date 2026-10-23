@@ -32,7 +32,7 @@
             "stencilId": "cloud-output"
           },
           "label": "Rerun complete",
-          "value": "<p>The saved search <b>{{conditionName}}</b> was rerun and its file assets re-synced.</p><ul><li><b>Created:</b> {{importCreatedCount}} new file asset(s)</li><li><b>Not imported:</b> {{importSkippedNewCount}} new matching file(s) — only counted when automatic import is off for this search (tag <code>dataxray-no-auto-import</code>)</li><li><b>Updated:</b> {{importUpdatedCount}} existing file asset(s)</li><li><b>No longer returned:</b> {{rerunUnlinkedCount}} file(s) — their link to this search is now <i>formerly returns</i></li><li><b>In no search:</b> {{rerunRetiredCount}} file asset(s) no search returns any more (status <i>Not in any search</i>, kept as records; a status set by a person is never changed)</li><li><b>Classification links that no longer apply:</b> {{importRelationsRemovedCount}} (now <i>formerly groups</i>; links created by people are never touched)</li><li><b>Failed:</b> {{importFailedCount}}</li><li><b>Unresolved classification links:</b> {{importSkippedClassifications}}</li></ul><p>New file assets are created in the <b>Data X-Ray Files</b> domain and keep syncing wherever they are moved. Full detail is in <code>dgc.log</code>. Click <b>Send</b> to close this task.</p>",
+          "value": "<p>The saved search <b>{{conditionName}}</b> was rerun and its file assets re-synced.</p><ul><li><b>Created:</b> {{importCreatedCount}} new file asset(s)</li><li><b>Not imported:</b> {{importSkippedNewCount}} new matching file(s) — only counted when automatic import is off for this search (tag <code>dataxray-no-auto-import</code>)</li><li><b>Updated:</b> {{importUpdatedCount}} existing file asset(s)</li><li><b>No longer returned:</b> {{rerunUnlinkedCount}} file(s) — their link to this search is now <i>formerly returns</i></li><li><b>In no search:</b> {{rerunRetiredCount}} file asset(s) no search returns any more (status <i>Not in any search</i>, kept as records; a status set by a person is never changed)</li><li><b>Classification links that no longer apply:</b> {{importRelationsRemovedCount}} (now <i>formerly groups</i>; links created by people are never touched)</li><li><b>Failed:</b> {{importFailedCount}}</li><li><b>Unresolved classification links:</b> {{importSkippedClassifications}}</li></ul><p>New file assets are created in the <b>DataXray Files</b> domain and keep syncing wherever they are moved. Full detail is in <code>dgc.log</code>. Click <b>Send</b> to close this task.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -65,7 +65,7 @@
   "metadata": {
     "key": "rerunSummaryForm",
     "name": "Rerun Summary",
-    "description": "Shows what the Data X-Ray search rerun created, updated, retired and failed.",
+    "description": "Shows what the DataXray search rerun created, updated, retired and failed.",
     "version": "1",
     "modelType": "form",
     "flowableDesignVersion": 3110,

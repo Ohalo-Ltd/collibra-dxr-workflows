@@ -14,13 +14,13 @@ import groovy.json.JsonOutput
 // {{include:collibra_lookup.groovy}}
 // {{include:dxr_edge_sync.groovy}}
 
-announceDxrVersion('Sync Data X-Ray Classification (Nightly)')
+announceDxrVersion('Sync DataXray Classification (Nightly)')
 def ids = dxrModelIds()
 def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
 execution.setVariable('syncSkip', false)
 execution.setVariable('syncFailed', false)
 if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {
-    def detailMsg = "Skipping Sync Data X-Ray Classification (Nightly) — the 'Edge HTTP connection name (Data X-Ray)' configuration variable is not set.\n\nOpen the workflow's settings page and enter the name of the HTTP connection to Data X-Ray on your Edge site; the next nightly run will pick it up automatically."
+    def detailMsg = "Skipping Sync DataXray Classification (Nightly) — the 'Edge HTTP connection name (DataXray)' configuration variable is not set.\n\nOpen the workflow's settings page and enter the name of the HTTP connection to DataXray on your Edge site; the next nightly run will pick it up automatically."
     loggerApi.error(detailMsg)
     recordRunSummary(0, 0, 0, 0, 0, 'misconfigured: Edge HTTP connection name unset')
     execution.setVariable('syncSkip', true)
@@ -32,7 +32,7 @@ execution.setVariable('dataxrayUrl', dataxrayUrl)
 
 execution.setVariable('classIndex', JsonOutput.toJson(buildEdgeClassificationIndex(ids)))
 startEdgeSync()
-loggerApi.info("Sync Data X-Ray Classification (Nightly) via Edge connection '${connectionName}': catalogue requests armed")
+loggerApi.info("Sync DataXray Classification (Nightly) via Edge connection '${connectionName}': catalogue requests armed")
 
 // Persist the run outcome to process variables for audit / downstream tasks.
 def recordRunSummary(int created, int updated, int retired, int skipped, int failed, String failuresJoined) {

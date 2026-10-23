@@ -177,8 +177,8 @@
   ],
   "metadata": {
     "key": "searchDataXrayForm",
-    "name": "Search Data X-Ray",
-    "description": "Pick the labels, extractors and annotators (plus optional annotated text and the annotators to search it in) to build a Data X-Ray search query.",
+    "name": "Search DataXray",
+    "description": "Pick the labels, extractors and annotators (plus optional annotated text and the annotators to search it in) to build a DataXray search query.",
     "version": "1",
     "modelType": "form",
     "flowableDesignVersion": 3110,

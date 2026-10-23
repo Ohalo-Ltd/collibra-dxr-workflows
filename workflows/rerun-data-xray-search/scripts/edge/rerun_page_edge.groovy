@@ -38,7 +38,7 @@ def opts = [
     createNew   : !noAutoImport,
     onPageZero  : { Map page ->
         if (page.total > page.maxResultWindow) {
-            return "Rerun of '${conditionName}' refused: it matches ${page.total} file(s), more than the ${page.maxResultWindow} results Data X-Ray can page through in one query.".toString()
+            return "Rerun of '${conditionName}' refused: it matches ${page.total} file(s), more than the ${page.maxResultWindow} results DataXray can page through in one query.".toString()
         }
         // Files this query already returns update in place — only genuinely new
         // files grow the domain. Without the full row set up front, bound the
@@ -48,7 +48,7 @@ def opts = [
         int growth = noAutoImport ? 0 : Math.max(0, page.total - previousFileIds.size())
         int projected = filesDomainCount + growth
         if (growth > 0 && projected > dxrMaxTotalFileAssets()) {
-            return "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this rerun could add up to ${growth} more — the projected ${projected} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.".toString()
+            return "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} DataXray file asset(s) and this rerun could add up to ${growth} more — the projected ${projected} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.".toString()
         }
         return null
     },

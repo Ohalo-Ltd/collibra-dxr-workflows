@@ -1,4 +1,4 @@
-// classification_sync.groovy — mirroring the Data X-Ray classification
+// classification_sync.groovy — mirroring the DataXray classification
 // catalogue into the Collibra classifications domain.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
@@ -6,53 +6,53 @@
 // takes the parsed `data` list and does everything Collibra-side.
 //
 // Sync semantics:
-//   – Upsert by Data X-Ray ID. Each Collibra asset carries a "Data X-Ray ID"
-//     attribute that stores the remote id; we match on that, so a Data X-Ray-side
+//   – Upsert by DataXray ID. Each Collibra asset carries a "DataXray ID"
+//     attribute that stores the remote id; we match on that, so a DataXray-side
 //     rename updates the existing asset rather than spawning a duplicate.
 //   – No name fallback: an item without an ID match is always a NEW asset,
-//     even when a same-named asset exists. A label deleted in Data X-Ray and
-//     re-created under the same name gets a new Data X-Ray ID, so it must not
+//     even when a same-named asset exists. A label deleted in DataXray and
+//     re-created under the same name gets a new DataXray ID, so it must not
 //     revive the old (retired) asset with its history and links.
 //   – Freeing a name: Collibra enforces full-name uniqueness per domain, so a
-//     create or rename onto a name held by an asset whose Data X-Ray ID is no
+//     create or rename onto a name held by an asset whose DataXray ID is no
 //     longer in the catalogue (retired, or about to be retired by this run)
 //     first renames that asset to "<name> (retired <id fragment>)". A name held
-//     by a current item or by an asset without a Data X-Ray ID (added by hand)
+//     by a current item or by an asset without a DataXray ID (added by hand)
 //     is never taken over — the item fails with a message naming the clash.
 //   – Name disambiguation: Collibra enforces full-name uniqueness per domain.
-//     When one name is used by more than one Data X-Ray resource (e.g. two
+//     When one name is used by more than one DataXray resource (e.g. two
 //     annotators both named "VAT Number", one Named Entity and one Regular
 //     Expression), each such asset's Collibra name is suffixed to keep them
 //     distinct — "VAT Number (Named Entity)", "VAT Number (Regular Expression)".
-//     The suffix is the subtype (the discriminator shown in the Data X-Ray UI),
+//     The suffix is the subtype (the discriminator shown in the DataXray UI),
 //     falling back to type, then to a short id fragment if those still tie.
 //     Names used by a single resource are left untouched.
-//   – When matched by ID, if the Data X-Ray name has diverged from the Collibra
+//   – When matched by ID, if the DataXray name has diverged from the Collibra
 //     asset name we rename the Collibra asset to match.
 //   – Every synced asset is tagged with 'dataxray-classification-sync'. Assets
-//     in the domain that carry this tag but are no longer in the current Data
-//     X-Ray response are RETIRED (status Obsolete) — never deleted. Saved
+//     in the domain that carry this tag but are no longer in the current DataXray
+//     response are RETIRED (status Obsolete) — never deleted. Saved
 //     search queries and imported file assets hold relations to these
 //     classifications, and a rerun must be able to say "this criterion was
-//     deleted in Data X-Ray" rather than find a dangling reference. If the
-//     classification reappears in Data X-Ray, the asset is reactivated
+//     deleted in DataXray" rather than find a dangling reference. If the
+//     classification reappears in DataXray, the asset is reactivated
 //     (status Candidate). Untagged assets in the domain are never touched,
 //     so anything added by hand is safe.
-//   – If Data X-Ray returns zero classifications, the retirement step is
+//   – If DataXray returns zero classifications, the retirement step is
 //     skipped to avoid a transient/broken response retiring all assets.
 
 // {{include:dxr_model.groovy}}
 // {{include:collibra_lookup.groovy}}
 
 // Sync the catalogue. `dataxrayUrl` (no trailing slash) prefixes the relative
-// link/searchLink paths Data X-Ray returns. Returns
+// link/searchLink paths DataXray returns. Returns
 // [created:, updated:, retired:, skipped:, failed:, failures: [String]].
 // opts (optional):
-//   indexIdAttrTypeId — when set, an item's `indexId` (Data X-Ray's numeric
+//   indexIdAttrTypeId — when set, an item's `indexId` (DataXray's numeric
 //                       search-index id) is stamped on the asset (Edge edition).
 //   noRetireTypeIds   — asset type ids that must NOT be retired this run (the
 //                       caller saw an incomplete list for them; Edge fallback).
-//   Items may carry `partial: true`: the item is known to exist in Data X-Ray
+//   Items may carry `partial: true`: the item is known to exist in DataXray
 //   (presence, name and ids are authoritative) but its description/link/subtype
 //   were NOT fetched this run — those attributes are left untouched.
 def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts = [:]) {
@@ -78,15 +78,15 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
     def existingByName = [:]
     existingById.values().each { a -> existingByName[a.getName()] = a }
 
-    // Map Data X-Ray ID → Collibra asset UUID, restricted to assets in this domain.
+    // Map DataXray ID → Collibra asset UUID, restricted to assets in this domain.
     def assetIdByDataxrayId = fetchAssetIdsByDataxrayId(ids.dataxrayIdAttrTypeId, existingById.keySet())
-    loggerApi.info("Indexed ${assetIdByDataxrayId.size()} asset(s) with a Data X-Ray ID attribute")
+    loggerApi.info("Indexed ${assetIdByDataxrayId.size()} asset(s) with a DataXray ID attribute")
     def dataxrayIdByAssetId = [:]
     assetIdByDataxrayId.each { dxrId, aid -> dataxrayIdByAssetId[aid] = dxrId }
     def currentDataxrayIds = classifications.findAll { it?.id != null }.collect { it.id.toString().trim() } as Set
 
     // Make `wanted` available for `forAssetId` (null = a create). Returns true
-    // when the name is free (or already this asset's). A holder whose Data X-Ray
+    // when the name is free (or already this asset's). A holder whose DataXray
     // ID has left the catalogue is renamed out of the way; any other holder is
     // left alone and the caller reports the clash.
     def freeName = { String wanted, UUID forAssetId ->
@@ -102,13 +102,13 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             .build())
         existingByName.remove(wanted)
         existingByName[retiredName] = holder
-        loggerApi.info("Renamed asset [${holder.getId()}] '${wanted}' → '${retiredName}': its Data X-Ray ID ${holderDxrId} is no longer in the catalogue and the name is needed")
+        loggerApi.info("Renamed asset [${holder.getId()}] '${wanted}' → '${retiredName}': its DataXray ID ${holderDxrId} is no longer in the catalogue and the name is needed")
         return true
     }
 
     // --- Disambiguate colliding asset names --------------------------------------
 
-    // Keyed by Data X-Ray id so the loop can look up each item's resolved name.
+    // Keyed by DataXray id so the loop can look up each item's resolved name.
     def itemsByName = [:]
     classifications.each { c ->
         def nm = c?.name
@@ -162,7 +162,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             }
             if (!dataxrayId) {
                 skipped++
-                loggerApi.warn("Skipping '${name}': missing Data X-Ray 'id'")
+                loggerApi.warn("Skipping '${name}': missing DataXray 'id'")
                 return
             }
 
@@ -171,7 +171,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             if (!assetTypeId) {
                 skipped++
                 if (type == 'ANNOTATOR_DOMAIN') {
-                    // Data categories group annotators in Data X-Ray; they are not mirrored (the annotators are).
+                    // Data categories group annotators in DataXray; they are not mirrored (the annotators are).
                     loggerApi.info("Skipping data category '${name}' (data categories are not mirrored to Collibra)")
                 } else {
                     loggerApi.warn("Skipping '${name}': unknown type '${type}'")
@@ -180,12 +180,12 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             }
 
             // The Collibra asset name. Disambiguated (see disambiguatedName) only
-            // when this name is shared by more than one Data X-Ray resource, so
+            // when this name is shared by more than one DataXray resource, so
             // collisions get distinct names rather than failing a create with
-            // termAlreadyExists; otherwise the bare Data X-Ray name is used.
+            // termAlreadyExists; otherwise the bare DataXray name is used.
             def assetName = (dataxrayId && disambiguatedName.containsKey(dataxrayId)) ? disambiguatedName[dataxrayId] : name.toString()
 
-            // Resolution: match by Data X-Ray ID, else create a new asset.
+            // Resolution: match by DataXray ID, else create a new asset.
             UUID assetId = null
             boolean isUpdate = false
             String previousName = null
@@ -201,7 +201,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
 
             if (assetId == null) {
                 if (!freeName(assetName, null)) {
-                    throw new IllegalStateException("the name '${assetName}' is already used by asset ${existingByName[assetName].getId()}, which is not a retired Data X-Ray classification".toString())
+                    throw new IllegalStateException("the name '${assetName}' is already used by asset ${existingByName[assetName].getId()}, which is not a retired DataXray classification".toString())
                 }
                 def asset = assetApi.addAsset(com.collibra.dgc.core.api.dto.instance.asset.AddAssetRequest.builder()
                     .name(assetName)
@@ -214,10 +214,10 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             }
 
             // Rename if the desired (possibly type-suffixed) name has diverged from
-            // what's in Collibra — covers both Data X-Ray-side renames and an asset
+            // what's in Collibra — covers both DataXray-side renames and an asset
             // newly becoming/ceasing to be a cross-type collision. Reactivate in
             // the same change if a previous sync had retired this classification
-            // and it has now reappeared in Data X-Ray.
+            // and it has now reappeared in DataXray.
             def needsRename = isUpdate && previousName != null && previousName != assetName
             if (needsRename || wasRetired) {
                 try {
@@ -247,7 +247,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             }
 
             // setAssetAttributes replaces all values of the given type — works for
-            // both fresh creates and updates. Stamping the Data X-Ray ID here keys
+            // both fresh creates and updates. Stamping the DataXray ID here keys
             // first-time-created assets for future runs.
             def attrErrors = []
             syncAttribute(attrErrors, assetId, ids.dataxrayIdAttrTypeId,  dataxrayId, 'dataxrayId')
@@ -281,11 +281,11 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
         }
     }
 
-    // --- Retire tagged assets no longer in Data X-Ray ---------------------------
+    // --- Retire tagged assets no longer in DataXray ---------------------------
 
     int retired = 0
     if (classifications.isEmpty()) {
-        loggerApi.warn("Data X-Ray returned 0 classifications — skipping retirement step to avoid retiring the whole domain")
+        loggerApi.warn("DataXray returned 0 classifications — skipping retirement step to avoid retiring the whole domain")
     } else {
         def taggedInDomain = fetchTaggedAssetsInDomain(ids.classificationsDomainId, SYNC_TAG)
         def noRetire = (opts.noRetireTypeIds ?: []) as Set
@@ -298,7 +298,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
             if (spared > 0) { loggerApi.warn("Retirement skipped for ${spared} asset(s) whose catalogue could not be fetched completely this run") }
         }
         if (!toRetire.isEmpty()) {
-            loggerApi.info("Retiring ${toRetire.size()} asset(s) no longer present in Data X-Ray")
+            loggerApi.info("Retiring ${toRetire.size()} asset(s) no longer present in DataXray")
             toRetire.each { asset ->
                 try {
                     assetApi.changeAsset(com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest.builder()
@@ -314,7 +314,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
         }
     }
 
-    loggerApi.info("Data X-Ray sync complete: created=${created}, updated=${updated}, retired=${retired}, skipped=${skipped}, failed=${failed}")
+    loggerApi.info("DataXray sync complete: created=${created}, updated=${updated}, retired=${retired}, skipped=${skipped}, failed=${failed}")
     return [created: created, updated: updated, retired: retired, skipped: skipped, failed: failed, failures: failures]
 }
 
@@ -334,14 +334,14 @@ def syncAttribute(List errors, UUID assetId, UUID typeId, value, String label) {
     }
 }
 
-// Title-case a Data X-Ray resource type (e.g. CLASSIFICATION → "Classification")
+// Title-case a DataXray resource type (e.g. CLASSIFICATION → "Classification")
 // for use as a disambiguating name suffix when no subtype is available.
 def typeLabel(String t) {
     if (!t) return ''
     return t.substring(0, 1).toUpperCase() + t.substring(1).toLowerCase()
 }
 
-// Humanise a Data X-Ray enum-style value (e.g. NAMED_ENTITY → "Named Entity")
+// Humanise a DataXray enum-style value (e.g. NAMED_ENTITY → "Named Entity")
 // for use as a disambiguating name suffix; returns '' for null/blank input.
 def humanize(String s) {
     if (!s?.trim()) return ''

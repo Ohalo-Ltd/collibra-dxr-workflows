@@ -2,7 +2,7 @@
 <!--
   rerunDataXraySearch workflow
   ============================
-  Rerun a saved Data X-Ray search from its Unstructured Data Query asset and
+  Rerun a saved DataXray search from its Unstructured Data Query asset and
   re-sync the imported file assets:
     startEvent (no form — started from the query asset's page, or headlessly
                 by the nightly file sync driver)
@@ -25,7 +25,7 @@
 
   All connection configuration lives on the start event as non-readable
   formProperty entries (hidden admin settings edited on the workflow settings
-  page), same as the other Data X-Ray workflows. Each carries a non-empty
+  page), same as the other DataXray workflows. Each carries a non-empty
   default because Collibra rejects empty defaults on non-readable properties.
 
   Script placeholders of the form {script:filename.groovy} are resolved by
@@ -47,7 +47,7 @@
              design:palette="flowable-core-process-palette">
 
   <process id="rerunDataXraySearch"
-           name="Rerun Data X-Ray Search"
+           name="Rerun DataXray Search"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
     <extensionElements>
@@ -56,8 +56,8 @@
 
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
       <extensionElements>
-        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="DataXray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste DataXray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="DataXray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste DataXray Bearer token here&gt;" readable="false" required="true"/>
         <!-- Set to 'true' by the nightly driver via startWorkflowInstances
              formProperties; a headless run never throws and skips the summary
              user task. Admins should leave this at 'false'. -->

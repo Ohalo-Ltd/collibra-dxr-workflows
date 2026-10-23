@@ -16,7 +16,7 @@ import groovy.json.JsonOutput
 // {{include:collibra_lookup.groovy}}
 // {{include:dxr_edge.groovy}}
 
-announceDxrVersion('Search Data X-Ray import')
+announceDxrVersion('Search DataXray import')
 def ids = dxrModelIds()
 
 def queryAssetId = string2Uuid((execution.getVariable('queryAssetId') ?: '').toString())
@@ -33,10 +33,10 @@ int pageSize     = Math.min(configuredPageSize, previewSize != null && previewSi
 int filesDomainCount = countFileAssets(ids)
 int projectedTotal = filesDomainCount + total
 if (projectedTotal > dxrMaxTotalFileAssets()) {
-    def msg = "Import refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this search matched ${total} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
+    def msg = "Import refused: Collibra holds ${filesDomainCount} DataXray file asset(s) and this search matched ${total} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
     loggerApi.error(msg)
     def wf = new WorkflowException(msg)
-    wf.setTitleMessage('Data X-Ray import refused')
+    wf.setTitleMessage('DataXray import refused')
     wf.setUserMessage(msg)
     throw wf
 }

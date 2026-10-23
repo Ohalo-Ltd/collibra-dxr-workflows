@@ -1,4 +1,4 @@
-// dxr_edge_sync.groovy — fetching the Data X-Ray classification catalogue
+// dxr_edge_sync.groovy — fetching the DataXray classification catalogue
 // through Edge without ever exceeding Collibra's 100 KB response cap.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
@@ -6,7 +6,7 @@
 //
 // The public GET /api/v1/classifications returns the whole catalogue in one
 // body (~300 bytes per item — a tenant with ~900 classifications answers ~300 KB
-// and the External API task refuses it). Data X-Ray has no paged catalogue
+// and the External API task refuses it). DataXray has no paged catalogue
 // endpoint, so the Edge sync assembles the same items from smaller calls:
 //
 //   GET /api/tags                                labels (all; ~450 B each)
@@ -68,8 +68,8 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
     def stage = (execution.getVariable('dxrStage') ?: '').toString()
     def r = readEdgeResponse()
     def what = stage == 'annotatorDetail'
-        ? "Data X-Ray annotator ${execution.getVariable('dxrSyncCurrentId')} detail".toString()
-        : "Data X-Ray ${stage} request".toString()
+        ? "DataXray annotator ${execution.getVariable('dxrSyncCurrentId')} detail".toString()
+        : "DataXray ${stage} request".toString()
     def requests = edgeSyncListRequests()
     int idx = (execution.getVariable('dxrCatalogueIndex') ?: 0) as int
     if (!r.ok) {
@@ -77,7 +77,7 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
             // The complete annotator list does not fit under Collibra's response
             // cap: fall back to the annotators-with-findings list + per-item detail,
             // and remember that annotators must not be retired this run.
-            loggerApi.warn("Data X-Ray's full annotator list exceeds Collibra's External API response limit — falling back to annotators with findings; annotators will not be retired by this sync")
+            loggerApi.warn("DataXray's full annotator list exceeds Collibra's External API response limit — falling back to annotators with findings; annotators will not be retired by this sync")
             execution.setVariable('dxrSyncAnnotatorsComplete', false)
             edgeResetRetries()
             execution.setVariable('dxrCatalogueIndex', idx + 1)
@@ -94,7 +94,7 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
     try {
         parsed = new groovy.json.JsonSlurper().parseText(r.body)
     } catch (Exception parseEx) {
-        onFatal("Data X-Ray ${stage} response could not be parsed: ${parseEx.message}".toString())
+        onFatal("DataXray ${stage} response could not be parsed: ${parseEx.message}".toString())
         return
     }
 
@@ -126,7 +126,7 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
                 lists.annotators = full
                 execution.setVariable('dxrSyncAnnotatorsComplete', true)
                 execution.setVariable('dxrSyncLists', groovy.json.JsonOutput.toJson(lists))
-                loggerApi.info("Data X-Ray catalogue lists loaded: ${lists.tags.size()} label(s), ${lists.extractors.size()} extractor(s), ${full.size()} annotator(s) (complete)")
+                loggerApi.info("DataXray catalogue lists loaded: ${lists.tags.size()} label(s), ${lists.extractors.size()} extractor(s), ${full.size()} annotator(s) (complete)")
                 execution.setVariable('dxrStage', 'complete')
                 execution.setVariable('hasMoreWork', false)
                 return
@@ -151,7 +151,7 @@ def handleEdgeSyncPage(Map known, Closure onFatal) {
             def knownName = uuid ? (known.nameByDxrId ?: [:])[uuid] : null
             if (!uuid || knownName != a.name) { queue << a.id }
         }
-        loggerApi.info("Data X-Ray catalogue lists loaded (fallback): ${lists.tags.size()} label(s), ${lists.extractors.size()} extractor(s), ${lists.annotators.size()} annotator(s) with findings; ${queue.size()} annotator detail(s) to fetch")
+        loggerApi.info("DataXray catalogue lists loaded (fallback): ${lists.tags.size()} label(s), ${lists.extractors.size()} extractor(s), ${lists.annotators.size()} annotator(s) with findings; ${queue.size()} annotator detail(s) to fetch")
         execution.setVariable('dxrSyncQueue', groovy.json.JsonOutput.toJson(queue))
         return armNextEdgeSyncDetail()
     }

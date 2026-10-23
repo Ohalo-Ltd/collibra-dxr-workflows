@@ -9,7 +9,7 @@
 // {{include:dxr_edge_sync.groovy}}
 
 handleEdgeSyncPage(readJsonVariable('classIndex', [:])) { String msg ->
-    loggerApi.error("Failed to fetch the classification catalogue from Data X-Ray: ${msg}")
+    loggerApi.error("Failed to fetch the classification catalogue from DataXray: ${msg}")
     execution.setVariable('syncFailed', true)
     execution.setVariable('hasMoreWork', false)
     ['syncCreatedCount', 'syncUpdatedCount', 'syncRetiredCount', 'syncSkippedCount', 'syncFailedCount'].each { execution.setVariable(it, 0) }

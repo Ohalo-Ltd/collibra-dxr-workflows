@@ -5,7 +5,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Search complete",
-          "value": "<p>The search query <b>{{conditionName}}</b> was created and linked to your selected classifications.</p><p><b>Data X-Ray query:</b> <code>{{queryString}}</code></p><p><b>Matching files:</b> {{resultCountDisplay}}</p><p>A <b>preview</b> of the first {{shownCount}} match(es) is stored as a table on the search-query asset. {{attachmentDescription}} Full detail is also in <code>dgc.log</code>.</p>",
+          "value": "<p>The search query <b>{{conditionName}}</b> was created and linked to your selected classifications.</p><p><b>DataXray query:</b> <code>{{queryString}}</code></p><p><b>Matching files:</b> {{resultCountDisplay}}</p><p>A <b>preview</b> of the first {{shownCount}} match(es) is stored as a table on the search-query asset. {{attachmentDescription}} Full detail is also in <code>dgc.log</code>.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -22,7 +22,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Import as assets",
-          "value": "<p>You can import all <b>{{resultCountDisplay}}</b> matching files as <b>Data X-Ray File</b> assets in the <b>Data X-Ray Files</b> domain, each carrying its datasource, path, size, last-modified date, a link back to Data X-Ray, and relations to the classifications it matched. The import runs in the background in batches; an <b>Import Summary</b> task will appear in your inbox when it finishes.</p><p>The three options are independent:</p><ul><li><b>Import now</b> creates the file assets for today's results.</li><li><b>Keep in sync nightly</b> reruns this search every night and refreshes its file assets. Files that no longer match get the status <i>Not in any search</i> (never deleted); a status you set yourself is never changed.</li><li><b>Create assets for new files found</b> lets those reruns import files that start matching later. Untick it to only refresh files already in Collibra.</li></ul><p>The two sync options are tags on the query asset (<code>dataxray-keep-in-sync</code>, <code>dataxray-no-auto-import</code>) and can be changed there at any time.</p>",
+          "value": "<p>You can import all <b>{{resultCountDisplay}}</b> matching files as <b>DataXray File</b> assets in the <b>DataXray Files</b> domain, each carrying its datasource, path, size, last-modified date, a link back to DataXray, and relations to the classifications it matched. The import runs in the background in batches; an <b>Import Summary</b> task will appear in your inbox when it finishes.</p><p>The three options are independent:</p><ul><li><b>Import now</b> creates the file assets for today's results.</li><li><b>Keep in sync nightly</b> reruns this search every night and refreshes its file assets. Files that no longer match get the status <i>Not in any search</i> (never deleted); a status you set yourself is never changed.</li><li><b>Create assets for new files found</b> lets those reruns import files that start matching later. Untick it to only refresh files already in Collibra.</li></ul><p>The two sync options are tags on the query asset (<code>dataxray-keep-in-sync</code>, <code>dataxray-no-auto-import</code>) and can be changed there at any time.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -39,7 +39,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Large import",
-          "value": "<p>⚠️ This search matched more than 10,000 files. The import will work, but expect it to run for a while in the background — check the <b>Data X-Ray Files</b> domain or wait for the <b>Import Summary</b> task.</p>",
+          "value": "<p>⚠️ This search matched more than 10,000 files. The import will work, but expect it to run for a while in the background — check the <b>DataXray Files</b> domain or wait for the <b>Import Summary</b> task.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -157,7 +157,7 @@
   "metadata": {
     "key": "searchResultsForm",
     "name": "Search Results",
-    "description": "Shows the composed Data X-Ray query and the matching files, and offers to import the results as assets.",
+    "description": "Shows the composed DataXray query and the matching files, and offers to import the results as assets.",
     "version": "1",
     "modelType": "form",
     "flowableDesignVersion": 3110,

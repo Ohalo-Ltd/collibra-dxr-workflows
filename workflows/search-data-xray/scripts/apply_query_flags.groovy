@@ -21,7 +21,7 @@
 
 def rawId = (execution.getVariable('queryAssetId') ?: '').toString()
 if (rawId.isEmpty()) {
-    loggerApi.warn('Search Data X-Ray: no query asset recorded — sync options not applied')
+    loggerApi.warn('Search DataXray: no query asset recorded — sync options not applied')
     return
 }
 def queryAssetId = string2Uuid(rawId)

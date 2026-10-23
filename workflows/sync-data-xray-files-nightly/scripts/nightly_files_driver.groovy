@@ -1,10 +1,10 @@
 // nightly_files_driver.groovy
 //
-// Nightly driver for the Data X-Ray file sync. Two phases:
+// Nightly driver for the DataXray file sync. Two phases:
 //
 // 1. Fan-out: finds every Unstructured Data Query asset tagged
 //    'dataxray-keep-in-sync' (the flag set when a user ticks "keep in sync"
-//    at import time) and starts one HEADLESS Rerun Data X-Ray Search instance
+//    at import time) and starts one HEADLESS Rerun DataXray Search instance
 //    per query. Each rerun re-runs its search and re-syncs its file assets in
 //    its own workflow instance with its own batched transactions — the driver
 //    only fans out, so it stays tiny no matter how many queries are flagged.
@@ -13,7 +13,7 @@
 //    sync while keeping it restorable. A manual rerun from the asset page
 //    still works on a retired query — that is explicit user intent.
 //
-// 2. Orphan sweep: sets every Data X-Ray File asset that NO query "returns"
+// 2. Orphan sweep: sets every DataXray File asset that NO query "returns"
 //    any more to 'Not in any search' — wherever it lives (the scan is by asset
 //    type, so files moved to another community are included). Deleting a saved
 //    query asset in Collibra deletes its "returns" relations with it, leaving
@@ -34,10 +34,10 @@
 // before its first async task is retried 3× by Collibra and then permanently
 // disabled until redeployment. Every failure path logs and ends cleanly.
 //
-// This workflow has NO Data X-Ray connection settings of its own: it never
-// calls Data X-Ray, so the same script ships in both editions. Each rerun
+// This workflow has NO DataXray connection settings of its own: it never
+// calls DataXray, so the same script ships in both editions. Each rerun
 // instance it starts uses the connection settings configured on the Rerun
-// Data X-Ray Search workflow — the Base URL / Bearer token on-prem, the Edge
+// DataXray Search workflow — the Base URL / Bearer token on-prem, the Edge
 // HTTP connection name in the Collibra Cloud + Edge edition.
 //
 // Process variables produced (audit only — there is no results form):
@@ -59,7 +59,7 @@ import com.collibra.dgc.core.api.model.workflow.WorkflowBusinessItemType
 final String KEEP_IN_SYNC_TAG = 'dataxray-keep-in-sync'
 final String RERUN_PROCESS_ID = 'rerunDataXraySearch'
 
-announceDxrVersion('Sync Data X-Ray Files (Nightly)')
+announceDxrVersion('Sync DataXray Files (Nightly)')
 def ids = dxrModelIds()
 def queryDomainId         = ids.queryDomainId
 def returnsRelationTypeId = ids.returnsRelationTypeId
@@ -71,7 +71,7 @@ def recordRunSummary = { int found, int started, int failed, int retiredSkipped,
     execution.setVariable('nightlyFailedCount', failed)
     execution.setVariable('nightlyRetiredSkipped', retiredSkipped)
     execution.setVariable('nightlyOrphansRetired', orphansRetired)
-    loggerApi.info("Sync Data X-Ray Files (Nightly): found=${found}, started=${started}, failed=${failed}, retiredSkipped=${retiredSkipped}, orphansRetired=${orphansRetired}${note ? ', ' + note : ''}")
+    loggerApi.info("Sync DataXray Files (Nightly): found=${found}, started=${started}, failed=${failed}, retiredSkipped=${retiredSkipped}, orphansRetired=${orphansRetired}${note ? ', ' + note : ''}")
 }
 
 // Park file assets that no query "returns" any more (see header, phase 2).
@@ -80,7 +80,7 @@ def recordRunSummary = { int found, int started, int failed, int retiredSkipped,
 // partial scan.
 def sweepOrphanedFiles = {
     if (!statusApi.exists(ids.notInAnySearchStatusId)) {
-        loggerApi.warn("Orphan sweep skipped: the status 'Not in any search' does not exist. Run Configure Data X-Ray Workflows once after upgrading.")
+        loggerApi.warn("Orphan sweep skipped: the status 'Not in any search' does not exist. Run Configure DataXray Workflows once after upgrading.")
         return 0
     }
     def returnedFileIds = [] as Set
@@ -123,7 +123,7 @@ try {
     rerunDefinitionId = wd.getId()
 } catch (Exception defEx) {
     // Timer-triggered: never throw — log, skip the fan-out, still sweep below.
-    loggerApi.error("Sync Data X-Ray Files (Nightly) fan-out skipped: the '${RERUN_PROCESS_ID}' workflow is not deployed (${defEx.message}). Deploy it and this job will pick it up tomorrow night.")
+    loggerApi.error("Sync DataXray Files (Nightly) fan-out skipped: the '${RERUN_PROCESS_ID}' workflow is not deployed (${defEx.message}). Deploy it and this job will pick it up tomorrow night.")
     fanOutNote = 'rerun workflow not deployed'
 }
 
@@ -143,7 +143,7 @@ if (rerunDefinitionId != null) {
             if (!cursor) break
         }
     } catch (Exception findEx) {
-        loggerApi.error("Sync Data X-Ray Files (Nightly) fan-out skipped: could not list flagged queries: ${findEx.message}")
+        loggerApi.error("Sync DataXray Files (Nightly) fan-out skipped: could not list flagged queries: ${findEx.message}")
         fanOutNote = 'query lookup failed'
         flaggedQueries = []
     }
@@ -185,7 +185,7 @@ try {
 } catch (Exception sweepEx) {
     // A failed relation/asset scan aborts the sweep — better to leave orphans
     // one more night than to retire based on a partial picture.
-    loggerApi.error("Sync Data X-Ray Files (Nightly) orphan sweep skipped: ${sweepEx.message}")
+    loggerApi.error("Sync DataXray Files (Nightly) orphan sweep skipped: ${sweepEx.message}")
 }
 
 recordRunSummary(found, started, failed, retiredSkipped, orphansRetired, fanOutNote)

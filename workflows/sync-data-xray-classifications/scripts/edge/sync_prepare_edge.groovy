@@ -13,14 +13,14 @@ import groovy.json.JsonOutput
 // {{include:collibra_lookup.groovy}}
 // {{include:dxr_edge_sync.groovy}}
 
-announceDxrVersion('Sync Data X-Ray Classifications')
+announceDxrVersion('Sync DataXray Classifications')
 def ids = dxrModelIds()
 def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
 if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {
-    def detailMsg = "Cannot run Sync Data X-Ray Classifications — the 'Edge HTTP connection name (Data X-Ray)' configuration variable is not set.\n\nOpen the workflow's settings page and enter the name of the HTTP connection to Data X-Ray on your Edge site, then start the workflow again."
+    def detailMsg = "Cannot run Sync DataXray Classifications — the 'Edge HTTP connection name (DataXray)' configuration variable is not set.\n\nOpen the workflow's settings page and enter the name of the HTTP connection to DataXray on your Edge site, then start the workflow again."
     loggerApi.error(detailMsg)
     def wf = new WorkflowException(detailMsg)
-    wf.setTitleMessage('Data X-Ray sync misconfigured')
+    wf.setTitleMessage('DataXray sync misconfigured')
     wf.setUserMessage(detailMsg)
     throw wf
 }
@@ -32,4 +32,4 @@ execution.setVariable('syncFailed', false)
 execution.setVariable('dxrErrorMessage', '')
 execution.setVariable('classIndex', JsonOutput.toJson(buildEdgeClassificationIndex(ids)))
 startEdgeSync()
-loggerApi.info("Sync Data X-Ray Classifications via Edge connection '${connectionName}': catalogue requests armed")
+loggerApi.info("Sync DataXray Classifications via Edge connection '${connectionName}': catalogue requests armed")
