@@ -94,11 +94,15 @@ on the query asset at any time; the change applies from the next rerun.
 
 What the import does, per matching file:
 
-1. **Works out the asset's identity.** Every file asset's UUID is derived
-   deterministically from the file's DataXray file id. The same DataXray
-   file therefore always maps to the *same* Collibra asset, no matter which
-   search imports it or how often. If the asset already exists it is updated
-   in place, wherever it lives; it is never duplicated.
+1. **Works out the asset's identity.** A new file asset's UUID is derived
+   from the file's DataXray file id, so the same DataXray file always maps
+   to the *same* Collibra asset, no matter which search imports it or how
+   often. In the Cloud + Edge edition the asset also records the file's
+   **DataXray Datasource ID** and **DataXray Object ID**, and a file whose
+   DataXray file id has changed is matched to its asset by those two (see
+   [What counts as the same file?](#what-counts-as-the-same-file)). If the
+   asset already exists it is updated in place, wherever it lives; it is
+   never duplicated.
 2. **Creates the asset** (if it does not exist) in the **DataXray Files**
    domain with type **DataXray File** and status **Candidate**. The asset's
    *display name* is the clean filename (`invoice.pdf`); its *full name* is the
@@ -108,6 +112,8 @@ What the import does, per matching file:
 3. **Writes its attributes**: DataXray ID, File Path, File Size, Last
    Modified and Datasource Name (and a Link, when DataXray supplies one).
    These are overwritten on every sync, so they always reflect the last run.
+   File Size and Last Modified are written for people to read:
+   `27.2 KB (27,885 bytes)` and `10 Apr 2025, 17:22 UTC`.
 4. **Links it to the query** with a *returns* relation — the record that this
    search currently matches this file.
 5. **Links it to the classifications it matched** (labels, extractors and
@@ -139,14 +145,34 @@ The imported assets appear in the **DataXray Files** domain:
 
 ## What counts as the same file?
 
-A file asset follows the file's **DataXray file id**. As long as DataXray
-keeps the id, every sync updates the same asset, whatever else changes. When
-DataXray assigns a new id, Collibra sees a new file: the next rerun of a
-matching search creates a new asset, and the old one drops out of the search
-(see [How are file assets orphaned?](#how-are-file-assets-orphaned)).
+A file asset follows the file's **DataXray file id**, and in the Cloud +
+Edge edition also its **object key**: the datasource's id in DataXray plus
+the object id the source system gives the file (its path on file shares and
+buckets, its item id on SharePoint Online, OneDrive and similar). Every sync
+stores both on the asset (attributes **DataXray ID**, **DataXray Datasource
+ID** and **DataXray Object ID**).
 
-Whether a file keeps its id depends on the DataXray connector of its
-datasource:
+- As long as DataXray keeps the file id, every sync updates the same asset,
+  whatever else changes.
+- **Cloud + Edge:** when DataXray assigns a new file id but the object key is
+  unchanged, the sync finds the asset by its object key and keeps updating
+  it, and the DataXray ID attribute takes the new id. This is what happens
+  when a datasource's scanned data is dropped from DataXray's index and the
+  datasource is scanned again: the files come back with new ids, and keep
+  their assets, comments, attachments, history and community placement.
+- When both change, Collibra sees a new file: the next rerun of a matching
+  search creates a new asset, and the old one drops out of the search (see
+  [How are file assets orphaned?](#how-are-file-assets-orphaned)).
+- **On-prem:** DataXray's public files API does not return the object id
+  (October 2026), so the on-prem edition follows the file id only.
+
+An asset created by a release before v2.6 gets its object key the next time
+a sync updates it. Rerun your searches (or let the nightly sync run) once
+after upgrading, before you drop a datasource's data from the index, so that
+every asset has one.
+
+Whether a file keeps its id (or its object id) depends on the DataXray
+connector of its datasource:
 
 | Connector | DataXray identifies a file by | Rename or move within the datasource |
 |---|---|---|
@@ -158,8 +184,11 @@ datasource:
 | Connector plugins | whatever id the plugin reports | Depends on the plugin |
 
 For **every** connector, a file gets a new id when it is copied or moved to
-another datasource, or when its datasource is deleted and scanned again. A copy
-is a separate file: the original keeps its asset, and the copy gets its own.
+another datasource, or when its datasource is deleted and created again (the
+new datasource has a new id, so the object key changes too). A copy is a
+separate file: the original keeps its asset, and the copy gets its own.
+Dropping a datasource's scanned data and scanning it again also gives every
+file a new id, but keeps the object key: see above.
 
 A new asset starts clean. Comments, attachments, history and any move to
 another community stay with the old asset.
@@ -168,18 +197,25 @@ another community stay with the old asset.
 
 ## How is the maximum number of file assets controlled?
 
-There is a single **instance-wide cap of 25,000 file assets**, with a
-**warning above 10,000** for any one import. The cap counts every asset of
-type **DataXray File** on the instance, wherever it lives: file assets moved
-out of the **DataXray Files** domain into other communities count too. The
-cap exists to keep imports, nightly syncs and the Collibra instance itself
-responsive; it is a fixed constant in the workflow scripts, not a setting that
-can be changed in the Collibra UI (contact Ohalo if your deployment needs a
-different limit).
+There are two limits:
+
+- **10,000 files per run.** A search matching more than 10,000 files cannot
+  be imported (or kept in sync nightly): the results task asks you to refine
+  it. A rerun that would create more than 10,000 *new* file assets is refused
+  the same way; a rerun that only refreshes existing assets is not. Large
+  imports (above 5,000 files) are allowed with a warning that they take a
+  while.
+- **An instance-wide cap of 25,000 file assets.** The cap counts every asset of
+  type **DataXray File** on the instance, wherever it lives: file assets moved
+  out of the **DataXray Files** domain into other communities count too. The
+  cap exists to keep imports, nightly syncs and the Collibra instance itself
+  responsive; it is a fixed constant in the workflow scripts, not a setting that
+  can be changed in the Collibra UI (contact Ohalo if your deployment needs a
+  different limit).
 
 Key facts about how it is applied:
 
-- **It is a total, not a per-import limit.** Before every import or rerun the
+- **The cap is a total, not a per-import limit.** Before every import or rerun the
   workflow counts *every* DataXray File asset in Collibra and adds the
   number of new assets the run would create. If that projected total exceeds
   25,000, the run is refused and nothing is imported.
@@ -206,7 +242,9 @@ What you see when the cap is hit:
 | Situation | Behaviour |
 |---|---|
 | A search's results task, and the projected total would exceed 25,000 | The import checkbox is not shown. Instead the task shows: *"Importing is disabled for this search: the DataXray Files domain holds N file asset(s) and this search matched M file(s) — the projected N+M would exceed the 25000 instance-wide limit. Narrow the query, or retire imported searches you no longer need."* N is the count of every DataXray File asset, including moved ones. |
-| A search matched more than 10,000 files but is within the cap | Import is offered, with a *"Large import — expect it to run for a while in the background"* warning. |
+| A search matched more than 10,000 files | Import and *Keep in sync nightly* are not shown. The task says: *"Importing is disabled for this search: it matched N file(s), more than the 10,000 a search can import. Refine the search …"* The import job refuses it too, if the task is completed through the REST API. |
+| A search matched more than 5,000 files (up to 10,000) and is within the cap | Import is offered, with a *"Large import — expect it to run for a while in the background"* warning. |
+| A rerun would create more than 10,000 new file assets | The rerun is refused (*"… more than the 10,000 one run may create"*); nothing is changed. Tag the query `dataxray-no-auto-import` to refresh only the files already imported. |
 | An import is refused when it starts (for example, another import finished in the meantime) | The import stops with *"Import refused: Collibra holds N DataXray file asset(s) and this search matched M …"*. Nothing is imported. |
 | A **manual** rerun (from the query asset's page) would exceed the cap | The rerun stops immediately with an error (*"Collibra holds N DataXray file asset(s) and this rerun would add M more …"*) naming the projected total. Nothing is changed. |
 | The **nightly** reruns a keep-in-sync query that would exceed the cap | The rerun is refused, logged in `dgc.log`, and ends cleanly. That query's file assets are left exactly as they were; other queries are unaffected. It will be refused again every night until the population is reduced or the query narrowed. |
@@ -516,7 +554,7 @@ needed).
 | What is a file asset's identity? | Its DataXray file id — the Collibra UUID is derived from it, so the same file is always the same asset. On path-based connectors (SMB, file shares, S3, Azure Blob, SharePoint on-premises) a rename or move gives the file a new id, and so a new asset. |
 | Which domain / type? | Created in **DataXray Files** / **DataXray File**, status **Candidate** when active. |
 | Can I move one to another community? | Yes; syncs update it where it is, and it still counts towards the cap and is included in the nightly sweep. The placement is lost if DataXray assigns the file a new id. |
-| Maximum number? | **25,000** DataXray File assets in total, wherever they live and whatever their status; warning above **10,000** per import. Fixed in the scripts. |
+| Maximum number? | **10,000** new file assets per import or rerun, and **25,000** DataXray File assets in total, wherever they live and whatever their status; warning above **5,000** per import. Fixed in the scripts. |
 | What keeps them current? | Manual **Rerun DataXray Search** on the query asset, or the **02:30 nightly** for queries tagged `dataxray-keep-in-sync`. |
 | When does one get Not in any search? | When no query returns it any more — after a rerun stops returning it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). Never if a person set its status. |
 | What happens to links that stop applying? | *returns* becomes *formerly returns*, and an integration-made *groups* becomes *formerly groups*. Both swap back if they apply again. Links a person created are never touched. |

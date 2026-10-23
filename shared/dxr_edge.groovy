@@ -319,7 +319,8 @@ def tupleFromSearchHit(Map hit, Map index, Map dsNames, String baseUrl) {
             if (v != null && !v.toString().trim().isEmpty()) { ref(index.extractorDxrIdByIndexId, key.substring(ext.length()), 'extractor') }
         }
     }
-    return [id, datasource.toString(), path, fileName, size, modified, '', refs]
+    def objectId = (src.object_id ?: '').toString()
+    return [id, datasource.toString(), path, fileName, size, modified, '', refs, dsId, objectId]
 }
 
 // Datasource ids in a page that `dsNames` does not know yet.
@@ -574,7 +575,7 @@ def importEdgePage(Map opts, Map page, List tuples) {
         : processFileBatch(tuples, opts.queryAssetId, "${opts.label} ${pageNo + 1}/${batchCount}".toString(),
                            [createNew: opts.createNew != false])
     accumulateBatchCounters(res)
-    if (opts.afterPage) { opts.afterPage(tuples, pageNo) }
+    if (opts.afterPage) { opts.afterPage(tuples, pageNo, res.seenAssetIds ?: tuples.collect { deterministicFileAssetId(it[0]).toString() }) }
     loggerApi.info("${opts.label} ${pageNo + 1}/${batchCount}: +${res.created} created, +${res.updated} updated, +${res.failed} failed, ${res.skippedNew} not imported, +${res.relationsAdded}/-${res.relationsRemoved} relation(s); ${Math.min((pageNo + 1) * pageSize, page.total)}/${page.total} done")
     return true
 }

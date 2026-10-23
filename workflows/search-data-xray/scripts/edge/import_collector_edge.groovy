@@ -28,7 +28,18 @@ int configuredPageSize = edgePageSize(execution.getVariable('dataxrayPageSize'))
 def previewSize  = execution.getVariable('dxrPreviewPageSize')
 int pageSize     = Math.min(configuredPageSize, previewSize != null && previewSize.toString().isInteger() ? previewSize.toString().toInteger() : configuredPageSize)
 
-// --- Re-check the instance-wide cap -------------------------------------------
+// --- Re-check the import limits -----------------------------------------------
+
+// The results form hides the import controls above these limits, but a task can
+// be completed through the REST API, so the script enforces them too.
+if (total > dxrMaxImportFiles()) {
+    def msg = dxrTooManyToImportMessage(total)
+    loggerApi.error(msg)
+    def wf = new WorkflowException(msg)
+    wf.setTitleMessage('DataXray import refused')
+    wf.setUserMessage(msg)
+    throw wf
+}
 
 int filesDomainCount = countFileAssets(ids)
 int projectedTotal = filesDomainCount + total

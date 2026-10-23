@@ -38,6 +38,8 @@ def dxrModelIds() {
         datasourceAttrTypeId   : string2Uuid('019e9210-be62-7a89-90d3-48b6f57e0c21'),
         dataxrayIdAttrTypeId   : string2Uuid('019e73ae-1aa8-700c-8086-626326822c22'),  // DataXray ID (public UUID)
         dataxrayIndexIdAttrTypeId: string2Uuid('019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'), // DataXray Index ID (numeric id in DXR's search index; stamped by the Edge-edition sync)
+        datasourceIdAttrTypeId : string2Uuid('019e9212-3d44-7f61-8e5c-8a9b0c1d2e23'),  // DataXray Datasource ID (file assets; Cloud + Edge)
+        objectIdAttrTypeId     : string2Uuid('019e9212-4e55-7072-9f6d-9b0c1d2e3f34'),  // DataXray Object ID (file assets; Cloud + Edge)
         linkAttrTypeId         : string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba'),
         searchLinkAttrTypeId   : string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254'),
         subtypeAttrTypeId      : string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad'),
@@ -60,9 +62,20 @@ def dxrMaxTotalFileAssets() { return 25_000 }
 // lower it further.
 def dxrEdgeResultsFileMaxRows() { return 10_000 }
 
+// No single run creates more file assets than this (either edition): a search
+// matching more cannot be imported (the user is asked to refine it), and a
+// rerun that would add more new files than this is refused. Agreed with TRC on
+// 13 Oct 2026.
+def dxrMaxImportFiles() { return 10_000 }
+
+// The user-facing refusal for a search above dxrMaxImportFiles().
+def dxrTooManyToImportMessage(Object totalDisplay) {
+    return "Importing is disabled for this search: it matched ${totalDisplay} file(s), more than the ${String.format(Locale.ENGLISH, '%,d', dxrMaxImportFiles())} a search can import. Refine the search (add a label, extractor or annotator, or annotated text) and run it again.".toString()
+}
+
 // Above this many files an import is allowed but the results form warns that
 // it will take a while.
-def dxrWarnImportFiles() { return 10_000 }
+def dxrWarnImportFiles() { return 5_000 }
 
 // Work items processed per async batch task execution (one DB transaction).
 def dxrBatchSize() { return 50 }
@@ -124,6 +137,8 @@ def rerunModelGap(Map ids) {
     if (!statusApi.exists(ids.notInAnySearchStatusId)) { missing << "the status 'Not in any search'" }
     if (!relationTypeApi.exists(ids.formerlyReturnsRelationTypeId)) { missing << "the relation type 'formerly returns'" }
     if (!relationTypeApi.exists(ids.formerlyGroupsRelationTypeId)) { missing << "the relation type 'formerly groups'" }
+    if (!attributeTypeApi.exists(ids.datasourceIdAttrTypeId)) { missing << "the attribute type 'DataXray Datasource ID'" }
+    if (!attributeTypeApi.exists(ids.objectIdAttrTypeId)) { missing << "the attribute type 'DataXray Object ID'" }
     if (missing.isEmpty()) { return '' }
     return "This instance is missing ${missing.join(', ')}. Run Configure DataXray Workflows once (as an admin) after upgrading the DataXray workflows, then rerun.".toString()
 }

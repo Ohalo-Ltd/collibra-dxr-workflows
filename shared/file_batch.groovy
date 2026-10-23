@@ -6,8 +6,11 @@
 // edge: straight from each fetched page) and the rerun's retire pass.
 //
 // Per work item (tuple layout in dxr_rows.groovy):
-//   – Deterministic asset UUID from the DataXray file id, so the same file
-//     always maps to the same Collibra asset: upsert is assetApi.exists().
+//   – Identity: a file's asset is the one with the UUID derived from its
+//     DataXray file id; failing that, the one whose stored object key
+//     (DataXray Datasource ID + Object ID) matches the row's, so a file
+//     DataXray gives a new id (its index dropped and rescanned) keeps its
+//     asset. See resolveFileAssetIds below.
 //   – Missing assets are bulk-created (addAssets) in the DataXray Files
 //     domain. The full name carries a short UUID-derived suffix (Collibra
 //     names are unique per domain; 10k files WILL repeat "invoice.pdf");
@@ -18,7 +21,7 @@
 //     (Accepted, Under Review, …) is never changed.
 //   – Attributes (DataXray ID, File Path, File Size, Last Modified,
 //     Datasource Name, Link) are written with setAssetAttributes (replace-all
-//     per type — idempotent).
+//     per type — idempotent); size and date in readable form (see below).
 //   – Relations: query asset —returns→ file asset (the per-query membership
 //     the rerun workflow diffs against), and file —groups→ each matched
 //     classification. Relations for freshly created assets are added in bulk
@@ -42,7 +45,8 @@
 // Upsert one batch of work-item tuples. `label` names the batch in log lines
 // (e.g. "Import batch 3/12"). opts.createNew (default true): false refreshes
 // existing assets only. Returns
-// [created:, updated:, failed:, relationsAdded:, relationsRemoved:, skippedNew:].
+// [created:, updated:, failed:, relationsAdded:, relationsRemoved:, skippedNew:,
+//  matchedByObjectKey:, seenAssetIds: (the asset UUID string each tuple maps to)].
 def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]) {
     def ids = dxrModelIds()
     boolean createNew = opts.createNew != false
@@ -52,21 +56,29 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
     int relationsAdded = 0
     int relationsRemoved = 0
     int skippedNew = 0
+    def resolved = batch.collect { deterministicFileAssetId(it[0]) }
+    int matchedByObjectKey = 0
 
     try {
         // --- Split the batch into new vs existing assets ------------------------
 
         def newItems = []       // [tuple, assetId]
         def existingItems = []  // [tuple, assetId]
-        batch.each { tuple ->
-            def assetId = deterministicFileAssetId(tuple[0])
-            if (assetApi.exists(assetId)) {
+        def found = resolveFileAssetIds(batch, ids)
+        batch.eachWithIndex { tuple, i ->
+            def assetId = found[i]
+            if (assetId != null) {
+                if (assetId != resolved[i]) { matchedByObjectKey++ }
+                resolved[i] = assetId
                 existingItems << [tuple, assetId]
             } else if (createNew) {
-                newItems << [tuple, assetId]
+                newItems << [tuple, resolved[i]]
             } else {
                 skippedNew++
             }
+        }
+        if (matchedByObjectKey > 0) {
+            loggerApi.info("${label}: ${matchedByObjectKey} file(s) DataXray gave a new id matched their existing asset by object key")
         }
         if (skippedNew > 0) {
             loggerApi.info("${label}: ${skippedNew} new matching file(s) not imported (automatic import is off for this search)")
@@ -121,10 +133,14 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             def (tuple, assetId) = pair
             setFileAssetAttr(assetId, ids.dataxrayIdAttrTypeId,   tuple[0])
             setFileAssetAttr(assetId, ids.filePathAttrTypeId,     tuple[2])
-            setFileAssetAttr(assetId, ids.fileSizeAttrTypeId,     tuple[4])
-            setFileAssetAttr(assetId, ids.lastModifiedAttrTypeId, tuple[5])
+            setFileAssetAttr(assetId, ids.fileSizeAttrTypeId,     readableFileSize(tuple[4]))
+            setFileAssetAttr(assetId, ids.lastModifiedAttrTypeId, readableTimestamp(tuple[5]))
             setFileAssetAttr(assetId, ids.datasourceAttrTypeId,   tuple[1])
             setFileAssetAttr(assetId, ids.linkAttrTypeId,         tuple[6])
+            if (fileObjectKey(tuple) != null) {
+                setFileAssetAttr(assetId, ids.datasourceIdAttrTypeId, tuple[8])
+                setFileAssetAttr(assetId, ids.objectIdAttrTypeId,     tuple[9])
+            }
         }
 
         // --- Relations ------------------------------------------------------------
@@ -219,7 +235,106 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
     }
 
     return [created: created, updated: updated, failed: failedInBatch,
-            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, skippedNew: skippedNew]
+            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, skippedNew: skippedNew,
+            matchedByObjectKey: matchedByObjectKey, seenAssetIds: resolved.collect { it.toString() }]
+}
+
+// --- File identity -------------------------------------------------------------
+//
+// DataXray's file id changes when a datasource's scanned data is dropped from
+// the index and scanned again; the datasource id and the source system's
+// object id (the path on file shares and buckets, the item id on SharePoint
+// Online, OneDrive, …) do not. Every asset written from a row that carries
+// both stores them (DataXray Datasource ID, DataXray Object ID), and a row
+// whose file id has no asset is looked up by them before a new asset is made.
+// The file id is tried first: an unchanged id is the same file, and the
+// object-key index is then never loaded.
+
+// The row's object key, or null when DataXray did not supply both parts.
+def fileObjectKey(List tuple) {
+    def ds  = tuple.size() > 9 ? (tuple[8] ?: '').toString() : ''
+    def obj = tuple.size() > 9 ? (tuple[9] ?: '').toString() : ''
+    return (ds && obj) ? "${ds}:${obj}".toString() : null
+}
+
+// The existing asset UUID for each tuple (null = no asset yet), in order.
+def resolveFileAssetIds(List batch, Map ids) {
+    Map keyIndex = null
+    return batch.collect { tuple ->
+        def byFileId = deterministicFileAssetId(tuple[0])
+        if (assetApi.exists(byFileId)) { return byFileId }
+        def key = fileObjectKey(tuple)
+        if (key == null) { return null }
+        if (keyIndex == null) { keyIndex = loadFileObjectKeyIndex(ids) }
+        def hit = keyIndex[key]
+        if (hit && assetApi.exists(string2Uuid(hit))) {
+            loggerApi.info("File ${tuple[0]} has a new DataXray id; matched asset ${hit} by object key ${key}")
+            return string2Uuid(hit)
+        }
+        return null
+    }
+}
+
+// object key → asset UUID string over every file asset that has both parts.
+// Built from Collibra once per workflow run (two attribute scans) and kept in
+// the process variable dxrObjectKeyIndex (gzip + Base64) for later batches
+// and pages. Assets created during the run are not in it: they were created
+// under their current file id, which is tried first.
+def loadFileObjectKeyIndex(Map ids) {
+    def cached = (execution.getVariable('dxrObjectKeyIndex') ?: '').toString()
+    if (cached) { return unpackJson(cached) as Map }
+    def index = [:]
+    try {
+        def dsByAsset  = attributeValuesOfType(ids.datasourceIdAttrTypeId)
+        def objByAsset = attributeValuesOfType(ids.objectIdAttrTypeId)
+        int clashes = 0
+        objByAsset.each { assetId, obj ->
+            def ds = dsByAsset[assetId]
+            if (!ds) { return }
+            def key = "${ds}:${obj}".toString()
+            if (index.containsKey(key)) { clashes++ } else { index[key] = assetId }
+        }
+        if (clashes > 0) { loggerApi.warn("${clashes} file asset(s) share an object key with another; the first found is used") }
+    } catch (Exception indexEx) {
+        loggerApi.warn("Could not build the object-key index (${indexEx.message}); files are matched by DataXray file id only")
+    }
+    loggerApi.info("Object-key index: ${index.size()} file asset(s)")
+    execution.setVariable('dxrObjectKeyIndex', packJson(index))
+    return index
+}
+
+// asset UUID string → value, for every attribute of one type.
+def attributeValuesOfType(UUID typeId) {
+    def out = [:]
+    def cursor = ''
+    while (true) {
+        def page = attributeApi.findAttributes(com.collibra.dgc.core.api.dto.instance.attribute.FindAttributesRequest.builder()
+            .typeIds([typeId])
+            .limit(1000)
+            .cursor(cursor)
+            .build())
+        page.getResults().each { attr ->
+            def aid = attr.getAsset()?.getId()
+            def val = attr.getValue()
+            if (aid && val != null && !val.toString().isEmpty()) { out[aid.toString()] = val.toString() }
+        }
+        cursor = page.getNextCursor()
+        if (!cursor) { break }
+    }
+    return out
+}
+
+def packJson(Object value) {
+    def baos = new ByteArrayOutputStream()
+    def gz = new java.util.zip.GZIPOutputStream(baos)
+    gz.write(groovy.json.JsonOutput.toJson(value).getBytes(java.nio.charset.StandardCharsets.UTF_8))
+    gz.close()
+    return Base64.getEncoder().encodeToString(baos.toByteArray())
+}
+
+def unpackJson(String packed) {
+    def gz = new java.util.zip.GZIPInputStream(new ByteArrayInputStream(Base64.getDecoder().decode(packed)))
+    return new groovy.json.JsonSlurper().parseText(new String(gz.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8))
 }
 
 // Add the batch's counters to the running import*Count process variables.
@@ -323,6 +438,47 @@ def fileNameOf(tuple) {
 def uniqueAssetName(String fileName, UUID assetId) {
     def frag = assetId.toString().replaceAll('-', '').take(8)
     return "${fileName.take(200)} [${frag}]".toString()
+}
+
+// File Size for people: "27.2 KB (27,885 bytes)" (1 KB = 1,024 bytes; the exact
+// count stays in brackets). A value that isn't a whole number is kept as is.
+def readableFileSize(value) {
+    def raw = (value == null ? '' : value.toString().trim())
+    if (!raw.isLong()) { return raw }
+    long bytes = raw.toLong()
+    def exact = String.format(Locale.ENGLISH, '%,d', bytes)
+    if (bytes < 1024) { return "${exact} ${bytes == 1L ? 'byte' : 'bytes'}".toString() }
+    def units = ['KB', 'MB', 'GB', 'TB', 'PB']
+    double v = bytes / 1024d
+    int u = 0
+    while (v >= 1024d && u < units.size() - 1) { v = v / 1024d; u++ }
+    return "${String.format(Locale.ENGLISH, '%.1f', v)} ${units[u]} (${exact} bytes)".toString()
+}
+
+// Last Modified for people: "10 Apr 2025, 17:22 UTC". DataXray sends ISO-8601
+// instants (with or without fractional seconds or an offset); a value without
+// a zone is read as UTC, digits alone as epoch seconds or milliseconds.
+// Anything else is kept as is.
+def readableTimestamp(value) {
+    def raw = (value == null ? '' : value.toString().trim())
+    if (raw.isEmpty()) { return raw }
+    java.time.Instant instant = null
+    try {
+        if (raw.isLong()) {
+            long n = raw.toLong()
+            instant = n > 100_000_000_000L ? java.time.Instant.ofEpochMilli(n) : java.time.Instant.ofEpochSecond(n)
+        } else {
+            try {
+                instant = java.time.OffsetDateTime.parse(raw).toInstant()
+            } catch (java.time.format.DateTimeParseException noOffset) {
+                instant = java.time.LocalDateTime.parse(raw).toInstant(java.time.ZoneOffset.UTC)
+            }
+        }
+    } catch (Exception parseEx) {
+        return raw
+    }
+    return java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm 'UTC'", Locale.ENGLISH)
+        .withZone(java.time.ZoneOffset.UTC).format(instant)
 }
 
 def setFileAssetAttr(UUID assetId, UUID typeId, value) {
