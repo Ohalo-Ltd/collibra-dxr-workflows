@@ -2,7 +2,7 @@
 <!--
   rerunDataXraySearch workflow
   ============================
-  Rerun a saved DataXray search from its Unstructured Data Query asset and
+  Rerun a saved DataXray search from its DataXray Sync Filter asset and
   re-sync the imported file assets:
     startEvent (no form — started from the query asset's page, or headlessly
                 by the nightly file sync driver)

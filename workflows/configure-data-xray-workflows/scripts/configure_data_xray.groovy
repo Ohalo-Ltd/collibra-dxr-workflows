@@ -129,8 +129,11 @@ def FILTER_ATTR_ID        = '019e9210-e04d-7c6b-a481-5f29d8036c7a'
 // file a new id (its index dropped and rescanned).
 def DATASOURCE_ID_ATTR_ID = '019e9212-3d44-7f61-8e5c-8a9b0c1d2e23'
 def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
+// DataXray's own name for the file, refreshed on every sync. The asset's name
+// is set from it once, when the asset is created, and is the user's after that.
+def FILE_NAME_ATTR_ID     = '019e9212-5f66-7183-a07e-ac1d2e3f4a45'
 
-// "returns / returned by" — links an Unstructured Data Query asset (source) to
+// "returns / returned by" — links a DataXray Sync Filter asset (source) to
 // each DataXray File asset (target) it currently returns. Deliberately NOT
 // the system "groups" relation type (7017), which the query already uses for
 // its classification criteria: a dedicated type makes "which files does this
@@ -138,7 +141,7 @@ def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
 // workflow retire a file only once NO query returns it any more.
 def RETURNS_RELTYPE_ID    = '019e9210-f180-79dc-b5a0-6c31e94f82d5'
 
-// "searches text in / text searched by" — links an Unstructured Data Query
+// "searches text in / text searched by" — links a DataXray Sync Filter
 // asset (source) to each Annotator asset (target) whose annotations its
 // annotated-text filter is searched in. Distinct from the query's "groups"
 // criteria relations: those annotators are AND-ed requirements, these only
@@ -227,7 +230,9 @@ def assetTypeDefs = [
     [id: '019c9fbe-25c3-71b7-90ac-057dd582fa1e', name: 'Label',
      parent: DATA_ASSET_TYPE_ID, symbol: 'ICON_CODE', color: '#3e9bd9',
      icon: 'uf-additional-icon-symbol_direction', acronym: null],
-    [id: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'Unstructured Data Query',
+    // A saved search: which DataXray files the integration keeps in sync.
+    [id: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'DataXray Sync Filter',
+     legacyName: 'Unstructured Data Query',
      parent: DATA_ASSET_TYPE_ID, symbol: 'ICON_CODE', color: '#1fb07f',
      icon: 'uf-additional-icon-tool_wrench', acronym: null],
     // displayName enabled: imported file assets carry a uniqueness suffix in
@@ -251,6 +256,7 @@ def attrTypeDefs = [
     [id: DATASOURCE_ATTR_ID,    name: 'Datasource Name',       stringType: 'PLAIN_TEXT'],
     [id: DATASOURCE_ID_ATTR_ID, name: 'DataXray Datasource ID', stringType: 'PLAIN_TEXT'],
     [id: OBJECT_ID_ATTR_ID,     name: 'DataXray Object ID',    stringType: 'PLAIN_TEXT'],
+    [id: FILE_NAME_ATTR_ID,     name: 'DataXray File Name',    stringType: 'PLAIN_TEXT'],
     [id: QUERY_ATTR_ID,         name: 'DataXray Query',        stringType: 'PLAIN_TEXT'],
     [id: FILTER_ATTR_ID,        name: 'Annotated Text Filter', stringType: 'PLAIN_TEXT'],
 ]
@@ -274,7 +280,7 @@ def assignmentDefs = [
     // via the API exist regardless, but stay invisible without this).
     // TO_TARGET = this type is the relation's source (page shows the role);
     // TO_SOURCE = this type is the target (page shows the co-role).
-    [assetTypeId: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'Unstructured Data Query',
+    [assetTypeId: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'DataXray Sync Filter',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, FILES_ATTR_ID, DXID_ATTR_ID,
                    QUERY_ATTR_ID, FILTER_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,      direction: 'TO_TARGET'],   // groups classifications
@@ -284,7 +290,7 @@ def assignmentDefs = [
     // descriptionMin 0: imported file assets carry no Description, so a
     // mandatory Description would flag every one of them as incomplete.
     [assetTypeId: FILE_TYPE_ID, name: 'DataXray File', descriptionMin: 0,
-     customAttrs: [FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
+     customAttrs: [FILE_NAME_ATTR_ID, FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
                    DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID,
                    DATASOURCE_ID_ATTR_ID, OBJECT_ID_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
@@ -409,7 +415,7 @@ attrTypeDefs.each { a ->
 
 // --- Phase 4b: relation type -------------------------------------------------
 
-// "Unstructured Data Query returns DataXray File". Created with a fixed
+// "DataXray Sync Filter returns DataXray File". Created with a fixed
 // canonical UUID like everything else; the search/rerun scripts reference it
 // as a constant.
 try {
@@ -432,7 +438,7 @@ try {
     loggerApi.error("ensure relation type failed: ${e.message}")
 }
 
-// "Unstructured Data Query searches text in Annotator" — scopes the query's
+// "DataXray Sync Filter searches text in Annotator" — scopes the query's
 // annotated-text filter to specific annotators (see TEXT_FILTER_RELTYPE_ID).
 try {
     def rtid = string2Uuid(TEXT_FILTER_RELTYPE_ID)
@@ -704,7 +710,9 @@ ensureRole(ROLE_USER_ID,  ROLE_USER_NAME,  [])
 // --- Phase 6b: rename to the DataXray brand ---------------------------------
 
 // The product was renamed from "Data X-Ray" to "DataXray" (and the queries
-// domain from "Data X-Ray Custom Queries" to "DataXray Sync Filter"). Phases
+// domain from "Data X-Ray Custom Queries" to "DataXray Sync Filter"; in v2.7 the
+// query asset type from "Unstructured Data Query" to "DataXray Sync Filter",
+// named by its def's legacyName). Phases
 // 1-6 only create what is missing, so an existing installation still carries
 // the old names. Rename each element while it still has its OLD DEFAULT name;
 // a name someone changed in Collibra is theirs and is left alone. Everything is
@@ -712,8 +720,8 @@ ensureRole(ROLE_USER_ID,  ROLE_USER_NAME,  [])
 def legacyName = { String name ->
     name == 'DataXray Sync Filter' ? 'Data X-Ray Custom Queries' : name.replace('DataXray', 'Data X-Ray')
 }
-def renameIfLegacy = { String label, String newName, Closure currentName, Closure doRename ->
-    def oldName = legacyName(newName)
+def renameIfLegacy = { String label, String newName, Closure currentName, Closure doRename, String legacy = null ->
+    def oldName = legacy ?: legacyName(newName)
     if (oldName == newName) { return }
     try {
         def current = currentName()
@@ -740,7 +748,8 @@ domainDefs.each { d ->
 assetTypeDefs.each { t ->
     renameIfLegacy('asset type', t.name,
         { assetTypeApi.exists(string2Uuid(t.id)) ? assetTypeApi.getAssetType(string2Uuid(t.id)).getName() : null },
-        { String n -> assetTypeApi.changeAssetType(ChangeAssetTypeRequest.builder().id(string2Uuid(t.id)).name(n).build()) })
+        { String n -> assetTypeApi.changeAssetType(ChangeAssetTypeRequest.builder().id(string2Uuid(t.id)).name(n).build()) },
+        t.legacyName)
 }
 attrTypeDefs.each { a ->
     renameIfLegacy('attribute type', a.name,

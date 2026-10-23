@@ -1,7 +1,7 @@
 // rerun_collector.groovy  (on-prem variant: direct HTTPS to DataXray)
 //
 // First stage of "Rerun DataXray Search" — an ASSET-scoped workflow started
-// from a saved Unstructured Data Query asset (or headlessly, per query, by the
+// from a saved DataXray Sync Filter asset (or headlessly, per query, by the
 // nightly file sync driver).
 //
 // The saved criteria are rebuilt from the query asset (shared/rerun_common.groovy):
@@ -100,7 +100,7 @@ if (modelGap) {
 
 def queryId = item?.getId()
 if (queryId == null) {
-    abort('Rerun DataXray Search', 'No query asset — this workflow must be started from an Unstructured Data Query asset.')
+    abort('Rerun DataXray Search', 'No query asset — this workflow must be started from a DataXray Sync Filter asset.')
     return
 }
 def queryAsset = assetApi.getAsset(queryId)
@@ -108,13 +108,13 @@ def queryAsset = assetApi.getAsset(queryId)
 // Hard type guard: this workflow is offered on EVERY asset page (Collibra
 // can't scope a workflow with global start roles to one asset type —
 // asset-type assignment rules are rejected with workflowWrongRoles). Started
-// on anything but an Unstructured Data Query it must stop HERE: a file asset
+// on anything but a DataXray Sync Filter it must stop HERE: a file asset
 // also carries "groups" relations to classifications, and without this guard
 // the rebuild below would happily treat them as search criteria and import
 // on the file's behalf.
 if (queryAsset.getType()?.getId() != ids.queryAssetTypeId) {
     abort('Rerun DataXray Search',
-        "'${queryAsset.getName()}' is a ${queryAsset.getType()?.getName()} asset — this workflow can only rerun an Unstructured Data Query asset (a saved search created by Search DataXray).")
+        "'${queryAsset.getName()}' is a ${queryAsset.getType()?.getName()} asset — this workflow can only rerun a DataXray Sync Filter asset (a saved search created by Search DataXray).")
     return
 }
 def conditionName = queryAsset.getName()

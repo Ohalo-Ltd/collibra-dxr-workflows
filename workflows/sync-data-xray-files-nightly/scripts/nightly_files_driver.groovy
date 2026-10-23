@@ -2,7 +2,7 @@
 //
 // Nightly driver for the DataXray file sync. Two phases:
 //
-// 1. Fan-out: finds every Unstructured Data Query asset tagged
+// 1. Fan-out: finds every DataXray Sync Filter asset tagged
 //    'dataxray-keep-in-sync' (the flag set when a user ticks "keep in sync"
 //    at import time) and starts one HEADLESS Rerun DataXray Search instance
 //    per query. Each rerun re-runs its search and re-syncs its file assets in

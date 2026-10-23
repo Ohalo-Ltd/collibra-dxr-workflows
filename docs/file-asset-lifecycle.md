@@ -13,7 +13,7 @@ Terminology used throughout:
 | Term | Meaning |
 |---|---|
 | **File asset** | An asset of type **DataXray File**, created in the **DataXray Files** domain. One per file in DataXray. |
-| **Query asset** | An asset of type **Unstructured Data Query** in the **DataXray Sync Filter** domain. Created by **Search DataXray**; one per saved search. |
+| **Query asset** | An asset of type **DataXray Sync Filter** in the **DataXray Sync Filter** domain. Created by **Search DataXray**; one per saved search. |
 | **Returns** | The relation from a query asset to each file asset its search currently matches (*query* **returns** *file* / *file* **returned by** *query*). This is the integration's record of "which searches this file belongs to". |
 | **Formerly returns** | The relation a *returns* link becomes when the search stops matching the file (*query* **formerly returns** *file* / *file* **formerly returned by** *query*). It is a record only: it never counts as the file being returned. |
 | **Formerly groups** | The same for a classification link: when DataXray no longer finds a label, extractor or annotator on a file, the file's *groups* link to it becomes *file* **formerly groups** *classification* / *classification* **formerly grouped by** *file*. |
@@ -108,10 +108,13 @@ What the import does, per matching file:
    *display name* is the clean filename (`invoice.pdf`); its *full name* is the
    filename plus a short suffix derived from the UUID (`invoice.pdf [e8cf757f]`),
    because Collibra requires names to be unique within a domain and filenames
-   repeat constantly.
-3. **Writes its attributes**: DataXray ID, File Path, File Size, Last
-   Modified and Datasource Name (and a Link, when DataXray supplies one).
-   These are overwritten on every sync, so they always reflect the last run.
+   repeat constantly. The name is set **only when the asset is created**: you
+   can rename the asset in Collibra and no sync changes it back. DataXray's
+   own name for the file is kept in the **DataXray File Name** attribute.
+3. **Writes its attributes**: DataXray ID, DataXray File Name, File Path,
+   File Size, Last Modified and Datasource Name (and a Link, when DataXray
+   supplies one). These are overwritten on every sync, so they always reflect
+   the last run: change them in DataXray, not in Collibra.
    File Size and Last Modified are written for people to read:
    `27.2 KB (27,885 bytes)` and `10 Apr 2025, 17:22 UTC`.
 4. **Links it to the query** with a *returns* relation — the record that this
@@ -257,7 +260,7 @@ A file asset is a snapshot of what DataXray reported the last time a search
 that returns it was run. It is brought up to date by a **rerun** of any query
 that returns it:
 
-- **Manually** — open the **Unstructured Data Query** asset and start
+- **Manually** — open the **DataXray Sync Filter** asset and start
   **Rerun DataXray Search** from its **Actions** menu. A **Rerun complete**
   summary task reports what changed.
 - **Automatically** — **Sync DataXray Files (Nightly)** runs every night at
@@ -276,9 +279,10 @@ results, and then for each matching file:
 |---|---|
 | New file matches the search | A new file asset is created and linked (as in an import). |
 | New file matches the search, and the query is tagged `dataxray-no-auto-import` | No asset is created. The **Rerun complete** task counts it under *Not imported*. If the file already has an asset (another search imported it), that asset is refreshed and linked to this query as usual. |
-| File renamed or moved, and DataXray kept its file id (see [What counts as the same file?](#what-counts-as-the-same-file)) | The **same** asset is renamed; File Path and the other attributes are refreshed. |
+| File renamed or moved, and DataXray kept its file id (see [What counts as the same file?](#what-counts-as-the-same-file)) | The **same** asset is updated: DataXray File Name, File Path and the other attributes are refreshed. The asset's name is not changed (it may be one a person gave it). |
 | File renamed or moved, and DataXray assigned a new file id (e.g. on an SMB share) | A **new** asset is created; the old one drops out of the search as described below. |
 | Size / last-modified changed | Attributes refreshed. |
+| A person renamed the asset in Collibra | Kept. Syncs never change an asset's name after creating it; DataXray's name is in the DataXray File Name attribute. Any **attribute** a person changes in Collibra is overwritten by the next sync. |
 | A label was added, or an annotator/extractor now has hits | A *groups* relation to that classification is **added**. If the file had a *formerly groups* link to it, that link is replaced. If a person already linked the file to that classification, nothing is added. |
 | A label was removed, or a classification no longer has hits on the file | The *groups* relation becomes **formerly groups**, so the change stays visible on the file asset. This applies only to links the integration created; see below. |
 | A person linked the file to a classification by hand | The link is never removed or changed, whatever DataXray reports. |
@@ -356,7 +360,7 @@ returned* vs *In no search*):
 
 ### 2. The query asset itself was deleted
 
-Deleting an **Unstructured Data Query** asset in Collibra deletes its
+Deleting a **DataXray Sync Filter** asset in Collibra deletes its
 *returns* relations with it. No rerun can ever update the files it exclusively
 returned, because the query that would have done so no longer exists. The
 nightly file sync therefore ends every run with an **orphan sweep**: it lists
@@ -552,6 +556,7 @@ needed).
 |---|---|
 | What creates a file asset? | An import from a search's results task, or a rerun that finds a new match (not for a query tagged `dataxray-no-auto-import`). Never a search on its own. |
 | What is a file asset's identity? | Its DataXray file id — the Collibra UUID is derived from it, so the same file is always the same asset. On path-based connectors (SMB, file shares, S3, Azure Blob, SharePoint on-premises) a rename or move gives the file a new id, and so a new asset. |
+| Can I rename one? | Yes. The name is set once, when the asset is created, and no sync changes it. DataXray's current name is in the **DataXray File Name** attribute. The other attributes always come from DataXray. |
 | Which domain / type? | Created in **DataXray Files** / **DataXray File**, status **Candidate** when active. |
 | Can I move one to another community? | Yes; syncs update it where it is, and it still counts towards the cap and is included in the nightly sweep. The placement is lost if DataXray assigns the file a new id. |
 | Maximum number? | **10,000** new file assets per import or rerun, and **25,000** DataXray File assets in total, wherever they live and whatever their status; warning above **5,000** per import. Fixed in the scripts. |
