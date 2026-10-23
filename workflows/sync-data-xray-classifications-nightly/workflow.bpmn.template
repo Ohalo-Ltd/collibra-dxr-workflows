@@ -2,17 +2,17 @@
 <!--
   syncDataXrayClassificationsNightly workflow
   ===========================================
-  Pulls the classification catalog from the Data X-Ray API and creates
+  Pulls the classification catalog from the DataXray API and creates
   matching Collibra assets in the configured classifications domain.
 
   Triggered automatically by a timer start event (cron "0 0 2 * * ?" — daily
   at 02:00 in the Collibra server timezone). No user initiates it, so the
   script must not depend on `users`/`item`/`initiator`, and ends cleanly on
-  misconfiguration or a transient Data X-Ray outage rather than throwing: a
+  misconfiguration or a transient DataXray outage rather than throwing: a
   timer workflow that fails before its first async task is retried 3× by
   Collibra and then permanently disabled until redeployment.
 
-  All configuration (Data X-Ray URL, auth token, asset/attribute type UUIDs)
+  All configuration (DataXray URL, auth token, asset/attribute type UUIDs)
   is read from the readable="false" form properties on the start event below;
   admins set them on the workflow settings page in the Collibra UI.
 
@@ -35,7 +35,7 @@
              design:palette="flowable-core-process-palette">
 
   <process id="syncDataXrayClassificationsNightly"
-           name="Sync Data X-Ray Classification (Nightly)"
+           name="Sync DataXray Classification (Nightly)"
            isExecutable="true">
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
@@ -57,8 +57,8 @@
     -->
     <startEvent id="startEvent" name="Start">
       <extensionElements>
-        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="DataXray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste DataXray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="DataXray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste DataXray Bearer token here&gt;" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartTimerEvent]]></design:stencilid>
       </extensionElements>

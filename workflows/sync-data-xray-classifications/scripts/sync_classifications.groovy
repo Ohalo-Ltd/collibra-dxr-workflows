@@ -1,8 +1,8 @@
-// sync_classifications.groovy  (interactive; on-prem variant: direct HTTPS to Data X-Ray)
+// sync_classifications.groovy  (interactive; on-prem variant: direct HTTPS to DataXray)
 //
-// Pulls classifications/annotators/extractors/labels from the Data X-Ray API
+// Pulls classifications/annotators/extractors/labels from the DataXray API
 // and mirrors them as Collibra assets in the classifications domain. The sync
-// semantics (upsert by Data X-Ray ID only, freeing names held by retired
+// semantics (upsert by DataXray ID only, freeing names held by retired
 // assets, name disambiguation, retire-never-delete) live in
 // shared/classification_sync.groovy.
 //
@@ -14,7 +14,7 @@
 // Process variables produced (for the results form / audit):
 //   syncCreatedCount (Integer) – assets newly created
 //   syncUpdatedCount (Integer) – existing assets reused (attributes resynced)
-//   syncRetiredCount (Integer) – tagged assets retired because they were no longer in Data X-Ray
+//   syncRetiredCount (Integer) – tagged assets retired because they were no longer in DataXray
 //   syncSkippedCount (Integer) – classifications skipped (missing name, unknown type, etc.)
 //   syncFailedCount  (Integer) – per-classification errors during upsert
 //   syncFailures     (String)  – semicolon-joined "<name>: <error>" list, may be empty
@@ -30,35 +30,35 @@ import com.collibra.dgc.workflow.api.exception.WorkflowException
 
 // --- Read & validate workflow configuration variables -----------------------
 
-announceDxrVersion('Sync Data X-Ray Classifications')
+announceDxrVersion('Sync DataXray Classifications')
 def cfg = readRequiredConfig([
-    dataxrayUrl      : 'Data X-Ray Base URL',
-    dataxrayAuthToken: 'Data X-Ray Auth Token (Bearer)',
+    dataxrayUrl      : 'DataXray Base URL',
+    dataxrayAuthToken: 'DataXray Auth Token (Bearer)',
 ])
 if (!cfg.missing.isEmpty()) {
-    def detailMsg = "Cannot run Sync Data X-Ray Classifications — the following workflow configuration variable(s) are not set:${missingConfigBullets(cfg.missing)}\n\nOpen the workflow's settings page and provide a value for each, then start the workflow again."
+    def detailMsg = "Cannot run Sync DataXray Classifications — the following workflow configuration variable(s) are not set:${missingConfigBullets(cfg.missing)}\n\nOpen the workflow's settings page and provide a value for each, then start the workflow again."
     loggerApi.error(detailMsg)
     def wf = new WorkflowException(detailMsg)
-    wf.setTitleMessage('Data X-Ray sync misconfigured')
+    wf.setTitleMessage('DataXray sync misconfigured')
     wf.setUserMessage(detailMsg)
     throw wf
 }
 def dataxrayUrl       = cfg.config.dataxrayUrl
 def dataxrayAuthToken = cfg.config.dataxrayAuthToken
 
-// --- Fetch classifications from Data X-Ray ----------------------------------
+// --- Fetch classifications from DataXray ----------------------------------
 
 def classifications
 try {
     classifications = parseClassificationsBody(fetchDxrText(dataxrayUrl + '/api/v1/classifications', dataxrayAuthToken, 60_000))
 } catch (Exception fetchEx) {
-    loggerApi.error("Failed to fetch classifications from Data X-Ray: ${fetchEx.message}")
-    def wf = new WorkflowException("Data X-Ray classification fetch failed: ${fetchEx.message}", fetchEx)
-    wf.setTitleMessage('Data X-Ray sync failed')
-    wf.setUserMessage("Could not fetch classifications from Data X-Ray: ${fetchEx.message}")
+    loggerApi.error("Failed to fetch classifications from DataXray: ${fetchEx.message}")
+    def wf = new WorkflowException("DataXray classification fetch failed: ${fetchEx.message}", fetchEx)
+    wf.setTitleMessage('DataXray sync failed')
+    wf.setUserMessage("Could not fetch classifications from DataXray: ${fetchEx.message}")
     throw wf
 }
-loggerApi.info("Data X-Ray returned ${classifications.size()} classification(s); syncing into Collibra")
+loggerApi.info("DataXray returned ${classifications.size()} classification(s); syncing into Collibra")
 
 // --- Sync ---------------------------------------------------------------------
 
@@ -78,7 +78,7 @@ execution.setVariable('syncFailuresDisplay', r.failures.isEmpty() ? 'None' : r.f
 // run as a failure in the Collibra UI.
 if (r.created == 0 && r.updated == 0 && r.failed > 0) {
     def wf = new WorkflowException("All ${r.failed} classification(s) failed to sync. First error: ${r.failures[0]}")
-    wf.setTitleMessage('Data X-Ray sync failed')
+    wf.setTitleMessage('DataXray sync failed')
     wf.setUserMessage("All ${r.failed} classification(s) failed to sync. First error: ${r.failures[0]}")
     throw wf
 }

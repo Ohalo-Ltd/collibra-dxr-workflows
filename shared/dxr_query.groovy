@@ -1,4 +1,4 @@
-// dxr_query.groovy — composing the Data X-Ray files query from search criteria.
+// dxr_query.groovy — composing the DataXray files query from search criteria.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
 //
@@ -6,7 +6,7 @@
 // clauses are AND-ed: a file must carry every one of them. The only OR is inside
 // the annotated-text clause, between the annotators explicitly picked for the
 // phrase (see buildAnnotatorPhraseClause). Field names are the ones the
-// Data X-Ray files API expects: labels.name, annotators.name, and
+// DataXray files API expects: labels.name, annotators.name, and
 // extractedMetadata.name (extractor results are exposed on file rows as
 // extractedMetadata entries — verified against a live instance; a query on
 // extractors.name matches nothing).
@@ -34,7 +34,7 @@ def composeDxrQuery(List labelNames, List extractorNames, List annotatorNames, S
 }
 
 // Escape a value for use inside a double-quoted query term: backslashes and
-// double quotes would otherwise terminate the term (Data X-Ray answers HTTP 400
+// double quotes would otherwise terminate the term (DataXray answers HTTP 400
 // for an unbalanced quote; "\"" and "\\" are accepted — verified live).
 def quoteTerm(String field, Object value) {
     def escaped = value.toString().replace('\\', '\\\\').replace('"', '\\"')

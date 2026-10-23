@@ -1,6 +1,6 @@
 # collibra-dxr-workflows
 
-The **Data X-Ray** [Collibra](https://www.collibra.com/) workflows — six Groovy/BPMN workflows released together, in **two editions**: an **on-prem** bundle whose scripts call Data X-Ray directly over HTTPS, and a **Collibra Cloud + Edge** bundle that reaches an on-premises Data X-Ray through a Collibra Edge site's HTTP connection.
+The **DataXray** [Collibra](https://www.collibra.com/) workflows — six Groovy/BPMN workflows released together, in **two editions**: an **on-prem** bundle whose scripts call DataXray directly over HTTPS, and a **Collibra Cloud + Edge** bundle that reaches an on-premises DataXray through a Collibra Edge site's HTTP connection.
 
 Collibra workflows are written in Groovy and run on a [Flowable](https://www.flowable.com/) BPMN engine embedded in the platform. This repo keeps each workflow's BPMN, Groovy scripts, and JSON forms under version control; the [collibra-workflower](https://github.com/Ohalo-Ltd/collibra-workflower) harness builds them into Workflow Designer ZIPs (identical to what the Collibra UI exports) and this repo's release Action ships them as a single bundle attached to each GitHub release.
 
@@ -11,38 +11,38 @@ There are two audiences:
 
 ## The workflows
 
-Six workflows make up the Data X-Ray integration. Most are **global** (started from the Collibra **+ Create** menu); the rerun workflow is started from a saved query asset's page, and the two nightly jobs run on timers.
+Six workflows make up the DataXray integration. Most are **global** (started from the Collibra **+ Create** menu); the rerun workflow is started from a saved query asset's page, and the two nightly jobs run on timers.
 
 | Workflow | Key | What it does |
 |---|---|---|
-| **Configure Data X-Ray Workflows** | `configureDataXrayWorkflows` | One-time admin setup. Idempotently creates the Data X-Ray operating model (community, domains, asset types, attribute types, the returns, formerly returns and formerly groups relation types, the *Not in any search* status, assignments) that the other workflows reference by fixed ID, creates the two access-control roles, and stamps who is allowed to run each workflow. Safe to re-run. |
-| **Search Data X-Ray** | `searchDataXray` | Builds a Data X-Ray search query from the labels, extractors, and annotators you choose (all criteria are AND-ed — a file must match every selected value; the optional annotated text may match in any of the annotators chosen for it), previews the matching files, and offers three independent options: **import all results as file assets** now (all-or-nothing, gated by an instance-wide 25k cap), **keep in sync nightly** (tag `dataxray-keep-in-sync`), and **create assets for new files on later reruns** (unticked: tag `dataxray-no-auto-import`). Run on demand. |
-| **Rerun Data X-Ray Search** | `rerunDataXraySearch` | Started from a saved **Unstructured Data Query** asset (ASSET-scoped). Rebuilds the query from the asset's classification relations + stored filter, reruns it, and re-syncs the imported file assets — new files created (unless the query is tagged `dataxray-no-auto-import`), changed files updated, links that stop applying swapped to *formerly returns* / *formerly groups*, and files no longer returned by **any** query set to **Not in any search** (never deleted). A status a person set and links people created are never changed. Also run headlessly by the nightly file sync. |
-| **Sync Data X-Ray Classifications** | `syncDataXrayClassifications` | Syncs the Data X-Ray classification catalog into Collibra and shows what changed. Orphans are **retired**, not deleted; reappearing classifications are reactivated. Run on demand. |
-| **Sync Data X-Ray Classification (Nightly)** | `syncDataXrayClassificationsNightly` | The same classification sync, run automatically every night at **02:00** (server time). No manual start. |
-| **Sync Data X-Ray Files (Nightly)** | `syncDataXrayFilesNightly` | Finds every query asset tagged `dataxray-keep-in-sync` and starts one headless rerun per query, every night at **02:30** (after the classification sync), then sets Data X-Ray File assets no query returns to *Not in any search*. No manual start. |
+| **Configure DataXray Workflows** | `configureDataXrayWorkflows` | One-time admin setup. Idempotently creates the DataXray operating model (community, domains, asset types, attribute types, the returns, formerly returns and formerly groups relation types, the *Not in any search* status, assignments) that the other workflows reference by fixed ID, creates the two access-control roles, and stamps who is allowed to run each workflow. Safe to re-run. |
+| **Search DataXray** | `searchDataXray` | Builds a DataXray search query from the labels, extractors, and annotators you choose (all criteria are AND-ed — a file must match every selected value; the optional annotated text may match in any of the annotators chosen for it), previews the matching files, and offers three independent options: **import all results as file assets** now (all-or-nothing, gated by an instance-wide 25k cap), **keep in sync nightly** (tag `dataxray-keep-in-sync`), and **create assets for new files on later reruns** (unticked: tag `dataxray-no-auto-import`). Run on demand. |
+| **Rerun DataXray Search** | `rerunDataXraySearch` | Started from a saved **Unstructured Data Query** asset (ASSET-scoped). Rebuilds the query from the asset's classification relations + stored filter, reruns it, and re-syncs the imported file assets — new files created (unless the query is tagged `dataxray-no-auto-import`), changed files updated, links that stop applying swapped to *formerly returns* / *formerly groups*, and files no longer returned by **any** query set to **Not in any search** (never deleted). A status a person set and links people created are never changed. Also run headlessly by the nightly file sync. |
+| **Sync DataXray Classifications** | `syncDataXrayClassifications` | Syncs the DataXray classification catalog into Collibra and shows what changed. Orphans are **retired**, not deleted; reappearing classifications are reactivated. Run on demand. |
+| **Sync DataXray Classification (Nightly)** | `syncDataXrayClassificationsNightly` | The same classification sync, run automatically every night at **02:00** (server time). No manual start. |
+| **Sync DataXray Files (Nightly)** | `syncDataXrayFilesNightly` | Finds every query asset tagged `dataxray-keep-in-sync` and starts one headless rerun per query, every night at **02:30** (after the classification sync), then sets DataXray File assets no query returns to *Not in any search*. No manual start. |
 
 Each lives in its own directory under [`workflows/`](workflows/) — `app.json` (metadata), `workflow.bpmn.template` (process definition; a template, not an importable file), `scripts/*.groovy` (logic), and `forms/*.form` (user input).
 
 ## Access control
 
-Two custom **global roles** gate the workflows; both are created (idempotently, with fixed UUIDs) by **Configure Data X-Ray Workflows**:
+Two custom **global roles** gate the workflows; both are created (idempotently, with fixed UUIDs) by **Configure DataXray Workflows**:
 
 | Role | Purpose |
 |---|---|
-| **Data X-Ray Admin** | Holds the `WORKFLOW_ADMINISTRATION` permission so members (alongside Sysadmins) can set each workflow's Base URL and Bearer token. ⚠️ That permission is global — it confers admin over *all* workflows on the instance; Collibra has no per-workflow admin permission. |
-| **Data X-Ray User** | Bare membership role with no permissions. Only gates who may *run* the search/sync workflows. |
+| **DataXray Admin** | Holds the `WORKFLOW_ADMINISTRATION` permission so members (alongside Sysadmins) can set each workflow's Base URL and Bearer token. ⚠️ That permission is global — it confers admin over *all* workflows on the instance; Collibra has no per-workflow admin permission. |
+| **DataXray User** | Bare membership role with no permissions. Only gates who may *run* the search/sync workflows. |
 
-Who may run each workflow is set at runtime by **Configure Data X-Ray Workflows** (search/sync/rerun → User + Admin; nightlies + configure → Admin). The BPMN's `candidateStarterGroups` is inert in Collibra, so access can only be asserted by re-running configure — see [CLAUDE.md](CLAUDE.md) for the full mechanics.
+Who may run each workflow is set at runtime by **Configure DataXray Workflows** (search/sync/rerun → User + Admin; nightlies + configure → Admin). The BPMN's `candidateStarterGroups` is inert in Collibra, so access can only be asserted by re-running configure — see [CLAUDE.md](CLAUDE.md) for the full mechanics.
 
 ## Releasing
 
-Publishing a GitHub release produces the customer-ready deliverables automatically. The [`Bundle Data X-Ray Workflow ZIPs`](.github/workflows/release-bundle.yml) Action checks out the harness at the version pinned in [`pack.json`](pack.json) (`harnessRef`), runs `deploy.py bundle`, and attaches **two bundles** to the release — one per variant declared in `pack.json`:
+Publishing a GitHub release produces the customer-ready deliverables automatically. The [`Bundle DataXray Workflow ZIPs`](.github/workflows/release-bundle.yml) Action checks out the harness at the version pinned in [`pack.json`](pack.json) (`harnessRef`), runs `deploy.py bundle`, and attaches **two bundles** to the release — one per variant declared in `pack.json`:
 
 | Bundle | Edition |
 |---|---|
-| `collibra-data-xray-workflows-onprem-<tag>.zip` | Direct HTTPS from Collibra to Data X-Ray (Bearer token on the workflows). |
-| `collibra-data-xray-workflows-cloud-edge-<tag>.zip` | Collibra Cloud → Edge site → Data X-Ray (credentials on the Edge HTTP connection; Data X-Ray is paged through its internal search API). |
+| `collibra-data-xray-workflows-onprem-<tag>.zip` | Direct HTTPS from Collibra to DataXray (Bearer token on the workflows). |
+| `collibra-data-xray-workflows-cloud-edge-<tag>.zip` | Collibra Cloud → Edge site → DataXray (credentials on the Edge HTTP connection; DataXray is paged through its internal search API). |
 
 Both hold the same six workflows under the same process ids; a customer installs one of them. No Collibra credentials are involved — the build is entirely offline.
 
@@ -84,15 +84,15 @@ python deploy.py bundle --pack packs/dxr-workflows       # build both release bu
 python tools/groovy_syntax_check.py packs/dxr-workflows  # compile every script of every variant (needs groovyc)
 ```
 
-Shared Groovy lives in [`shared/`](shared/) and is pulled into scripts with `// {{include:name.groovy}}` at build time; the Edge edition adds `workflow.edge.bpmn.template` and `scripts/edge/` per workflow. See [CLAUDE.md](CLAUDE.md) for the two-edition design and the Data X-Ray API contract each one relies on.
+Shared Groovy lives in [`shared/`](shared/) and is pulled into scripts with `// {{include:name.groovy}}` at build time; the Edge edition adds `workflow.edge.bpmn.template` and `scripts/edge/` per workflow. See [CLAUDE.md](CLAUDE.md) for the two-edition design and the DataXray API contract each one relies on.
 
 Commit and push pack changes from inside `packs/dxr-workflows` (it is its own git repo), then commit the updated submodule pointer in the harness. Deployed definition UUIDs are recorded per environment in [`workflow-registry.json`](workflow-registry.json).
 
-Adding a workflow to the bundle = add its directory under `workflows/` **and** its name to `pack.json`'s `workflows` list. See the harness README for the workflow directory layout and Collibra gotchas, and [CLAUDE.md](CLAUDE.md) here for the Data X-Ray specifics (access control, file import model, DXR API facts).
+Adding a workflow to the bundle = add its directory under `workflows/` **and** its name to `pack.json`'s `workflows` list. See the harness README for the workflow directory layout and Collibra gotchas, and [CLAUDE.md](CLAUDE.md) here for the DataXray specifics (access control, file import model, DXR API facts).
 
 ## License
 
-Source-available under the [Ohalo Source-Available License](LICENSE) — free to inspect and to deploy for organisations licensed for Data X-Ray; not open source.
+Source-available under the [Ohalo Source-Available License](LICENSE) — free to inspect and to deploy for organisations licensed for DataXray; not open source.
 
 ## Attribution
 

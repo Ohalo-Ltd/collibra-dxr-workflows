@@ -1,12 +1,12 @@
 // configure_data_xray.groovy
 //
-// One-time, idempotent operating-model bootstrap for the Data X-Ray workflows,
+// One-time, idempotent operating-model bootstrap for the DataXray workflows,
 // run by an admin from the + Create menu.
 //
 // What it does:
 //   1. Ensures the community, domains, asset types, attribute types, the
 //      "returns", "formerly returns" and "formerly groups" relation types and
-//      the 'Not in any search' status the Data X-Ray sync, search,
+//      the 'Not in any search' status the DataXray sync, search,
 //      import and rerun workflows depend on all exist — creating any
 //      that are missing with FIXED canonical UUIDs. Those UUIDs are the same
 //      ones hardcoded as constants in the sync/search scripts and baked into
@@ -16,16 +16,16 @@
 //      creating a per-type assignment — but only where one isn't already in
 //      effect, so existing (hand-tuned) assignments are never disturbed.
 //   3. Ensures the two access-control roles exist with FIXED canonical UUIDs:
-//        - 'Data X-Ray Admin' — granted the WORKFLOW_ADMINISTRATION global
-//          permission, so holders (alongside Sysadmins) can open each Data
-//          X-Ray workflow's settings page and set its Data X-Ray connection settings
+//        - 'DataXray Admin' — granted the WORKFLOW_ADMINISTRATION global
+//          permission, so holders (alongside Sysadmins) can open each DataXray
+//          workflow's settings page and set its DataXray connection settings
 //          (Base URL + Bearer token; Edge edition: the Edge HTTP connection name).
 //          NOTE: WORKFLOW_ADMINISTRATION is a *global* permission — it confers
-//          admin over ALL workflows on the instance, not only the Data X-Ray
+//          admin over ALL workflows on the instance, not only the DataXray
 //          ones; Collibra has no per-workflow administration permission.
-//        - 'Data X-Ray User' — a plain membership role, no permissions; it only
+//        - 'DataXray User' — a plain membership role, no permissions; it only
 //          exists to gate who may *run* the search/sync workflows.
-//   4. Sets each Data X-Ray workflow definition's start roles ("who can run"):
+//   4. Sets each DataXray workflow definition's start roles ("who can run"):
 //        - searchDataXray / syncDataXrayClassifications / rerunDataXraySearch → User + Admin
 //        - syncDataXrayClassificationsNightly / syncDataXrayFilesNightly /
 //          configureDataXrayWorkflows → Admin
@@ -50,9 +50,9 @@
 // edit them on the settings page. Granting the Admin role that permission (3)
 // is the only knob; nothing here "hides" the token from Users — it already is.
 //
-// The Data X-Ray workflows reference these elements by fixed UUID directly, so
+// The DataXray workflows reference these elements by fixed UUID directly, so
 // there are NO configuration variables to write — the admin only sets each
-// workflow's Data X-Ray connection settings by hand.
+// workflow's DataXray connection settings by hand.
 //
 // Idempotent: anything that already exists is left untouched. Safe to re-run.
 //
@@ -69,6 +69,10 @@
 
 import com.collibra.dgc.core.api.dto.instance.community.AddCommunityRequest
 import com.collibra.dgc.core.api.dto.instance.domain.AddDomainRequest
+import com.collibra.dgc.core.api.dto.instance.community.ChangeCommunityRequest
+import com.collibra.dgc.core.api.dto.instance.domain.ChangeDomainRequest
+import com.collibra.dgc.core.api.dto.meta.assettype.ChangeAssetTypeRequest
+import com.collibra.dgc.core.api.dto.meta.attributetype.ChangeAttributeTypeRequest
 import com.collibra.dgc.core.api.dto.meta.assettype.AddAssetTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AddAttributeTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AttributeKind
@@ -88,12 +92,12 @@ import com.collibra.dgc.core.api.model.workflow.WorkflowExclusivity
 
 // {{include:dxr_model.groovy}}
 
-announceDxrVersion('Configure Data X-Ray Workflows')
+announceDxrVersion('Configure DataXray Workflows')
 
 // --- Canonical identifiers (fixed across instances) -------------------------
 
 def COMMUNITY_ID   = '019c9fbf-0ab2-7258-b118-e68d3e814fe1'
-def COMMUNITY_NAME = 'Collibra to Data X-Ray Integration'
+def COMMUNITY_NAME = 'Collibra to DataXray Integration'
 
 // System "Data Asset Domain" domain type — present on every instance.
 def DOMAIN_TYPE_ID = '00000000-0000-0000-0000-000000030001'
@@ -106,7 +110,7 @@ def LINK_ATTR_ID        = '019c9fc5-aa4c-72af-8918-caa54fe61eba'
 def SEARCH_LINK_ATTR_ID = '019c9fc5-8ff5-77a7-962d-4b6b05c69254'
 def SUBTYPE_ATTR_ID     = '019c9fc5-ecc8-759b-9c0b-78547fa315ad'
 def DXID_ATTR_ID        = '019e73ae-1aa8-700c-8086-626326822c22'
-def INDEX_ID_ATTR_ID = '019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'  // Data X-Ray Index ID (Edge edition: numeric id in DXR's search index)
+def INDEX_ID_ATTR_ID = '019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'  // DataXray Index ID (Edge edition: numeric id in DXR's search index)
 def FILES_ATTR_ID       = '019e2736-8bd0-727a-b4ab-6899517a3e73'
 
 // File-import model (gated asset import + rerun + nightly file sync). Same
@@ -122,7 +126,7 @@ def QUERY_ATTR_ID         = '019e9210-cf9b-751a-85f2-d30c7a48b9e6'
 def FILTER_ATTR_ID        = '019e9210-e04d-7c6b-a481-5f29d8036c7a'
 
 // "returns / returned by" — links an Unstructured Data Query asset (source) to
-// each Data X-Ray File asset (target) it currently returns. Deliberately NOT
+// each DataXray File asset (target) it currently returns. Deliberately NOT
 // the system "groups" relation type (7017), which the query already uses for
 // its classification criteria: a dedicated type makes "which files does this
 // query return" a clean findRelations(typeId, sourceId) and lets the rerun
@@ -143,7 +147,7 @@ def TEXT_FILTER_RELTYPE_ID = '019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'
 def FORMERLY_RETURNS_RELTYPE_ID = '019e9212-1b22-7d4f-8c3a-6e5f7a8b9c01'
 
 // "formerly groups / formerly grouped by" — the same for a file→classification
-// link Data X-Ray no longer finds evidence for. Mirrors the system "groups"
+// link DataXray no longer finds evidence for. Mirrors the system "groups"
 // type (Data Asset → Data Asset) on the target side.
 def FORMERLY_GROUPS_RELTYPE_ID  = '019e9212-2c33-7e50-9d4b-7f6a8b9c0d12'
 
@@ -163,23 +167,23 @@ def DATA_CONCEPT_TYPE_ID = '00000000-0000-0000-0000-000000031113'
 def DATA_ASSET_TYPE_ID   = '00000000-0000-0000-0000-000000031002'
 
 // --- Access-control roles (fixed canonical UUIDs) ---------------------------
-// Created here if missing. 'Data X-Ray Admin' gets WORKFLOW_ADMINISTRATION so
-// it can edit the Data X-Ray connection settings; 'Data X-Ray User' is a bare
+// Created here if missing. 'DataXray Admin' gets WORKFLOW_ADMINISTRATION so
+// it can edit the DataXray connection settings; 'DataXray User' is a bare
 // membership role used only to gate who can run the search/sync workflows.
 def ROLE_ADMIN_ID   = '019e9000-abcd-7000-a115-74a17d050000'
-def ROLE_ADMIN_NAME = 'Data X-Ray Admin'
+def ROLE_ADMIN_NAME = 'DataXray Admin'
 def ROLE_USER_ID    = '019e9000-abce-7000-9e7d-a7a7115e0000'
-def ROLE_USER_NAME  = 'Data X-Ray User'
+def ROLE_USER_NAME  = 'DataXray User'
 
 // Which start roles ("who can run") each workflow definition should carry,
 // keyed by its BPMN process id. Setting these by UUID at runtime is the sole
 // enforcement (the BPMN's flowable:candidateStarterGroups is inert in Collibra).
 def starterRoleDefs = [
-    [processId: 'searchDataXray',                     name: 'Search Data X-Ray',
+    [processId: 'searchDataXray',                     name: 'Search DataXray',
      roleIds: [ROLE_USER_ID, ROLE_ADMIN_ID]],
-    [processId: 'syncDataXrayClassifications',        name: 'Sync Data X-Ray Classifications',
+    [processId: 'syncDataXrayClassifications',        name: 'Sync DataXray Classifications',
      roleIds: [ROLE_USER_ID, ROLE_ADMIN_ID]],
-    [processId: 'syncDataXrayClassificationsNightly', name: 'Sync Data X-Ray Classifications (Nightly)',
+    [processId: 'syncDataXrayClassificationsNightly', name: 'Sync DataXray Classification (Nightly)', 
      roleIds: [ROLE_ADMIN_ID]],
     // UNCONSTRAINED exclusivity: by default Collibra allows one running
     // instance per resource, which HIDES the workflow from the asset's action
@@ -190,19 +194,19 @@ def starterRoleDefs = [
     // for workflows whose start roles are GLOBAL roles, and our access model
     // is global roles by design. rerun_collector.groovy therefore hard-guards
     // the asset type at runtime instead.
-    [processId: 'rerunDataXraySearch',                name: 'Rerun Data X-Ray Search',
+    [processId: 'rerunDataXraySearch',                name: 'Rerun DataXray Search',
      roleIds: [ROLE_USER_ID, ROLE_ADMIN_ID],
      exclusivity: 'UNCONSTRAINED'],
-    [processId: 'syncDataXrayFilesNightly',           name: 'Sync Data X-Ray Files (Nightly)',
+    [processId: 'syncDataXrayFilesNightly',           name: 'Sync DataXray Files (Nightly)',
      roleIds: [ROLE_ADMIN_ID]],
-    [processId: 'configureDataXrayWorkflows',         name: 'Configure Data X-Ray Workflows',
+    [processId: 'configureDataXrayWorkflows',         name: 'Configure DataXray Workflows',
      roleIds: [ROLE_ADMIN_ID]],
 ]
 
 def domainDefs = [
-    [id: '019c9fbf-622c-76f4-9dd6-2a9730a11515', name: 'Data X-Ray Classifications'],
-    [id: '019dcf96-233a-72e1-bf25-8398b8c9146e', name: 'Data X-Ray Custom Queries'],
-    [id: FILES_DOMAIN_ID,                        name: 'Data X-Ray Files'],
+    [id: '019c9fbf-622c-76f4-9dd6-2a9730a11515', name: 'DataXray Classifications'],
+    [id: '019dcf96-233a-72e1-bf25-8398b8c9146e', name: 'DataXray Sync Filter'],
+    [id: FILES_DOMAIN_ID,                        name: 'DataXray Files'],
 ]
 
 def assetTypeDefs = [
@@ -224,7 +228,7 @@ def assetTypeDefs = [
     // displayName enabled: imported file assets carry a uniqueness suffix in
     // their full name (Collibra names are unique per domain and 10k files WILL
     // contain duplicate filenames), so the UI shows the clean display name.
-    [id: FILE_TYPE_ID, name: 'Data X-Ray File',
+    [id: FILE_TYPE_ID, name: 'DataXray File',
      parent: DATA_ASSET_TYPE_ID, symbol: 'ACRONYM_CODE', color: '#d97e3e',
      icon: null, acronym: 'FILE', displayName: true],
 ]
@@ -233,14 +237,14 @@ def attrTypeDefs = [
     [id: LINK_ATTR_ID,          name: 'Link',                  stringType: 'PLAIN_TEXT'],
     [id: SEARCH_LINK_ATTR_ID,   name: 'Search Link',           stringType: 'PLAIN_TEXT'],
     [id: SUBTYPE_ATTR_ID,       name: 'Sub Type',              stringType: 'PLAIN_TEXT'],
-    [id: DXID_ATTR_ID,          name: 'Data X-Ray ID',         stringType: 'PLAIN_TEXT'],
-    [id: INDEX_ID_ATTR_ID,      name: 'Data X-Ray Index ID',   stringType: 'PLAIN_TEXT'],
+    [id: DXID_ATTR_ID,          name: 'DataXray ID',           stringType: 'PLAIN_TEXT'],
+    [id: INDEX_ID_ATTR_ID,      name: 'DataXray Index ID',     stringType: 'PLAIN_TEXT'],
     [id: FILES_ATTR_ID,         name: 'Files',                 stringType: 'RICH_TEXT'],
     [id: FILE_PATH_ATTR_ID,     name: 'File Path',             stringType: 'PLAIN_TEXT'],
     [id: FILE_SIZE_ATTR_ID,     name: 'File Size',             stringType: 'PLAIN_TEXT'],
     [id: LAST_MODIFIED_ATTR_ID, name: 'Last Modified',         stringType: 'PLAIN_TEXT'],
     [id: DATASOURCE_ATTR_ID,    name: 'Datasource Name',       stringType: 'PLAIN_TEXT'],
-    [id: QUERY_ATTR_ID,         name: 'Data X-Ray Query',      stringType: 'PLAIN_TEXT'],
+    [id: QUERY_ATTR_ID,         name: 'DataXray Query',        stringType: 'PLAIN_TEXT'],
     [id: FILTER_ATTR_ID,        name: 'Annotated Text Filter', stringType: 'PLAIN_TEXT'],
 ]
 
@@ -272,7 +276,7 @@ def assignmentDefs = [
                  [id: TEXT_FILTER_RELTYPE_ID, direction: 'TO_TARGET']]], // searches text in annotators
     // descriptionMin 0: imported file assets carry no Description, so a
     // mandatory Description would flag every one of them as incomplete.
-    [assetTypeId: FILE_TYPE_ID, name: 'Data X-Ray File', descriptionMin: 0,
+    [assetTypeId: FILE_TYPE_ID, name: 'DataXray File', descriptionMin: 0,
      customAttrs: [FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
                    DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
@@ -397,7 +401,7 @@ attrTypeDefs.each { a ->
 
 // --- Phase 4b: relation type -------------------------------------------------
 
-// "Unstructured Data Query returns Data X-Ray File". Created with a fixed
+// "Unstructured Data Query returns DataXray File". Created with a fixed
 // canonical UUID like everything else; the search/rerun scripts reference it
 // as a constant.
 try {
@@ -484,7 +488,7 @@ try {
         statusApi.addStatus(AddStatusRequest.builder()
             .id(sid)
             .name(NOT_IN_SEARCH_STATUS_NAME)
-            .description('Set by the Data X-Ray workflows on a file asset that no saved search returns any more. The file still exists in Data X-Ray; a search that matches it again sets it back to Candidate. A status set by a person is never changed by the workflows.')
+            .description('Set by the DataXray workflows on a file asset that no saved search returns any more. The file still exists in DataXray; a search that matches it again sets it back to Candidate. A status set by a person is never changed by the workflows.')
             .build())
         created << "Status '${NOT_IN_SEARCH_STATUS_NAME}'"
         loggerApi.info("Created status ${NOT_IN_SEARCH_STATUS_NAME} [${NOT_IN_SEARCH_STATUS_ID}]")
@@ -689,11 +693,64 @@ def ensureRole = { String roleId, String roleName, List requiredPerms ->
 ensureRole(ROLE_ADMIN_ID, ROLE_ADMIN_NAME, [Permission.WORKFLOW_ADMINISTRATION])
 ensureRole(ROLE_USER_ID,  ROLE_USER_NAME,  [])
 
+// --- Phase 6b: rename to the DataXray brand ---------------------------------
+
+// The product was renamed from "Data X-Ray" to "DataXray" (and the queries
+// domain from "Data X-Ray Custom Queries" to "DataXray Sync Filter"). Phases
+// 1-6 only create what is missing, so an existing installation still carries
+// the old names. Rename each element while it still has its OLD DEFAULT name;
+// a name someone changed in Collibra is theirs and is left alone. Everything is
+// looked up by fixed ID, so a rename never affects the workflows.
+def legacyName = { String name ->
+    name == 'DataXray Sync Filter' ? 'Data X-Ray Custom Queries' : name.replace('DataXray', 'Data X-Ray')
+}
+def renameIfLegacy = { String label, String newName, Closure currentName, Closure doRename ->
+    def oldName = legacyName(newName)
+    if (oldName == newName) { return }
+    try {
+        def current = currentName()
+        if (current == null) { return }
+        if (current == oldName) {
+            doRename(newName)
+            created << "Renamed ${label} '${oldName}' to '${newName}'"
+            loggerApi.info("Renamed ${label} '${oldName}' to '${newName}'")
+        }
+    } catch (Exception e) {
+        failed << "Rename ${label} '${oldName}' to '${newName}': ${e.message}"
+        loggerApi.error("rename ${label} ${oldName} failed: ${e.message}")
+    }
+}
+
+renameIfLegacy('community', COMMUNITY_NAME,
+    { communityApi.exists(string2Uuid(COMMUNITY_ID)) ? communityApi.getCommunity(string2Uuid(COMMUNITY_ID)).getName() : null },
+    { String n -> communityApi.changeCommunity(ChangeCommunityRequest.builder().id(string2Uuid(COMMUNITY_ID)).name(n).build()) })
+domainDefs.each { d ->
+    renameIfLegacy('domain', d.name,
+        { domainApi.exists(string2Uuid(d.id)) ? domainApi.getDomain(string2Uuid(d.id)).getName() : null },
+        { String n -> domainApi.changeDomain(ChangeDomainRequest.builder().id(string2Uuid(d.id)).name(n).build()) })
+}
+assetTypeDefs.each { t ->
+    renameIfLegacy('asset type', t.name,
+        { assetTypeApi.exists(string2Uuid(t.id)) ? assetTypeApi.getAssetType(string2Uuid(t.id)).getName() : null },
+        { String n -> assetTypeApi.changeAssetType(ChangeAssetTypeRequest.builder().id(string2Uuid(t.id)).name(n).build()) })
+}
+attrTypeDefs.each { a ->
+    renameIfLegacy('attribute type', a.name,
+        { attributeTypeApi.exists(string2Uuid(a.id)) ? attributeTypeApi.getAttributeType(string2Uuid(a.id)).getName() : null },
+        { String n -> attributeTypeApi.changeAttributeType(ChangeAttributeTypeRequest.builder().id(string2Uuid(a.id)).name(n).build()) })
+}
+[[ROLE_ADMIN_ID, ROLE_ADMIN_NAME], [ROLE_USER_ID, ROLE_USER_NAME]].each { r ->
+    renameIfLegacy('role', r[1],
+        { roleApi.exists(string2Uuid(r[0])) ? roleApi.getRole(string2Uuid(r[0])).getName() : null },
+        { String n -> roleApi.changeRole(ChangeRoleRequest.builder().id(string2Uuid(r[0])).name(n).build()) })
+}
+
 // --- Phase 7: workflow run-access (start roles) -----------------------------
 
-// Set each Data X-Ray workflow definition's start roles by UUID. This is a
-// partial update: only startRoleIds is sent, so configuration variables (the
-// admin-set Data X-Ray connection settings) are left untouched. A workflow that isn't
+// Set each DataXray workflow definition's start roles by UUID (and its name,
+// while it still has the old default one). This is a partial update: only
+// startRoleIds (and name) are sent, so configuration variables (the
+// admin-set DataXray connection settings) are left untouched. A workflow that isn't
 // deployed yet is skipped — re-run this once everything is deployed.
 starterRoleDefs.each { s ->
     try {
@@ -707,7 +764,12 @@ starterRoleDefs.each { s ->
             .id(wd.getId())
             .startRoleIds(roleUuids)
         if (s.exclusivity) { change.exclusivity(WorkflowExclusivity.valueOf(s.exclusivity)) }
+        // A redeploy keeps a definition's old name: rename it to the DataXray
+        // brand while it still has its old default name (see Phase 6b).
+        boolean rename = wd.getName() == legacyName(s.name) && wd.getName() != s.name
+        if (rename) { change.name(s.name) }
         workflowDefinitionApi.changeWorkflowDefinition(change.build())
+        if (rename) { created << "Renamed workflow '${legacyName(s.name)}' to '${s.name}'" }
         def who = s.roleIds.contains(ROLE_USER_ID) ? 'User + Admin' : 'Admin only'
         configured << "Run-access for '${s.name}' → ${who}${s.exclusivity ? " (${s.exclusivity})" : ''}"
         loggerApi.info("Set start roles for ${s.processId}: ${roleUuids}${s.exclusivity ? ", exclusivity ${s.exclusivity}" : ''}")
@@ -738,5 +800,5 @@ execution.setVariable('configureSkippedCount', skipped.size())
 execution.setVariable('configureFailedCount', failed.size())
 execution.setVariable('configureDetail', detail)
 
-loggerApi.info("Configure Data X-Ray complete: created=${created.size()}, " +
+loggerApi.info("Configure DataXray complete: created=${created.size()}, " +
     "skipped=${skipped.size()}, failed=${failed.size()}")

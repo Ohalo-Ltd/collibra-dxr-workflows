@@ -37,7 +37,7 @@
              design:palette="flowable-core-process-palette">
 
   <process id="syncDataXrayClassifications"
-           name="Sync Data X-Ray Classifications"
+           name="Sync DataXray Classifications"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
     <extensionElements>
@@ -46,8 +46,8 @@
 
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="startSyncForm">
       <extensionElements>
-        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="DataXray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste DataXray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="DataXray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste DataXray Bearer token here&gt;" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>

@@ -1,6 +1,6 @@
 // retire_orphans.groovy  (on-prem variant)
 //
-// Final sync stage of "Rerun Data X-Ray Search": files the query previously
+// Final sync stage of "Rerun DataXray Search": files the query previously
 // returned but no longer does are unlinked and — when NO other query still
 // returns them — RETIRED (status Obsolete). Never deleted (see
 // shared/file_batch.groovy: retireOrphanFiles).
@@ -8,7 +8,7 @@
 // Safety rails:
 //   – An aborted rerun (rerunAborted=true) touches nothing.
 //   – A rerun that returned ZERO results skips retirement entirely — a
-//     transient Data X-Ray outage or truncated response must not retire a
+//     transient DataXray outage or truncated response must not retire a
 //     query's whole file population (same guard as the classification sync).
 //   – A file returned by two queries is only retired once BOTH drop it.
 //
@@ -28,7 +28,7 @@ if (execution.getVariable('rerunAborted') == true) {
 
 int total = (execution.getVariable('importTotal') ?: 0) as int
 if (total == 0) {
-    loggerApi.warn('Retire pass skipped: the rerun returned 0 results — not retiring anything in case Data X-Ray answered incompletely')
+    loggerApi.warn('Retire pass skipped: the rerun returned 0 results — not retiring anything in case DataXray answered incompletely')
     return
 }
 

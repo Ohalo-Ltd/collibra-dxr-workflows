@@ -34,7 +34,7 @@
              design:palette="flowable-core-process-palette">
 
   <process id="configureDataXrayWorkflows"
-           name="Configure Data X-Ray Workflows"
+           name="Configure DataXray Workflows"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
     <extensionElements>

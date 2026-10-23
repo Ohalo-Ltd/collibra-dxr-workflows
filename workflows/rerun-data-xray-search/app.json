@@ -1,13 +1,13 @@
 {
   "key": "rerunDataXraySearch",
-  "name": "Rerun Data X-Ray Search",
-  "description": "Rerun a saved Data X-Ray search from its query asset and re-sync the imported file assets: new files are imported, changed files updated, and files that no longer match are retired (never deleted). Data X-Ray workflows {{pack:version}} ({{pack:variant}}).",
+  "name": "Rerun DataXray Search",
+  "description": "Rerun a saved DataXray search from its query asset and re-sync the imported file assets: new files are imported, changed files updated, and files that no longer match are retired (never deleted). DataXray workflows {{pack:version}} ({{pack:variant}}).",
   "theme": "theme-3",
   "icon": "glyphicon-repeat",
   "businessItemResourceType": "ASSET",
   "variants": {
     "edge": {
-      "description": "Rerun a saved Data X-Ray search from its query asset and re-sync the imported file assets: new files are imported, changed files updated, and files that no longer match are retired (never deleted). Collibra Cloud + Edge edition: Data X-Ray is reached through an Edge HTTP connection. Data X-Ray workflows {{pack:version}} ({{pack:variant}})."
+      "description": "Rerun a saved DataXray search from its query asset and re-sync the imported file assets: new files are imported, changed files updated, and files that no longer match are retired (never deleted). Collibra Cloud + Edge edition: DataXray is reached through an Edge HTTP connection. DataXray workflows {{pack:version}} ({{pack:variant}})."
     }
   }
 }

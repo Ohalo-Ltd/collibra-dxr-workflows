@@ -28,15 +28,15 @@
              exporterVersion="2025.1.09"
              design:palette="flowable-core-process-palette">
   <process id="syncDataXrayClassificationsNightly"
-           name="Sync Data X-Ray Classification (Nightly)"
+           name="Sync DataXray Classification (Nightly)"
            isExecutable="true">
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
     </extensionElements>
     <startEvent id="startEvent" name="Start">
       <extensionElements>
-        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (Data X-Ray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL (deep links only)" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="false"/>
+        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (DataXray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="DataXray Base URL (deep links only)" type="string" variable="dataxrayUrl" default="&lt;paste DataXray base URL here&gt;" readable="false" required="false"/>
         <design:stencilid><![CDATA[StartTimerEvent]]></design:stencilid>
       </extensionElements>
       <timerEventDefinition>
@@ -72,7 +72,7 @@
         <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
       </extensionElements>
     </serviceTask>
-    <scriptTask id="syncPageTask" name="Handle Data X-Ray Response" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+    <scriptTask id="syncPageTask" name="Handle DataXray Response" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
       </extensionElements>

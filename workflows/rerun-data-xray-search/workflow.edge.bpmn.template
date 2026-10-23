@@ -2,7 +2,7 @@
 <!--
   rerunDataXraySearch workflow — Collibra Cloud + Edge variant
   ============================================================
-  Same process id, form and outcome as workflow.bpmn; Data X-Ray is reached
+  Same process id, form and outcome as workflow.bpmn; DataXray is reached
   through a Collibra External API task bound to an Edge HTTP connection:
     startEvent (no form — started from the query asset's page, or headlessly
                 by the nightly file sync driver)
@@ -31,7 +31,7 @@
              exporterVersion="2025.1.09"
              design:palette="flowable-core-process-palette">
   <process id="rerunDataXraySearch"
-           name="Rerun Data X-Ray Search"
+           name="Rerun DataXray Search"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
     <extensionElements>
@@ -39,9 +39,9 @@
     </extensionElements>
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
       <extensionElements>
-        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (Data X-Ray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayPageSize" name="Data X-Ray results per request (1-100)" type="string" variable="dataxrayPageSize" default="25" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL (deep links only)" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="false"/>
+        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (DataXray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayPageSize" name="DataXray results per request (1-100)" type="string" variable="dataxrayPageSize" default="25" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="DataXray Base URL (deep links only)" type="string" variable="dataxrayUrl" default="&lt;paste DataXray base URL here&gt;" readable="false" required="false"/>
         <!-- Set to 'true' by the nightly driver via startWorkflowInstances
              formProperties; a headless run never throws and skips the summary
              user task. Admins should leave this at 'false'. -->
@@ -55,7 +55,7 @@
       </extensionElements>
       <script>{{script:rerun_collector_edge.groovy}}</script>
     </scriptTask>
-    <serviceTask id="rerunFetchTask" name="Call Data X-Ray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
+    <serviceTask id="rerunFetchTask" name="Call DataXray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
       <extensionElements>
         <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
         <flowable:field name="requestUrl"><flowable:expression><![CDATA[${dxrRequestPath}]]></flowable:expression></flowable:field>

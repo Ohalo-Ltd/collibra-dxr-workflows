@@ -1,7 +1,7 @@
 // worklist.groovy — the gzip+Base64 work-list process variable.
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
-// ON-PREM VARIANT: the collector script streams every Data X-Ray row into one
+// ON-PREM VARIANT: the collector script streams every DataXray row into one
 // immutable process variable (importWorkList); the async batch task consumes
 // it 50 rows at a time, advancing only an integer cursor. The blob is written
 // once and never rewritten. (The edge variant processes each fetched page

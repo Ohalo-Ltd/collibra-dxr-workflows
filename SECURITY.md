@@ -10,10 +10,10 @@ days.
 ## Scope
 
 These workflows run inside your own Collibra instance and connect to your own
-Data X-Ray instance using credentials that *you* configure as hidden workflow
+DataXray instance using credentials that *you* configure as hidden workflow
 configuration variables. They never send data to Ohalo. Relevant concerns
 include: leakage of those credentials into logs or forms, unexpected writes or
-deletions in Collibra, and injection via Data X-Ray-supplied names/values.
+deletions in Collibra, and injection via DataXray-supplied names/values.
 
 ## Supported versions
 

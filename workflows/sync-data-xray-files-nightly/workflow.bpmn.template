@@ -3,7 +3,7 @@
   syncDataXrayFilesNightly workflow
   =================================
   Finds every Unstructured Data Query asset tagged 'dataxray-keep-in-sync' and
-  starts one HEADLESS Rerun Data X-Ray Search instance per query, so flagged
+  starts one HEADLESS Rerun DataXray Search instance per query, so flagged
   searches rerun and re-sync their imported file assets automatically.
 
   Triggered by a timer start event (cron "0 30 2 * * ?" — daily at 02:30 in
@@ -14,9 +14,9 @@
   throwing: a timer workflow that fails before its first async task is retried
   3× by Collibra and then permanently disabled until redeployment.
 
-  This workflow has NO configuration variables: it never calls Data X-Ray
+  This workflow has NO configuration variables: it never calls DataXray
   itself. Each rerun instance it starts reads the Base URL / Bearer token
-  configured on the Rerun Data X-Ray Search workflow.
+  configured on the Rerun DataXray Search workflow.
 
   Script placeholders of the form {script:filename.groovy} are resolved by
   deploy.py before the BPMN is packaged.
@@ -37,7 +37,7 @@
              design:palette="flowable-core-process-palette">
 
   <process id="syncDataXrayFilesNightly"
-           name="Sync Data X-Ray Files (Nightly)"
+           name="Sync DataXray Files (Nightly)"
            isExecutable="true">
     <extensionElements>
       <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>

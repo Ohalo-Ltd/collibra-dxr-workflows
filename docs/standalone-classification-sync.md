@@ -1,15 +1,15 @@
 # Standalone classification sync (Python script)
 
-`sync_classifications_standalone.py` (shipped next to this guide in the release bundle; `tools/sync_classifications_standalone.py` in the repository) is a command-line equivalent of the **Sync Data X-Ray Classifications** workflow. It reads the classification catalogue straight from Data X-Ray and writes the same assets, attributes, tags and statuses the workflow writes, so the search, import, rerun and nightly workflows keep working against them.
+`sync_classifications_standalone.py` (shipped next to this guide in the release bundle; `tools/sync_classifications_standalone.py` in the repository) is a command-line equivalent of the **Sync DataXray Classifications** workflow. It reads the classification catalogue straight from DataXray and writes the same assets, attributes, tags and statuses the workflow writes, so the search, import, rerun and nightly workflows keep working against them.
 
-Use it when the sync must run **outside Collibra**, for example on a machine inside the customer network that can reach both Data X-Ray and Collibra, and the workflow editions do not fit. In every other case prefer the workflow: it runs on a schedule inside Collibra, is gated by the Data X-Ray roles, shows a results screen and logs to the Collibra log. The script gives you none of that; scheduling and credential storage are yours.
+Use it when the sync must run **outside Collibra**, for example on a machine inside the customer network that can reach both DataXray and Collibra, and the workflow editions do not fit. In every other case prefer the workflow: it runs on a schedule inside Collibra, is gated by the DataXray roles, shows a results screen and logs to the Collibra log. The script gives you none of that; scheduling and credential storage are yours.
 
 ## Prerequisites
 
-1. **Import the workflow bundle and run `Configure Data X-Ray Workflows` once**, exactly as in the [deployment guide](deployment-guide.md). Configure creates the *Data X-Ray Classifications* domain, the Classification / Annotator / Extractor / Label asset types and the *Data X-Ray ID*, *Link*, *Search Link* and *Sub Type* attribute types, all with fixed ids. The script writes to those ids and does nothing useful on an instance where configure has not run.
+1. **Import the workflow bundle and run `Configure DataXray Workflows` once**, exactly as in the [deployment guide](deployment-guide.md). Configure creates the *DataXray Classifications* domain, the Classification / Annotator / Extractor / Label asset types and the *DataXray ID*, *Link*, *Search Link* and *Sub Type* attribute types, all with fixed ids. The script writes to those ids and does nothing useful on an instance where configure has not run.
 2. A machine with **Python 3.10 or newer** and the `requests` package (`pip install requests`; `python-dotenv` is optional and lets you keep settings in a `.env` file).
-3. A **Collibra identity** allowed to create and edit assets in the *Data X-Ray Classifications* domain and to tag them: a local user and password, or, on an SSO-only tenant, a JWT-based service identity (see *Authentication* below).
-4. A **Data X-Ray Bearer token** for a user who can see the classifications you want in Collibra, the same kind of token the on-prem workflow edition uses.
+3. A **Collibra identity** allowed to create and edit assets in the *DataXray Classifications* domain and to tag them: a local user and password, or, on an SSO-only tenant, a JWT-based service identity (see *Authentication* below).
+4. A **DataXray Bearer token** for a user who can see the classifications you want in Collibra, the same kind of token the on-prem workflow edition uses.
 
 ## Configure the script
 
@@ -20,10 +20,10 @@ COLLIBRA_URL=https://<tenant>.collibra.com
 COLLIBRA_USER=<collibra user>          # Basic auth (local password) — or see Authentication
 COLLIBRA_PASSWORD=<password>
 DXR_BASE_URL=https://<data-x-ray-host>
-DXR_API_KEY=<Data X-Ray Bearer token>
+DXR_API_KEY=<DataXray Bearer token>
 ```
 
-`DXR_BASE_URL` is also the prefix of the *Link* and *Search Link* attributes; pass `--link-base https://...` if users should open Data X-Ray through a different address than the script uses.
+`DXR_BASE_URL` is also the prefix of the *Link* and *Search Link* attributes; pass `--link-base https://...` if users should open DataXray through a different address than the script uses.
 
 The block marked **CANONICAL IDS, DO NOT EDIT** at the top of the script lists the domain, asset type, attribute type and status ids. They are the same on every Collibra instance because configure creates them, and each constant names the matching constant in the configure workflow's script. If an instance appears to have different ids, run the configure workflow; do not change the script.
 
@@ -42,7 +42,7 @@ The script supports three ways of authenticating to Collibra. Set `COLLIBRA_AUTH
 Collibra accepts JWTs from an external identity provider once the Collibra administrator has registered that provider under **Settings → Security → JWT** (issuer, public keys or JWKS endpoint, and the claim that carries the Collibra user name). With that in place:
 
 1. **Identity provider (Entra ID, Okta, Keycloak, …):** create an application / service principal for the sync with the client-credentials grant enabled. Make sure the access token it issues carries the user-name claim Collibra is configured to read (for example `preferred_username` or `sub`), and that the value matches an existing Collibra user.
-2. **Collibra:** that user must exist (SSO-provisioned is fine) and hold the permissions to create, edit, tag and change the status of assets in the *Data X-Ray Classifications* domain. The script acts as that user; Collibra's audit trail shows that name.
+2. **Collibra:** that user must exist (SSO-provisioned is fine) and hold the permissions to create, edit, tag and change the status of assets in the *DataXray Classifications* domain. The script acts as that user; Collibra's audit trail shows that name.
 3. **Script:** set `COLLIBRA_AUTH=oauth2` and the token endpoint, client id and secret. Run `--dry-run` first and check the line `Collibra: authenticated with oauth2 as '<user>'` names the intended user.
 
 Collibra's own documentation for the JWT settings is authoritative for the exact fields; they vary slightly between versions.
@@ -67,7 +67,7 @@ python sync_classifications_standalone.py
 python sync_classifications_standalone.py --stamp-index-ids
 ```
 
-That also writes the numeric *Data X-Ray Index ID* the Edge edition's search and rerun workflows need, reading it from Data X-Ray's internal catalogue endpoints. Without it, every search fails with *Cannot search: … has no Data X-Ray Index ID in Collibra*. Running the script again with the flag after a run without it updates the existing assets in place, and a later run without the flag leaves stamped ids untouched. The attribute type is created by configure from pack v2.1.0 onwards.
+That also writes the numeric *DataXray Index ID* the Edge edition's search and rerun workflows need, reading it from DataXray's internal catalogue endpoints. Without it, every search fails with *Cannot search: … has no DataXray Index ID in Collibra*. Running the script again with the flag after a run without it updates the existing assets in place, and a later run without the flag leaves stamped ids untouched. The attribute type is created by configure from pack v2.1.0 onwards.
 
 The first line after the catalogue count is the authentication check, `Collibra: authenticated with basic as 'jane.doe'`. The last line is the summary, in the same terms as the workflow's results screen:
 
@@ -75,16 +75,16 @@ The first line after the catalogue count is the authentication check, `Collibra:
 Sync complete: created=0 updated=69 retired=0 skipped=13 failed=0
 ```
 
-`skipped` counts Data X-Ray data categories (logged as `Skipping data category '<name>'`), which the workflow does not mirror either — the annotators inside them are synced as usual, so custom data categories need no action. The exit code is 0 when everything synced and 1 when any item failed or the catalogue came back empty, so a scheduler can alert on it. To run it nightly, a cron entry such as `0 2 * * * cd /opt/dxr-sync && python sync_classifications_standalone.py >> sync.log 2>&1` does the job; keep the `.env` file readable only by that account.
+`skipped` counts DataXray data categories (logged as `Skipping data category '<name>'`), which the workflow does not mirror either — the annotators inside them are synced as usual, so custom data categories need no action. The exit code is 0 when everything synced and 1 when any item failed or the catalogue came back empty, so a scheduler can alert on it. To run it nightly, a cron entry such as `0 2 * * * cd /opt/dxr-sync && python sync_classifications_standalone.py >> sync.log 2>&1` does the job; keep the `.env` file readable only by that account.
 
 ## What it does, and what it deliberately mirrors
 
-- **Upsert by Data X-Ray ID.** Each asset is found through its *Data X-Ray ID* attribute, so a rename in Data X-Ray renames the asset rather than creating a duplicate. Matching is by ID only: a classification deleted in Data X-Ray and re-created under the same name is a new asset, and the old, retired asset is renamed *Name (retired 1a2b3c4d)* to free the name. A same-named asset that is not a retired Data X-Ray classification (one added by hand, say) is never taken over; that item fails with a message naming the clash.
+- **Upsert by DataXray ID.** Each asset is found through its *DataXray ID* attribute, so a rename in DataXray renames the asset rather than creating a duplicate. Matching is by ID only: a classification deleted in DataXray and re-created under the same name is a new asset, and the old, retired asset is renamed *Name (retired 1a2b3c4d)* to free the name. A same-named asset that is not a retired DataXray classification (one added by hand, say) is never taken over; that item fails with a message naming the clash.
 - **Colliding names** are suffixed with the subtype, for example `VAT Number (Named Entity)` and `VAT Number (Regular Expression)`.
 - **Tag `dataxray-classification-sync`** on every asset it writes. Assets in the domain without that tag are never touched.
-- **Retire, never delete.** Tagged assets that disappeared from Data X-Ray are set to *Obsolete*; they come back to *Candidate* if the classification reappears. A rerun of a saved search relies on this to refuse a query whose criterion was deleted. If Data X-Ray returns an empty catalogue nothing is retired.
-- Description, Link, Search Link and Sub Type are replaced on every run; a value missing in Data X-Ray clears the attribute.
+- **Retire, never delete.** Tagged assets that disappeared from DataXray are set to *Obsolete*; they come back to *Candidate* if the classification reappears. A rerun of a saved search relies on this to refuse a query whose criterion was deleted. If DataXray returns an empty catalogue nothing is retired.
+- Description, Link, Search Link and Sub Type are replaced on every run; a value missing in DataXray clears the attribute.
 
 ## Do not mix it with the nightly workflow
 
-Run either the script or the *Sync Data X-Ray Classifications (nightly)* workflow, not both. They write the same assets and one of them is redundant.
+Run either the script or the *Sync DataXray Classifications (nightly)* workflow, not both. They write the same assets and one of them is redundant.

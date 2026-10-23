@@ -58,7 +58,7 @@ def fetchTaggedAssetsInDomain(UUID domainId, String tagName) {
     return results
 }
 
-// Map Data X-Ray ID attribute value → Collibra asset UUID, restricted to the
+// Map DataXray ID attribute value → Collibra asset UUID, restricted to the
 // given assets. findAttributes has no domain filter, so we query globally by
 // type and then drop any hits that belong to assets outside the set.
 def fetchAssetIdsByDataxrayId(UUID attrTypeId, Set<UUID> assetsInDomain) {
@@ -84,7 +84,7 @@ def fetchAssetIdsByDataxrayId(UUID attrTypeId, Set<UUID> assetsInDomain) {
 }
 
 // Two indexes over the classifications domain for resolving a file row's
-// classification refs to Collibra assets: by Data X-Ray ID attribute
+// classification refs to Collibra assets: by DataXray ID attribute
 // (authoritative — survives renames and name disambiguation) and by asset
 // name (fallback for rows that only carry names). Built once per run.
 // Returns [byDxrId: [dxrId → UUID], byName: [name → UUID]].
@@ -133,7 +133,7 @@ def integrationIdentityIds() {
     return [dxrWorkflowUserId()] as Set
 }
 
-// Every Data X-Ray File asset on the instance, wherever it has been moved —
+// Every DataXray File asset on the instance, wherever it has been moved —
 // cursor-paged by asset type, not domain. Calls `visit` with each asset.
 def eachFileAsset(Map ids, Closure visit) {
     def cursor = ''
@@ -149,7 +149,7 @@ def eachFileAsset(Map ids, Closure visit) {
     }
 }
 
-// The file-asset population the 25,000 cap applies to: every Data X-Ray File
+// The file-asset population the 25,000 cap applies to: every DataXray File
 // asset on the instance, including ones moved out of the Files domain.
 def countFileAssets(Map ids) {
     int count = 0
@@ -237,9 +237,9 @@ def fetchAttributeValuesByType(UUID attrTypeId, Set<UUID> assetIds) {
 }
 
 // The Edge edition's classification index, built from Collibra alone (no
-// Data X-Ray catalogue calls): every classification asset with its public
-// Data X-Ray ID (uuid) and, when the Edge sync has stamped it, the numeric id
-// Data X-Ray's search index uses. All keys/values are Strings so the map can
+// DataXray catalogue calls): every classification asset with its public
+// DataXray ID (uuid) and, when the Edge sync has stamped it, the numeric id
+// DataXray's search index uses. All keys/values are Strings so the map can
 // round-trip through a JSON process variable. Returns
 //   [byDxrId: [uuid → assetId], byName: [name → assetId],
 //    indexIdByDxrId: [uuid → indexId], nameByDxrId: [uuid → asset name],

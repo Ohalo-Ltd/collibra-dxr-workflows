@@ -1,14 +1,14 @@
-// sync_classifications.groovy  (nightly; on-prem variant: direct HTTPS to Data X-Ray)
+// sync_classifications.groovy  (nightly; on-prem variant: direct HTTPS to DataXray)
 //
-// Pulls classifications/annotators/extractors/labels from the Data X-Ray API
+// Pulls classifications/annotators/extractors/labels from the DataXray API
 // and mirrors them as Collibra assets in the classifications domain. The sync
-// semantics (upsert by Data X-Ray ID only, freeing names held by retired
+// semantics (upsert by DataXray ID only, freeing names held by retired
 // assets, name disambiguation, retire-never-delete) live in
 // shared/classification_sync.groovy.
 //
 // This workflow is triggered by a timer start event (nightly at 02:00), so it
 // runs unattended with no user/initiator. On misconfiguration or a transient
-// Data X-Ray outage it logs the reason and ends cleanly rather than throwing:
+// DataXray outage it logs the reason and ends cleanly rather than throwing:
 // a timer-triggered workflow that fails before its first async task is retried
 // 3× by Collibra and then permanently disabled until redeployment.
 //
@@ -29,13 +29,13 @@
 
 // --- Read & validate workflow configuration variables -----------------------
 
-announceDxrVersion('Sync Data X-Ray Classification (Nightly)')
+announceDxrVersion('Sync DataXray Classification (Nightly)')
 def cfg = readRequiredConfig([
-    dataxrayUrl      : 'Data X-Ray Base URL',
-    dataxrayAuthToken: 'Data X-Ray Auth Token (Bearer)',
+    dataxrayUrl      : 'DataXray Base URL',
+    dataxrayAuthToken: 'DataXray Auth Token (Bearer)',
 ])
 if (!cfg.missing.isEmpty()) {
-    def detailMsg = "Skipping Sync Data X-Ray Classification (Nightly) — the following workflow configuration variable(s) are not set:${missingConfigBullets(cfg.missing)}\n\nOpen the workflow's settings page and provide a value for each; the next nightly run will pick them up automatically."
+    def detailMsg = "Skipping Sync DataXray Classification (Nightly) — the following workflow configuration variable(s) are not set:${missingConfigBullets(cfg.missing)}\n\nOpen the workflow's settings page and provide a value for each; the next nightly run will pick them up automatically."
     // Timer-triggered: end cleanly rather than throw. A WorkflowException here
     // (before the first async task) would be retried 3× by Collibra and then
     // permanently disable the schedule until redeployment.
@@ -46,19 +46,19 @@ if (!cfg.missing.isEmpty()) {
 def dataxrayUrl       = cfg.config.dataxrayUrl
 def dataxrayAuthToken = cfg.config.dataxrayAuthToken
 
-// --- Fetch classifications from Data X-Ray ----------------------------------
+// --- Fetch classifications from DataXray ----------------------------------
 
 def classifications
 try {
     classifications = parseClassificationsBody(fetchDxrText(dataxrayUrl + '/api/v1/classifications', dataxrayAuthToken, 60_000))
 } catch (Exception fetchEx) {
-    // Timer-triggered: a transient Data X-Ray outage must not throw (see above)
+    // Timer-triggered: a transient DataXray outage must not throw (see above)
     // — log and end cleanly so the schedule survives and retries next night.
-    loggerApi.error("Failed to fetch classifications from Data X-Ray: ${fetchEx.message}")
+    loggerApi.error("Failed to fetch classifications from DataXray: ${fetchEx.message}")
     recordRunSummary(0, 0, 0, 0, 0, "fetch failed: ${fetchEx.message}")
     return
 }
-loggerApi.info("Data X-Ray returned ${classifications.size()} classification(s); syncing into Collibra")
+loggerApi.info("DataXray returned ${classifications.size()} classification(s); syncing into Collibra")
 
 // --- Sync ---------------------------------------------------------------------
 
@@ -72,7 +72,7 @@ recordRunSummary(r.created, r.updated, r.retired, r.skipped, r.failed, r.failure
 // error for dgc.log. Timer-triggered: don't throw — a thrown WorkflowException
 // before the first async task is retried 3× and then disables the schedule.
 if (r.created == 0 && r.updated == 0 && r.failed > 0) {
-    loggerApi.error("Data X-Ray sync run failed: all ${r.failed} classification(s) failed to sync. First error: ${r.failures[0]}")
+    loggerApi.error("DataXray sync run failed: all ${r.failed} classification(s) failed to sync. First error: ${r.failures[0]}")
 }
 
 // --- Helpers ---------------------------------------------------------------

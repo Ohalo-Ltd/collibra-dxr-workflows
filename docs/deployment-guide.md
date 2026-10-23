@@ -1,6 +1,6 @@
-# Data X-Ray Workflows — Deployment & Configuration Guide
+# DataXray Workflows — Deployment & Configuration Guide
 
-This guide explains how to deploy and configure the Data X-Ray workflows in
+This guide explains how to deploy and configure the DataXray workflows in
 Collibra entirely through the Collibra user interface. You will be provided with
 **six Workflow Designer ZIP files**, one per workflow. No command-line tools or
 scripts are required — everything below is done from within Collibra.
@@ -11,8 +11,8 @@ Each release ships **two bundles** with the same six workflows:
 
 | Bundle | Use it when | Guide |
 |---|---|---|
-| `collibra-data-xray-workflows-onprem-<version>.zip` | Collibra (self-hosted **or** Cloud) can reach your Data X-Ray directly over HTTPS. The workflows call Data X-Ray themselves with a Bearer token. | **This guide.** |
-| `collibra-data-xray-workflows-cloud-edge-<version>.zip` | Collibra **Cloud** and a Data X-Ray that is only reachable from inside your network. Calls go through a **Collibra Edge site** and an HTTP connection that holds the credentials. | [deployment-guide-edge.md](deployment-guide-edge.md) — Steps 1–3 and 5 below still apply; Step 4 differs. |
+| `collibra-data-xray-workflows-onprem-<version>.zip` | Collibra (self-hosted **or** Cloud) can reach your DataXray directly over HTTPS. The workflows call DataXray themselves with a Bearer token. | **This guide.** |
+| `collibra-data-xray-workflows-cloud-edge-<version>.zip` | Collibra **Cloud** and a DataXray that is only reachable from inside your network. Calls go through a **Collibra Edge site** and an HTTP connection that holds the credentials. | [deployment-guide-edge.md](deployment-guide-edge.md) — Steps 1–3 and 5 below still apply; Step 4 differs. |
 
 Both editions use the same process ids, so you can switch from one to the other later by importing the other bundle over the installed workflows; you will need to re-enter the variables the new edition uses (the Bearer token for on-prem, the connection name for Edge), because Collibra drops variables a redeployed workflow no longer declares.
 
@@ -20,12 +20,12 @@ Both editions use the same process ids, so you can switch from one to the other 
 
 | Workflow | What it does | How it runs |
 |---|---|---|
-| **Configure Data X-Ray Workflows** | One-time setup. Creates the community, domains, asset types, attribute types, relation types, the **Not in any search** status and the assignments the other workflows rely on, creates the two access-control roles, and sets who is allowed to run each workflow. Idempotent — safe to run again. | From the **+ Create** menu. Run once after importing. |
-| **Search Data X-Ray** | Builds a Data X-Ray search query from Collibra classifications (every selected label, extractor and annotator must match — criteria are always AND-ed; the optional annotated text may appear in any of the annotators chosen for it), previews the matching files, and offers to **import all results as file assets**, to **keep the search in sync nightly**, and to let later reruns **create assets for new files** (three independent options). | From the **+ Create** menu, on demand. |
-| **Rerun Data X-Ray Search** | Reruns a saved search from its query asset and re-syncs its file assets: new files imported, changed files updated, files no search returns any more set to **Not in any search** (never deleted). | From an **Unstructured Data Query** asset's page; also run headlessly by the nightly file sync. |
-| **Sync Data X-Ray Classifications** | Syncs classifications from Data X-Ray into Collibra, on demand. Classifications that disappear from Data X-Ray are **retired**, not deleted. | From the **+ Create** menu, on demand. |
-| **Sync Data X-Ray Classification (Nightly)** | The same classification sync, run automatically every night at **02:00** (server time). | Runs on a timer; no manual start. |
-| **Sync Data X-Ray Files (Nightly)** | Finds every search flagged **keep in sync** and reruns it headlessly every night at **02:30** (after the classification sync). | Runs on a timer; no manual start. |
+| **Configure DataXray Workflows** | One-time setup. Creates the community, domains, asset types, attribute types, relation types, the **Not in any search** status and the assignments the other workflows rely on, creates the two access-control roles, and sets who is allowed to run each workflow. Idempotent — safe to run again. | From the **+ Create** menu. Run once after importing. |
+| **Search DataXray** | Builds a DataXray search query from Collibra classifications (every selected label, extractor and annotator must match — criteria are always AND-ed; the optional annotated text may appear in any of the annotators chosen for it), previews the matching files, and offers to **import all results as file assets**, to **keep the search in sync nightly**, and to let later reruns **create assets for new files** (three independent options). | From the **+ Create** menu, on demand. |
+| **Rerun DataXray Search** | Reruns a saved search from its query asset and re-syncs its file assets: new files imported, changed files updated, files no search returns any more set to **Not in any search** (never deleted). | From an **Unstructured Data Query** asset's page; also run headlessly by the nightly file sync. |
+| **Sync DataXray Classifications** | Syncs classifications from DataXray into Collibra, on demand. Classifications that disappear from DataXray are **retired**, not deleted. | From the **+ Create** menu, on demand. |
+| **Sync DataXray Classification (Nightly)** | The same classification sync, run automatically every night at **02:00** (server time). | Runs on a timer; no manual start. |
+| **Sync DataXray Files (Nightly)** | Finds every search flagged **keep in sync** and reruns it headlessly every night at **02:30** (after the classification sync). | Runs on a timer; no manual start. |
 
 ## Prerequisites
 
@@ -63,13 +63,13 @@ overview page renders blank. Enable each one:
 
 Repeat for all six workflows.
 
-## Step 3 — Run "Configure Data X-Ray Workflows" once
+## Step 3 — Run "Configure DataXray Workflows" once
 
 This single run creates everything the other workflows depend on, including the
 two access roles and the run permissions.
 
 1. Click the **+ Create** button at the top of Collibra.
-2. Choose **Configure Data X-Ray Workflows** and confirm.
+2. Choose **Configure DataXray Workflows** and confirm.
 3. When it finishes, a results task appears in your inbox with a summary of what
    was created, configured and skipped. Open it, review, and click **Send** to
    close it.
@@ -83,21 +83,21 @@ untouched.
 
 After this step you will have two new global roles:
 
-- **Data X-Ray Admin**
-- **Data X-Ray User**
+- **DataXray Admin**
+- **DataXray User**
 
-## Step 4 — Set the Data X-Ray connection (Base URL + Bearer token)
+## Step 4 — Set the DataXray connection (Base URL + Bearer token)
 
 > **Cloud + Edge edition?** This step is different: there is no Bearer token,
 > and the workflows need the name of an Edge HTTP connection instead. Follow
 > Steps 1 and 4 of [deployment-guide-edge.md](deployment-guide-edge.md).
 
-Four of the workflows — **Search Data X-Ray**, **Rerun Data X-Ray Search**,
-**Sync Data X-Ray Classifications**, and **Sync Data X-Ray Classification
-(Nightly)** — need to know your Data X-Ray instance's address and an
+Four of the workflows — **Search DataXray**, **Rerun DataXray Search**,
+**Sync DataXray Classifications**, and **Sync DataXray Classification
+(Nightly)** — need to know your DataXray instance's address and an
 authentication token. These are hidden configuration variables; they are never
 shown to people who *run* the workflow and can only be set by an admin. (The
-**Configure** workflow and **Sync Data X-Ray Files (Nightly)** have no such
+**Configure** workflow and **Sync DataXray Files (Nightly)** have no such
 settings — the nightly file sync only starts reruns, which carry their own.)
 
 For **each** of those four workflows:
@@ -105,15 +105,15 @@ For **each** of those four workflows:
 1. Go to **Settings → Workflows → Definitions** and select the workflow.
 2. Find the **Variables** section and click the **edit** icon.
 3. Set:
-   - **Data X-Ray Base URL** — the base URL of your Data X-Ray instance.
-   - **Data X-Ray Auth Token (Bearer)** — a valid Bearer token.
+   - **DataXray Base URL** — the base URL of your DataXray instance.
+   - **DataXray Auth Token (Bearer)** — a valid Bearer token.
 4. Save.
 
 Until a real value is supplied, each field shows a placeholder such as
-`<paste Data X-Ray base URL here>`; a workflow run will stop with a clear error
+`<paste DataXray base URL here>`; a workflow run will stop with a clear error
 if it is still unset.
 
-> **Rerun Data X-Ray Search** also has a hidden **Headless** variable. Leave it
+> **Rerun DataXray Search** also has a hidden **Headless** variable. Leave it
 > at `false` — the nightly file sync sets it per run when it starts reruns
 > automatically.
 
@@ -129,8 +129,8 @@ if you prefer to manage many users at once).
 
 | Role | Give it to | What it grants |
 |---|---|---|
-| **Data X-Ray User** | Everyday users who should run searches and syncs. | Permission to **run** Search Data X-Ray, Rerun Data X-Ray Search and Sync Data X-Ray Classifications. |
-| **Data X-Ray Admin** | The people who manage the Data X-Ray integration. | Permission to run everything **and** to edit the Base URL / Bearer token. ⚠️ This role carries the **Workflow Administration** permission, which is admin over *all* workflows on the instance — assign it deliberately. |
+| **DataXray User** | Everyday users who should run searches and syncs. | Permission to **run** Search DataXray, Rerun DataXray Search and Sync DataXray Classifications. |
+| **DataXray Admin** | The people who manage the DataXray integration. | Permission to run everything **and** to edit the Base URL / Bearer token. ⚠️ This role carries the **Workflow Administration** permission, which is admin over *all* workflows on the instance — assign it deliberately. |
 
 Sysadmins (and anyone with Workflow Administration) can already run and configure
 everything without being added to these roles.
@@ -145,10 +145,10 @@ everything without being added to these roles.
 
 ## Who can see what
 
-- The workflows refer to the **Collibra to Data X-Ray Integration** community
+- The workflows refer to the **Collibra to DataXray Integration** community
   and its three domains only by their fixed IDs, and Configure never renames
   them. Renaming the community or the domains in Collibra is safe.
-- **Keep the Data X-Ray Classifications domain readable by everyone** who
+- **Keep the DataXray Classifications domain readable by everyone** who
   works with file or query assets. A user who cannot view a classification
   asset cannot see relations to it either (Collibra: "View permissions also
   impact asset relations"), so classifications moved into a restricted
@@ -156,7 +156,7 @@ everything without being added to these roles.
   assets out of this domain: the classification sync only looks for them
   there.
 - **File assets and saved searches can be private.** Set view permissions on
-  the **Data X-Ray Files** and **Data X-Ray Custom Queries** domains (view
+  the **DataXray Files** and **DataXray Sync Filter** domains (view
   permissions can be set per domain, not only per community); no separate
   community is needed. Restrict the queries domain as well, because a query's
   *returns* links list file names. A user who cannot view a file asset does
@@ -172,13 +172,13 @@ everything without being added to these roles.
 
 ## Using the workflows
 
-- **Search Data X-Ray** and **Sync Data X-Ray Classifications** — run from the
-  **+ Create** menu. Visible to users holding **Data X-Ray User** or
-  **Data X-Ray Admin** (and to admins).
+- **Search DataXray** and **Sync DataXray Classifications** — run from the
+  **+ Create** menu. Visible to users holding **DataXray User** or
+  **DataXray Admin** (and to admins).
 - **Importing search results as assets** — after a search, the results task
   offers three independent options:
   - **Import now: create assets for all N matching files** (up to an
-    instance-wide limit of **25,000** Data X-Ray File assets, wherever they
+    instance-wide limit of **25,000** DataXray File assets, wherever they
     live; a warning appears above 10,000).
   - **Keep in sync nightly** tags the query asset `dataxray-keep-in-sync` for
     the nightly file sync. It does not require importing now.
@@ -189,24 +189,24 @@ everything without being added to these roles.
 
   The tags are set as soon as you click **Send**, and you can add or remove
   either one on the query asset at any time.
-- **Rerun Data X-Ray Search** — open a saved **Unstructured Data Query** asset
+- **Rerun DataXray Search** — open a saved **Unstructured Data Query** asset
   and start the workflow from its page. The saved criteria are rebuilt from the
-  query's linked classifications (so Data X-Ray renames are picked up
-  automatically); if a criterion was deleted in Data X-Ray, the rerun stops and
+  query's linked classifications (so DataXray renames are picked up
+  automatically); if a criterion was deleted in DataXray, the rerun stops and
   names it rather than silently broadening the search.
-- **Sync Data X-Ray Classification (Nightly)** — runs automatically every night
+- **Sync DataXray Classification (Nightly)** — runs automatically every night
   at **02:00**; there is nothing to start by hand.
-- **Sync Data X-Ray Files (Nightly)** — runs automatically every night at
+- **Sync DataXray Files (Nightly)** — runs automatically every night at
   **02:30**, rerunning every search tagged `dataxray-keep-in-sync`. Remove that
   tag from a query asset to stop syncing it; add it to resume.
-- **Never delete** — classification assets that disappear from Data X-Ray are
+- **Never delete** — classification assets that disappear from DataXray are
   set to status **Obsolete**. A file asset that **no** saved search returns
   any more gets the status **Not in any search**, and goes back to
   **Candidate** if a search matches it again. Both keep their comments,
   attachments and workflow history. A status a person set on a file asset
   (Accepted, Under Review and so on) is never changed.
 - **Links are kept as history** — when a search stops returning a file, its
-  *returns* link becomes *formerly returns*; when Data X-Ray no longer finds a
+  *returns* link becomes *formerly returns*; when DataXray no longer finds a
   classification on a file, the file's *groups* link becomes *formerly
   groups*. Both are swapped back if they apply again. Links that people create
   are never removed or changed. The full file-asset lifecycle — creation, the
@@ -224,16 +224,16 @@ everything without being added to these roles.
 ## Verifying the setup
 
 - In **Workflows → Definitions**, all six workflows show as **enabled**.
-- **Search Data X-Ray** and **Sync Data X-Ray Classifications** appear in the
-  **+ Create** menu for a user who has the **Data X-Ray User** role.
-- **Rerun Data X-Ray Search** appears on the page of an **Unstructured Data
-  Query** asset (create one via Search Data X-Ray first).
-- A test run of **Search Data X-Ray** completes without a "connection not set"
+- **Search DataXray** and **Sync DataXray Classifications** appear in the
+  **+ Create** menu for a user who has the **DataXray User** role.
+- **Rerun DataXray Search** appears on the page of an **Unstructured Data
+  Query** asset (create one via Search DataXray first).
+- A test run of **Search DataXray** completes without a "connection not set"
   error (i.e. Step 4 was done), and its results task offers the import controls.
 
 ## Which version is installed?
 
-Every workflow states the release it came from, as *Data X-Ray workflows vX.Y.Z (onprem)* or *(cloud-edge)*:
+Every workflow states the release it came from, as *DataXray workflows vX.Y.Z (onprem)* or *(cloud-edge)*:
 
 - at the end of its description on its overview page (Settings → Workflows → Definitions → select the workflow), also returned by the REST API (`GET /rest/2.0/workflowDefinitions/<id>`);
 - in small print at the bottom of its result, summary and failure tasks;
@@ -252,13 +252,24 @@ Collibra replaces a workflow with the same process ID in place:
 So a normal upgrade needs no reconfiguration. The exception is an upgrade
 that adds to the operating model, such as v2.4 below.
 
+### Upgrading from Data X-Ray to DataXray names
+
+Releases before the DataXray rename call the product **Data X-Ray** and the queries domain **Data X-Ray Custom
+Queries**. After re-importing the workflows, run **Configure DataXray Workflows** once: it renames the
+community, the three domains (the queries domain becomes **DataXray Sync Filter**), the **DataXray File** asset type,
+the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute types, the **DataXray Admin** and
+**DataXray User** roles and the six workflow definitions. It only renames an element that still has its old default
+name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes:
+settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
+(`data-xray` by default) stay as they are.
+
 ### Upgrading to v2.4
 
 Re-import all six workflows (in place; settings and run permissions are
-kept), then **run Configure Data X-Ray Workflows once** as an admin (Step 3).
+kept), then **run Configure DataXray Workflows once** as an admin (Step 3).
 It creates the **Not in any search** status and the **formerly returns** and
 **formerly groups** relation types, and adds them to the asset type
-assignments. Until it has run, **Rerun Data X-Ray Search** refuses to start
+assignments. Until it has run, **Rerun DataXray Search** refuses to start
 with a message saying so, and the nightly file sync skips its orphan sweep
 (logged in `dgc.log`).
 
@@ -279,13 +290,13 @@ that case, re-enter the token/URL (Step 4) and **run Configure once more** (Step
 | Symptom | Cause / fix |
 |---|---|
 | Workflow's overview page is blank. | The workflow is disabled — enable it (Step 2). |
-| A run stops with "Data X-Ray … is not set" / "misconfigured". | The Base URL or Bearer token is still the placeholder — set it (Step 4). |
+| A run stops with "DataXray … is not set" / "misconfigured". | The Base URL or Bearer token is still the placeholder — set it (Step 4). |
 | Configure's results list a workflow as **"not deployed yet"**. | That workflow wasn't imported when Configure ran — import it (Steps 1–2) and run Configure again (Step 3). |
-| A user can't see Search/Sync in **+ Create**. | They don't hold **Data X-Ray User** or **Data X-Ray Admin** — assign the role (Step 5). |
-| A user can't edit the Base URL / token. | Editing requires **Data X-Ray Admin** (or Sysadmin / Workflow Administration). |
-| The import controls don't appear on the search results task. | Either the search returned 0 results, or the projected number of Data X-Ray File assets (wherever they live) exceeds the 25,000 cap (the task shows the reason). |
+| A user can't see Search/Sync in **+ Create**. | They don't hold **DataXray User** or **DataXray Admin** — assign the role (Step 5). |
+| A user can't edit the Base URL / token. | Editing requires **DataXray Admin** (or Sysadmin / Workflow Administration). |
+| The import controls don't appear on the search results task. | Either the search returned 0 results, or the projected number of DataXray File assets (wherever they live) exceeds the 25,000 cap (the task shows the reason). |
 | A rerun stops with "This instance is missing the status 'Not in any search' …". | The workflows were upgraded to v2.4 but Configure has not been re-run — run it once (Step 3). |
 | *formerly returns* or *formerly groups* links don't show on an asset page. | Configure left that asset type's assignment alone because it has hand-tuned rules (its results list it). Add the relation types in Settings > Operating model > Asset types > Assignments. |
-| A search is refused with "… was deleted in Data X-Ray (its Collibra asset is retired)". | A classification picked in the form was deleted in Data X-Ray; the sync marked its Collibra asset Obsolete, but the pickers still offer it. Remove it from the search. |
-| A rerun fails with "criterion no longer exists". | A classification used by the saved search was deleted in Data X-Ray. Recreate it there and run the classification sync, or create a new search. |
-| Nightly file sync did nothing. | No query assets carry the `dataxray-keep-in-sync` tag, or **Rerun Data X-Ray Search** isn't imported/enabled — check `dgc.log` for the run summary. |
+| A search is refused with "… was deleted in DataXray (its Collibra asset is retired)". | A classification picked in the form was deleted in DataXray; the sync marked its Collibra asset Obsolete, but the pickers still offer it. Remove it from the search. |
+| A rerun fails with "criterion no longer exists". | A classification used by the saved search was deleted in DataXray. Recreate it there and run the classification sync, or create a new search. |
+| Nightly file sync did nothing. | No query assets carry the `dataxray-keep-in-sync` tag, or **Rerun DataXray Search** isn't imported/enabled — check `dgc.log` for the run summary. |

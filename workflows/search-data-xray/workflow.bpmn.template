@@ -2,7 +2,7 @@
 <!--
   searchDataXray workflow
   =======================
-  Create a Data X-Ray search query from Collibra classifications, then
+  Create a DataXray search query from Collibra classifications, then
   optionally import every matching file as a Collibra asset:
     startEvent (form: searchDataXrayForm — rendered as the + Create dialog)
       → searchDataXrayTask (script)
@@ -49,7 +49,7 @@
              design:palette="flowable-core-process-palette">
 
   <process id="searchDataXray"
-           name="Search Data X-Ray"
+           name="Search DataXray"
            isExecutable="true"
            flowable:candidateStarterGroups="flowableUser">
     <extensionElements>
@@ -58,15 +58,15 @@
 
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator" flowable:formKey="searchDataXrayForm">
       <extensionElements>
-        <flowable:formProperty id="dataxrayUrl" name="Data X-Ray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste Data X-Ray base URL here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayAuthToken" name="Data X-Ray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste Data X-Ray Bearer token here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayUrl" name="DataXray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste DataXray base URL here&gt;" readable="false" required="true"/>
+        <flowable:formProperty id="dataxrayAuthToken" name="DataXray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste DataXray Bearer token here&gt;" readable="false" required="true"/>
 
         <design:stencilid><![CDATA[StartNoneEvent]]></design:stencilid>
       </extensionElements>
     </startEvent>
 
     <scriptTask id="searchDataXrayTask"
-                name="Search Data X-Ray"
+                name="Search DataXray"
                 scriptFormat="groovy"
                 flowable:autoStoreVariables="false">
       <extensionElements>
