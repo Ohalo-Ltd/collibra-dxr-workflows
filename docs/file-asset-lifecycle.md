@@ -13,7 +13,7 @@ Terminology used throughout:
 | Term | Meaning |
 |---|---|
 | **File asset** | An asset of type **DataXray File**, created in the **DataXray Files** domain. One per file in DataXray. |
-| **Query asset** | An asset of type **Unstructured Data Query** in the **DataXray Sync Filter** domain. Created by **Search DataXray**; one per saved search. |
+| **Query asset** | An asset of type **DataXray Sync Filter** in the **DataXray Sync Filter** domain. Created by **Search DataXray**; one per saved search. |
 | **Returns** | The relation from a query asset to each file asset its search currently matches (*query* **returns** *file* / *file* **returned by** *query*). This is the integration's record of "which searches this file belongs to". |
 | **Formerly returns** | The relation a *returns* link becomes when the search stops matching the file (*query* **formerly returns** *file* / *file* **formerly returned by** *query*). It is a record only: it never counts as the file being returned. |
 | **Formerly groups** | The same for a classification link: when DataXray no longer finds a label, extractor or annotator on a file, the file's *groups* link to it becomes *file* **formerly groups** *classification* / *classification* **formerly grouped by** *file*. |
@@ -57,8 +57,16 @@ Name** attribute.
   │ (kept, never deleted)            │ ─ "formerly returns" ────┘
   └──────────────────────────────────┘
                    │
+                   │  Cloud + Edge: the nightly check finds DataXray
+                   │  no longer has the file (or its datasource)
+                   ▼
+  ┌──────────────────────────────────┐  back to Not in any search
+  │ status Not in DataXray           │  if DataXray has it again;
+  │ (kept, never deleted)            │  Candidate if a search matches
+  └──────────────────────────────────┘
+                   │
                    ▼  only by a person: bulk delete, filtered on
-                deleted   status Not in any search
+                deleted   status Not in DataXray (or Not in any search)
 
   * not for a query tagged dataxray-no-auto-import
   A status set by a person (Accepted, Under Review, ...) is never changed by
@@ -108,10 +116,13 @@ What the import does, per matching file:
    *display name* is the clean filename (`invoice.pdf`); its *full name* is the
    filename plus a short suffix derived from the UUID (`invoice.pdf [e8cf757f]`),
    because Collibra requires names to be unique within a domain and filenames
-   repeat constantly.
-3. **Writes its attributes**: DataXray ID, File Path, File Size, Last
-   Modified and Datasource Name (and a Link, when DataXray supplies one).
-   These are overwritten on every sync, so they always reflect the last run.
+   repeat constantly. The name is set **only when the asset is created**: you
+   can rename the asset in Collibra and no sync changes it back. DataXray's
+   own name for the file is kept in the **DataXray File Name** attribute.
+3. **Writes its attributes**: DataXray ID, DataXray File Name, File Path,
+   File Size, Last Modified and Datasource Name (and a Link, when DataXray
+   supplies one). These are overwritten on every sync, so they always reflect
+   the last run: change them in DataXray, not in Collibra.
    File Size and Last Modified are written for people to read:
    `27.2 KB (27,885 bytes)` and `10 Apr 2025, 17:22 UTC`.
 4. **Links it to the query** with a *returns* relation — the record that this
@@ -257,7 +268,7 @@ A file asset is a snapshot of what DataXray reported the last time a search
 that returns it was run. It is brought up to date by a **rerun** of any query
 that returns it:
 
-- **Manually** — open the **Unstructured Data Query** asset and start
+- **Manually** — open the **DataXray Sync Filter** asset and start
   **Rerun DataXray Search** from its **Actions** menu. A **Rerun complete**
   summary task reports what changed.
 - **Automatically** — **Sync DataXray Files (Nightly)** runs every night at
@@ -276,9 +287,10 @@ results, and then for each matching file:
 |---|---|
 | New file matches the search | A new file asset is created and linked (as in an import). |
 | New file matches the search, and the query is tagged `dataxray-no-auto-import` | No asset is created. The **Rerun complete** task counts it under *Not imported*. If the file already has an asset (another search imported it), that asset is refreshed and linked to this query as usual. |
-| File renamed or moved, and DataXray kept its file id (see [What counts as the same file?](#what-counts-as-the-same-file)) | The **same** asset is renamed; File Path and the other attributes are refreshed. |
+| File renamed or moved, and DataXray kept its file id (see [What counts as the same file?](#what-counts-as-the-same-file)) | The **same** asset is updated: DataXray File Name, File Path and the other attributes are refreshed. The asset's name is not changed (it may be one a person gave it). |
 | File renamed or moved, and DataXray assigned a new file id (e.g. on an SMB share) | A **new** asset is created; the old one drops out of the search as described below. |
 | Size / last-modified changed | Attributes refreshed. |
+| A person renamed the asset in Collibra | Kept. Syncs never change an asset's name after creating it; DataXray's name is in the DataXray File Name attribute. Any **attribute** a person changes in Collibra is overwritten by the next sync. |
 | A label was added, or an annotator/extractor now has hits | A *groups* relation to that classification is **added**. If the file had a *formerly groups* link to it, that link is replaced. If a person already linked the file to that classification, nothing is added. |
 | A label was removed, or a classification no longer has hits on the file | The *groups* relation becomes **formerly groups**, so the change stays visible on the file asset. This applies only to links the integration created; see below. |
 | A person linked the file to a classification by hand | The link is never removed or changed, whatever DataXray reports. |
@@ -347,16 +359,16 @@ returned* vs *In no search*):
 
 | Scenario | Outcome |
 |---|---|
-| File deleted in DataXray | Disappears from every search's results → each search's link becomes *formerly returns* as it reruns → Not in any search once the last one has rerun. |
+| File deleted in DataXray | Disappears from every search's results → each search's link becomes *formerly returns* as it reruns → Not in any search once the last one has rerun → in the Cloud + Edge edition, **Not in DataXray** at the next nightly check (see [3](#3-dataxray-no-longer-has-the-file-cloud--edge)). |
 | File changed so it no longer meets the criteria (e.g. a label removed) | That query's link becomes *formerly returns*; the status changes only if no other query returns it. |
 | Search criteria narrowed (a criterion removed in DataXray is *not* silently dropped — the rerun fails instead, see the deployment guide) | Files outside the new criteria get *formerly returns* links, then Not in any search if no query returns them. |
 | DataXray re-scanned a datasource and assigned **new file ids** | The new generation is created as new assets; the old generation becomes orphaned and gets Not in any search, with its history intact. |
 | File renamed or moved on a connector that identifies files by path, or moved to another datasource | The same, for that one file: a new asset for the new file id, the old asset Not in any search. |
-| Datasource deleted in DataXray | Its files disappear from every search's results and get Not in any search as each search reruns. A search that matched *only* that datasource now returns nothing, so the zero-results rule below leaves its files as they are; delete the query asset to release them. |
+| Datasource deleted in DataXray | Its files disappear from every search's results and get Not in any search as each search reruns, then (Cloud + Edge) Not in DataXray at the next nightly check. A search that matched *only* that datasource now returns nothing, so the zero-results rule below leaves its files as they are; delete the query asset to release them. |
 
 ### 2. The query asset itself was deleted
 
-Deleting an **Unstructured Data Query** asset in Collibra deletes its
+Deleting a **DataXray Sync Filter** asset in Collibra deletes its
 *returns* relations with it. No rerun can ever update the files it exclusively
 returned, because the query that would have done so no longer exists. The
 nightly file sync therefore ends every run with an **orphan sweep**: it lists
@@ -374,6 +386,40 @@ partial data).
 also moves every orphaned file asset that an earlier release set to
 **Obsolete** to **Not in any search**. This happens once; from then on
 Obsolete is never set on file assets.
+
+### 3. DataXray no longer has the file (Cloud + Edge)
+
+A search can only say that a file no longer matches it. It cannot say why: the
+file may still be in DataXray and simply have stopped matching (a label was
+removed), or it may have been deleted. So in the Cloud + Edge edition the
+nightly file sync ends with an **existence check**: it asks DataXray about
+every file asset that is **Not in any search** or **Not in DataXray**.
+
+- Each file is looked up by its **DataXray Datasource ID** and **DataXray
+  Object ID**, the identity that survives DataXray dropping a datasource's
+  scan results and scanning it again (see [What counts as the same
+  file?](#what-counts-as-the-same-file)).
+- **DataXray does not have the file** → status **Not in DataXray**. This is
+  the file deleted in DataXray, or its whole datasource deleted there.
+- **DataXray has the file** → nothing changes. A **Not in DataXray** asset
+  whose file DataXray has again goes back to **Not in any search**, and to
+  **Candidate** as soon as a search matches it.
+- **A status a person set is never changed.** Only assets that are Not in any
+  search or Not in DataXray are checked.
+- DataXray updates a datasource's index in place while it scans, one changed
+  file at a time, so a scan in progress never makes files look deleted.
+
+The check asks about 200 files per request through Edge (about a second
+each), so 2,000 files no search returns take about 10 requests. If DataXray
+stops answering, the check stops for the night; files already checked keep
+their new status and the rest are checked the next night.
+
+**Not checked:** a file asset that has no DataXray Datasource ID / Object ID.
+Every sync from v2.6 on stores both, and a file only becomes Not in any search
+after being synced, so this only affects file assets that were already Not in
+any search when the workflows were upgraded to v2.6 or later. They stay Not in
+any search. The on-prem edition does not run the check: DataXray's public
+files API does not return object ids.
 
 > Deleting a query also discards its attached results CSV and its history. If
 > the aim is only to stop syncing, prefer removing the tag or retiring the
@@ -395,12 +441,13 @@ Obsolete is never set on file assets.
   started on the wrong asset type, Configure not yet re-run after an
   upgrade), or could not fetch every result, the pass that swaps links and
   sets Not in any search does not run.
-- **A status set by a person is never changed** by the rerun or the sweep.
-  Only Candidate, Not in any search and Obsolete are managed by the
-  integration. A file asset someone marked Accepted, for example, is never
+- **A status set by a person is never changed** by the rerun, the sweep or
+  the existence check. Only Candidate, Not in any search, Not in DataXray and
+  Obsolete are managed by the integration. A file asset someone marked Accepted, for example, is never
   made Not in any search by DataXray.
-- **Files already Not in any search are left alone** by both the rerun and the
-  sweep; their status and history are not touched again.
+- **Files already Not in any search or Not in DataXray are left alone** by
+  both the rerun and the sweep; only the existence check moves them between
+  the two.
 
 ---
 
@@ -444,7 +491,9 @@ Things to know before relying on it:
 
 **They are not — not by the integration.** No workflow in this bundle deletes
 a file asset (or a classification asset, or a query asset). Every path that
-removes a file from the picture ends in **Not in any search**, so comments,
+removes a file from the picture ends in **Not in any search** (or, in the
+Cloud + Edge edition, **Not in DataXray** once DataXray no longer has the
+file), so comments,
 attachments, history and the file's relations survive as a record.
 
 Deletion is a **manual, administrative action**, done in the Collibra UI (or
@@ -458,6 +507,7 @@ What to expect if file assets *are* deleted by hand:
 
 | You delete… | Then… |
 |---|---|
+| A file asset with status **Not in DataXray** | Nothing further happens: DataXray no longer has the file, so no search can bring it back. The safest files to delete. |
 | A file asset with status **Not in any search** | Nothing further happens. This is the safe, intended way to reclaim capacity (see below). If the file later matches a search again it is simply created afresh as a new asset (same UUID, but its old history is gone). |
 | An **active** file asset that a search still matches | The next rerun of that search (manual or nightly) **recreates** it — same UUID, same name, fresh attributes and relations — because the deterministic identity means the workflow simply sees a file it has not imported yet. Its comments and history are not restored. A query tagged `dataxray-no-auto-import` does not recreate it. |
 | A **query asset** | Its file assets are **not** deleted. Those no other query returns get Not in any search at the next nightly orphan sweep (see above). |
@@ -552,12 +602,14 @@ needed).
 |---|---|
 | What creates a file asset? | An import from a search's results task, or a rerun that finds a new match (not for a query tagged `dataxray-no-auto-import`). Never a search on its own. |
 | What is a file asset's identity? | Its DataXray file id — the Collibra UUID is derived from it, so the same file is always the same asset. On path-based connectors (SMB, file shares, S3, Azure Blob, SharePoint on-premises) a rename or move gives the file a new id, and so a new asset. |
+| Can I rename one? | Yes. The name is set once, when the asset is created, and no sync changes it. DataXray's current name is in the **DataXray File Name** attribute. The other attributes always come from DataXray. |
 | Which domain / type? | Created in **DataXray Files** / **DataXray File**, status **Candidate** when active. |
 | Can I move one to another community? | Yes; syncs update it where it is, and it still counts towards the cap and is included in the nightly sweep. The placement is lost if DataXray assigns the file a new id. |
 | Maximum number? | **10,000** new file assets per import or rerun, and **25,000** DataXray File assets in total, wherever they live and whatever their status; warning above **5,000** per import. Fixed in the scripts. |
 | What keeps them current? | Manual **Rerun DataXray Search** on the query asset, or the **02:30 nightly** for queries tagged `dataxray-keep-in-sync`. |
 | When does one get Not in any search? | When no query returns it any more — after a rerun stops returning it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). Never if a person set its status. |
 | What happens to links that stop applying? | *returns* becomes *formerly returns*, and an integration-made *groups* becomes *formerly groups*. Both swap back if they apply again. Links a person created are never touched. |
+| When does one get Not in DataXray? | Cloud + Edge only: when it is Not in any search and the nightly check finds DataXray no longer has the file, or its datasource. Never if a person set its status. |
 | When is one deleted? | Only by a person. The integration never deletes. |
 | When does one go back to Candidate? | As soon as any search's import or rerun matches it again, unless a person set its status. |
 | How do I free capacity? | Delete file assets that are Not in any search; to release active ones, delete their query asset and let the nightly sweep run, then delete. |

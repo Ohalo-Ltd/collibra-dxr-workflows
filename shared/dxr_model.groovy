@@ -12,8 +12,8 @@
 def dxrModelIds() {
     return [
         // Domains and asset types
-        queryDomainId          : string2Uuid('019dcf96-233a-72e1-bf25-8398b8c9146e'),  // DataXray Queries
-        queryAssetTypeId       : string2Uuid('019dcf97-3bac-72c3-8b59-b6ddbe8a8396'),  // Unstructured Data Query
+        queryDomainId          : string2Uuid('019dcf96-233a-72e1-bf25-8398b8c9146e'),  // DataXray Sync Filter
+        queryAssetTypeId       : string2Uuid('019dcf97-3bac-72c3-8b59-b6ddbe8a8396'),  // DataXray Sync Filter (was Unstructured Data Query)
         classificationsDomainId: string2Uuid('019c9fbf-622c-76f4-9dd6-2a9730a11515'),  // DataXray Classifications
         filesDomainId          : string2Uuid('019e9210-52a4-7c31-9b5e-3d8f0a6c1e42'),  // DataXray Files
         fileTypeId             : string2Uuid('019e9210-6e77-7b02-8c4a-92d15b7f30a9'),  // DataXray File
@@ -40,6 +40,7 @@ def dxrModelIds() {
         dataxrayIndexIdAttrTypeId: string2Uuid('019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'), // DataXray Index ID (numeric id in DXR's search index; stamped by the Edge-edition sync)
         datasourceIdAttrTypeId : string2Uuid('019e9212-3d44-7f61-8e5c-8a9b0c1d2e23'),  // DataXray Datasource ID (file assets; Cloud + Edge)
         objectIdAttrTypeId     : string2Uuid('019e9212-4e55-7072-9f6d-9b0c1d2e3f34'),  // DataXray Object ID (file assets; Cloud + Edge)
+        fileNameAttrTypeId     : string2Uuid('019e9212-5f66-7183-a07e-ac1d2e3f4a45'),  // DataXray File Name (file assets: DataXray's name, kept in sync; the asset name is the user's)
         linkAttrTypeId         : string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba'),
         searchLinkAttrTypeId   : string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254'),
         subtypeAttrTypeId      : string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad'),
@@ -48,6 +49,9 @@ def dxrModelIds() {
         candidateStatusId      : string2Uuid('00000000-0000-0000-0000-000000005008'),
         // Custom status created by configure: a file asset no saved search returns any more
         notInAnySearchStatusId : string2Uuid('019e9212-0a11-7c3e-9b2f-5d4e6f7a8b90'),
+        // Custom status created by configure: a file asset no saved search returns AND
+        // DataXray no longer has (nightly existence check, Cloud + Edge)
+        notInDataXrayStatusId  : string2Uuid('019e9212-6a77-7294-b18f-bd2e3f4a5b56'),
     ]
 }
 
@@ -117,14 +121,22 @@ def dxrWorkflowUserId() { return string2Uuid('00000000-0000-0000-0000-0000009000
 // was set by a person (Accepted, Under Review, …) and is never changed by a sync.
 def isIntegrationOwnedFileStatus(UUID statusId, Map ids) {
     return statusId == null || statusId == ids.candidateStatusId ||
-        statusId == ids.notInAnySearchStatusId || statusId == ids.obsoleteStatusId
+        statusId == ids.notInAnySearchStatusId || statusId == ids.notInDataXrayStatusId ||
+        statusId == ids.obsoleteStatusId
 }
 
 // Statuses a sync flips back to Candidate when a search matches the file again:
-// 'Not in any search', and Obsolete (what releases before v2.4 used).
+// 'Not in any search', 'Not in DataXray' (DataXray has the file again), and
+// Obsolete (what releases before v2.4 used).
 def isParkedFileStatus(UUID statusId, Map ids) {
-    return statusId == ids.notInAnySearchStatusId || statusId == ids.obsoleteStatusId
+    return statusId == ids.notInAnySearchStatusId || statusId == ids.notInDataXrayStatusId ||
+        statusId == ids.obsoleteStatusId
 }
+
+// Nightly existence check (Cloud + Edge): object ids asked about per request.
+// 200 keeps both the request and the answer (~250 bytes per file found, only
+// datasource_id and object_id returned) well under Edge's 100 KB limit.
+def dxrExistsCheckBatchSize() { return 200 }
 
 // Tag stamped on every classification asset written by the classification sync.
 def dxrClassificationSyncTag() { return 'dataxray-classification-sync' }
@@ -139,6 +151,7 @@ def rerunModelGap(Map ids) {
     if (!relationTypeApi.exists(ids.formerlyGroupsRelationTypeId)) { missing << "the relation type 'formerly groups'" }
     if (!attributeTypeApi.exists(ids.datasourceIdAttrTypeId)) { missing << "the attribute type 'DataXray Datasource ID'" }
     if (!attributeTypeApi.exists(ids.objectIdAttrTypeId)) { missing << "the attribute type 'DataXray Object ID'" }
+    if (!attributeTypeApi.exists(ids.fileNameAttrTypeId)) { missing << "the attribute type 'DataXray File Name'" }
     if (missing.isEmpty()) { return '' }
     return "This instance is missing ${missing.join(', ')}. Run Configure DataXray Workflows once (as an admin) after upgrading the DataXray workflows, then rerun.".toString()
 }

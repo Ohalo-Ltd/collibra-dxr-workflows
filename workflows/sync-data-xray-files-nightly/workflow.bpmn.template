@@ -2,7 +2,7 @@
 <!--
   syncDataXrayFilesNightly workflow
   =================================
-  Finds every Unstructured Data Query asset tagged 'dataxray-keep-in-sync' and
+  Finds every DataXray Sync Filter asset tagged 'dataxray-keep-in-sync' and
   starts one HEADLESS Rerun DataXray Search instance per query, so flagged
   searches rerun and re-sync their imported file assets automatically.
 

@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  syncDataXrayFilesNightly workflow — Collibra Cloud + Edge variant
+  =================================================================
+  Same process id and fan-out/sweep as workflow.bpmn.template, plus the
+  nightly check that DataXray still has the files no search returns:
+    startEvent (timer, 02:30)
+      → fanOutRerunsTask (script, sync: one headless rerun per flagged query,
+           then the orphan sweep → 'Not in any search')
+      → existsPrepareTask (script, sync: list 'Not in any search' / 'Not in
+           DataXray' file assets with an object key, batch them per datasource,
+           arm the first request)
+      → existsGateway ─ ${hasMoreWork} ─→ existsFetchTask (External API task)
+           → existsPageTask (script, async: apply the answer, arm the next)
+           → existsLoopGateway ─ ${hasMoreWork} ─→ back to existsFetchTask
+      → endEvent
+  Timer workflows that fail before their first async task are retried 3× and
+  then disabled, so both synchronous scripts never throw.
+
+  The only configuration variable is the Edge HTTP connection name. The reruns
+  this workflow starts use the settings configured on Rerun DataXray Search.
+-->
+<definitions xmlns="http://www.omg.org/spec/BPMN/20100524/MODEL"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+             xmlns:flowable="http://flowable.org/bpmn"
+             xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+             xmlns:omgdc="http://www.omg.org/spec/DD/20100524/DC"
+             xmlns:omgdi="http://www.omg.org/spec/DD/20100524/DI"
+             xmlns:design="http://flowable.org/design"
+             typeLanguage="http://www.w3.org/2001/XMLSchema"
+             expressionLanguage="http://www.w3.org/1999/XPath"
+             targetNamespace="http://www.collibra.com/apiv2"
+             exporter="Flowable Design"
+             exporterVersion="2025.1.09"
+             design:palette="flowable-core-process-palette">
+  <process id="syncDataXrayFilesNightly"
+           name="Sync DataXray Files (Nightly)"
+           isExecutable="true">
+    <extensionElements>
+      <design:stencilid><![CDATA[BPMNDiagram]]></design:stencilid>
+    </extensionElements>
+    <startEvent id="startEvent" name="Start">
+      <extensionElements>
+        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (DataXray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
+        <design:stencilid><![CDATA[StartTimerEvent]]></design:stencilid>
+      </extensionElements>
+      <timerEventDefinition>
+        <timeCycle flowable:type="cron">0 30 2 * * ?</timeCycle>
+      </timerEventDefinition>
+    </startEvent>
+    <scriptTask id="fanOutRerunsTask" name="Start Reruns for Flagged Queries" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:nightly_files_driver.groovy}}</script>
+    </scriptTask>
+    <scriptTask id="existsPrepareTask" name="Prepare DataXray Existence Check" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:exists_prepare_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="existsGateway" name="Anything to check?" default="flowNothingToCheck">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <serviceTask id="existsFetchTask" name="Call DataXray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
+      <extensionElements>
+        <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestUrl"><flowable:expression><![CDATA[${dxrRequestPath}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestHeaders"><flowable:expression><![CDATA[${dxrRequestHeaders}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestBody"><flowable:expression><![CDATA[${dxrRequestBody}]]></flowable:expression></flowable:field>
+        <flowable:field name="disallowRedirects"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="responseVariableName"><flowable:string><![CDATA[dxrResponseBody]]></flowable:string></flowable:field>
+        <flowable:field name="resultVariablePrefix"><flowable:string><![CDATA[dxr]]></flowable:string></flowable:field>
+        <flowable:field name="ignoreException"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveRequestVariables"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParameters"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParametersTransient"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseVariableAsJson"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <design:stencilid><![CDATA[HttpTask]]></design:stencilid>
+        <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
+      </extensionElements>
+    </serviceTask>
+    <scriptTask id="existsPageTask" name="Update File Statuses (batch)" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:exists_page_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="existsLoopGateway" name="More requests?" default="flowChecksDone">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <endEvent id="endEvent" name="End">
+      <extensionElements>
+        <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
+      </extensionElements>
+    </endEvent>
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="fanOutRerunsTask"/>
+    <sequenceFlow id="flow2" sourceRef="fanOutRerunsTask" targetRef="existsPrepareTask"/>
+    <sequenceFlow id="flow3" sourceRef="existsPrepareTask" targetRef="existsGateway"/>
+    <sequenceFlow id="flowCheck" sourceRef="existsGateway" targetRef="existsFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowNothingToCheck" sourceRef="existsGateway" targetRef="endEvent"/>
+    <sequenceFlow id="flow4" sourceRef="existsFetchTask" targetRef="existsPageTask"/>
+    <sequenceFlow id="flow5" sourceRef="existsPageTask" targetRef="existsLoopGateway"/>
+    <sequenceFlow id="flowMoreChecks" sourceRef="existsLoopGateway" targetRef="existsFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowChecksDone" sourceRef="existsLoopGateway" targetRef="endEvent"/>
+  </process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_syncDataXrayFilesNightly">
+    <bpmndi:BPMNPlane bpmnElement="syncDataXrayFilesNightly" id="BPMNPlane_syncDataXrayFilesNightly">
+      <bpmndi:BPMNShape bpmnElement="startEvent" id="S_startEvent"><omgdc:Bounds height="30.0" width="30.0" x="60.0" y="165.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="fanOutRerunsTask" id="S_fanOutRerunsTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="existsPrepareTask" id="S_existsPrepareTask"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="existsGateway" id="S_existsGateway"><omgdc:Bounds height="40.0" width="40.0" x="410.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="existsFetchTask" id="S_existsFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="490.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="existsPageTask" id="S_existsPageTask"><omgdc:Bounds height="80.0" width="100.0" x="630.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="existsLoopGateway" id="S_existsLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="770.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="850.0" y="166.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="90.0" y="180.0"/><omgdi:waypoint x="130.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="230.0" y="180.0"/><omgdi:waypoint x="270.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="370.0" y="180.0"/><omgdi:waypoint x="410.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowCheck" id="E_flowCheck"><omgdi:waypoint x="450.0" y="180.0"/><omgdi:waypoint x="490.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowNothingToCheck" id="E_flowNothingToCheck"><omgdi:waypoint x="430.0" y="200.0"/><omgdi:waypoint x="430.0" y="260.0"/><omgdi:waypoint x="864.0" y="260.0"/><omgdi:waypoint x="864.0" y="194.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow4" id="E_flow4"><omgdi:waypoint x="590.0" y="180.0"/><omgdi:waypoint x="630.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow5" id="E_flow5"><omgdi:waypoint x="730.0" y="180.0"/><omgdi:waypoint x="770.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowMoreChecks" id="E_flowMoreChecks"><omgdi:waypoint x="790.0" y="160.0"/><omgdi:waypoint x="790.0" y="100.0"/><omgdi:waypoint x="540.0" y="100.0"/><omgdi:waypoint x="540.0" y="140.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowChecksDone" id="E_flowChecksDone"><omgdi:waypoint x="810.0" y="180.0"/><omgdi:waypoint x="850.0" y="180.0"/></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</definitions>

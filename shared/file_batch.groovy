@@ -14,13 +14,14 @@
 //   – Missing assets are bulk-created (addAssets) in the DataXray Files
 //     domain. The full name carries a short UUID-derived suffix (Collibra
 //     names are unique per domain; 10k files WILL repeat "invoice.pdf");
-//     the display name is the clean filename.
-//   – Existing assets are refreshed: renamed if the filename changed, and
-//     reactivated (status Candidate) if a previous sync parked them as
-//     'Not in any search' (or Obsolete, before v2.4). A status a person set
-//     (Accepted, Under Review, …) is never changed.
-//   – Attributes (DataXray ID, File Path, File Size, Last Modified,
-//     Datasource Name, Link) are written with setAssetAttributes (replace-all
+//     the display name is the clean filename. Both are set only here: a
+//     rename in Collibra is kept, and DataXray's current filename goes to the
+//     DataXray File Name attribute (v2.7).
+//   – Existing assets are reactivated (status Candidate) if a previous sync
+//     parked them as 'Not in any search' (or Obsolete, before v2.4). A status
+//     a person set (Accepted, Under Review, …) is never changed.
+//   – Attributes (DataXray ID, DataXray File Name, File Path, File Size, Last
+//     Modified, Datasource Name, Link) are written with setAssetAttributes (replace-all
 //     per type — idempotent); size and date in readable form (see below).
 //   – Relations: query asset —returns→ file asset (the per-query membership
 //     the rerun workflow diffs against), and file —groups→ each matched
@@ -102,23 +103,21 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             created = newItems.size()
         }
 
-        // --- Refresh pre-existing assets (rename / reactivate) ------------------
+        // --- Refresh pre-existing assets (reactivate) ----------------------------
 
+        // The asset's name is set from DataXray's file name once, at creation,
+        // and is the user's after that: a rename in Collibra sticks. DataXray's
+        // current name is kept in the DataXray File Name attribute instead.
         existingItems.each { pair ->
             def (tuple, assetId) = pair
             try {
                 def asset = assetApi.getAsset(assetId)
-                def desiredName = uniqueAssetName(fileNameOf(tuple), assetId)
-                def needsRename = asset.getName() != desiredName
                 // Only a status the integration set is flipped back; a status a
                 // person chose stays as it is.
-                def isParked = isParkedFileStatus(asset.getStatus()?.getId(), ids)
-                if (needsRename || isParked) {
-                    def change = com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest.builder().id(assetId)
-                    if (needsRename) { change.name(desiredName).displayName(fileNameOf(tuple)) }
-                    if (isParked)    { change.statusId(ids.candidateStatusId) }
-                    assetApi.changeAsset(change.build())
-                    if (isParked) { loggerApi.info("Reactivated file asset ${assetId} (was '${asset.getStatus()?.getName()}')") }
+                if (isParkedFileStatus(asset.getStatus()?.getId(), ids)) {
+                    assetApi.changeAsset(com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest.builder()
+                        .id(assetId).statusId(ids.candidateStatusId).build())
+                    loggerApi.info("Reactivated file asset ${assetId} (was '${asset.getStatus()?.getName()}')")
                 }
                 updated++
             } catch (Exception refreshEx) {
@@ -132,6 +131,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
         (newItems + existingItems).each { pair ->
             def (tuple, assetId) = pair
             setFileAssetAttr(assetId, ids.dataxrayIdAttrTypeId,   tuple[0])
+            setFileAssetAttr(assetId, ids.fileNameAttrTypeId,     fileNameOf(tuple))
             setFileAssetAttr(assetId, ids.filePathAttrTypeId,     tuple[2])
             setFileAssetAttr(assetId, ids.fileSizeAttrTypeId,     readableFileSize(tuple[4]))
             setFileAssetAttr(assetId, ids.lastModifiedAttrTypeId, readableTimestamp(tuple[5]))
@@ -404,7 +404,9 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
 // true when the status was changed.
 def parkFileAsset(asset, Map ids, String reason) {
     def statusId = asset.getStatus()?.getId()
-    if (statusId == ids.notInAnySearchStatusId) { return false }
+    // 'Not in DataXray' already says more (no search returns it, and DataXray
+    // no longer has it): keep it.
+    if (statusId == ids.notInAnySearchStatusId || statusId == ids.notInDataXrayStatusId) { return false }
     if (!isIntegrationOwnedFileStatus(statusId, ids)) {
         loggerApi.info("File asset '${asset.getName()}' [${asset.getId()}] is in no search (${reason}); kept its status '${asset.getStatus()?.getName()}', set by a person")
         return false

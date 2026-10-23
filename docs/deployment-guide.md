@@ -22,7 +22,7 @@ Both editions use the same process ids, so you can switch from one to the other 
 |---|---|---|
 | **Configure DataXray Workflows** | One-time setup. Creates the community, domains, asset types, attribute types, relation types, the **Not in any search** status and the assignments the other workflows rely on, creates the two access-control roles, and sets who is allowed to run each workflow. Idempotent — safe to run again. | From the **+ Create** menu. Run once after importing. |
 | **Search DataXray** | Builds a DataXray search query from Collibra classifications (every selected label, extractor and annotator must match — criteria are always AND-ed; the optional annotated text may appear in any of the annotators chosen for it), previews the matching files, and offers to **import all results as file assets**, to **keep the search in sync nightly**, and to let later reruns **create assets for new files** (three independent options). | From the **+ Create** menu, on demand. |
-| **Rerun DataXray Search** | Reruns a saved search from its query asset and re-syncs its file assets: new files imported, changed files updated, files no search returns any more set to **Not in any search** (never deleted). | From an **Unstructured Data Query** asset's page; also run headlessly by the nightly file sync. |
+| **Rerun DataXray Search** | Reruns a saved search from its query asset and re-syncs its file assets: new files imported, changed files updated, files no search returns any more set to **Not in any search** (never deleted). | From a **DataXray Sync Filter** asset's page; also run headlessly by the nightly file sync. |
 | **Sync DataXray Classifications** | Syncs classifications from DataXray into Collibra, on demand. Classifications that disappear from DataXray are **retired**, not deleted. | From the **+ Create** menu, on demand. |
 | **Sync DataXray Classification (Nightly)** | The same classification sync, run automatically every night at **02:00** (server time). | Runs on a timer; no manual start. |
 | **Sync DataXray Files (Nightly)** | Finds every search flagged **keep in sync** and reruns it headlessly every night at **02:30** (after the classification sync). | Runs on a timer; no manual start. |
@@ -191,7 +191,7 @@ everything without being added to these roles.
 
   The tags are set as soon as you click **Send**, and you can add or remove
   either one on the query asset at any time.
-- **Rerun DataXray Search** — open a saved **Unstructured Data Query** asset
+- **Rerun DataXray Search** — open a saved **DataXray Sync Filter** asset
   and start the workflow from its page. The saved criteria are rebuilt from the
   query's linked classifications (so DataXray renames are picked up
   automatically); if a criterion was deleted in DataXray, the rerun stops and
@@ -214,7 +214,7 @@ everything without being added to these roles.
   are never removed or changed. The full file-asset lifecycle — creation, the
   25,000 cap, sync, orphaning, deletion and what to do at the limit — is
   explained in [file-asset-lifecycle.md](file-asset-lifecycle.md).
-- **Deleting a saved query** — deleting an Unstructured Data Query asset does
+- **Deleting a saved query** — deleting a DataXray Sync Filter asset does
   **not** delete its imported file assets. Files that only that query returned
   are picked up by the nightly file sync's orphan sweep and set to **Not in any
   search** the following night; files other queries also return are
@@ -264,6 +264,27 @@ the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute type
 name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes:
 settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
 (`data-xray` by default) stay as they are.
+
+### Upgrading to v2.7
+
+Re-import the workflows, then **run Configure DataXray Workflows once** as an
+admin. It creates the **DataXray File Name** attribute type and adds it to
+the **DataXray File** asset type, and renames the **Unstructured Data Query**
+asset type to **DataXray Sync Filter** (only if it still has that name). It
+also creates the **DataXray Datasource ID** and **DataXray Object ID**
+attribute types if you are upgrading from a release before v2.6 (they stay
+empty in the on-prem edition). Until it has run, **Rerun DataXray Search**
+refuses to start with a message saying so.
+
+From v2.7 a sync no longer renames existing file assets: the asset name is
+set from DataXray's filename when the asset is created and can then be
+changed in Collibra. DataXray's current filename is kept in the **DataXray
+File Name** attribute.
+
+Configure also creates the **Not in DataXray** status. Only the Cloud + Edge
+edition sets it, from a nightly check against DataXray; the on-prem edition
+cannot run that check, because DataXray's public files API does not return the
+object ids it relies on.
 
 ### Upgrading to v2.4
 

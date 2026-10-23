@@ -74,13 +74,13 @@ if (modelGap) {
 
 def queryId = item?.getId()
 if (queryId == null) {
-    abort('Rerun DataXray Search', 'No query asset — this workflow must be started from an Unstructured Data Query asset.')
+    abort('Rerun DataXray Search', 'No query asset — this workflow must be started from a DataXray Sync Filter asset.')
     return
 }
 def queryAsset = assetApi.getAsset(queryId)
 if (queryAsset.getType()?.getId() != ids.queryAssetTypeId) {
     abort('Rerun DataXray Search',
-        "'${queryAsset.getName()}' is a ${queryAsset.getType()?.getName()} asset — this workflow can only rerun an Unstructured Data Query asset (a saved search created by Search DataXray).")
+        "'${queryAsset.getName()}' is a ${queryAsset.getType()?.getName()} asset — this workflow can only rerun a DataXray Sync Filter asset (a saved search created by Search DataXray).")
     return
 }
 def conditionName = queryAsset.getName()

@@ -129,8 +129,11 @@ def FILTER_ATTR_ID        = '019e9210-e04d-7c6b-a481-5f29d8036c7a'
 // file a new id (its index dropped and rescanned).
 def DATASOURCE_ID_ATTR_ID = '019e9212-3d44-7f61-8e5c-8a9b0c1d2e23'
 def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
+// DataXray's own name for the file, refreshed on every sync. The asset's name
+// is set from it once, when the asset is created, and is the user's after that.
+def FILE_NAME_ATTR_ID     = '019e9212-5f66-7183-a07e-ac1d2e3f4a45'
 
-// "returns / returned by" — links an Unstructured Data Query asset (source) to
+// "returns / returned by" — links a DataXray Sync Filter asset (source) to
 // each DataXray File asset (target) it currently returns. Deliberately NOT
 // the system "groups" relation type (7017), which the query already uses for
 // its classification criteria: a dedicated type makes "which files does this
@@ -138,7 +141,7 @@ def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
 // workflow retire a file only once NO query returns it any more.
 def RETURNS_RELTYPE_ID    = '019e9210-f180-79dc-b5a0-6c31e94f82d5'
 
-// "searches text in / text searched by" — links an Unstructured Data Query
+// "searches text in / text searched by" — links a DataXray Sync Filter
 // asset (source) to each Annotator asset (target) whose annotations its
 // annotated-text filter is searched in. Distinct from the query's "groups"
 // criteria relations: those annotators are AND-ed requirements, these only
@@ -160,6 +163,11 @@ def FORMERLY_GROUPS_RELTYPE_ID  = '019e9212-2c33-7e50-9d4b-7f6a8b9c0d12'
 // returns any more (it used to become Obsolete). Added to the File assignment.
 def NOT_IN_SEARCH_STATUS_ID     = '019e9212-0a11-7c3e-9b2f-5d4e6f7a8b90'
 def NOT_IN_SEARCH_STATUS_NAME   = 'Not in any search'
+// Custom status 'Not in DataXray' — set by the nightly file sync (Cloud + Edge)
+// on a 'Not in any search' file asset that DataXray no longer has: the file,
+// or its whole datasource, was deleted. Added to the File assignment.
+def NOT_IN_DXR_STATUS_ID        = '019e9212-6a77-7294-b18f-bd2e3f4a5b56'
+def NOT_IN_DXR_STATUS_NAME      = 'Not in DataXray'
 
 // System "groups / is grouped by" relation type — present on every instance.
 // query→classification and file→classification links use it.
@@ -227,7 +235,9 @@ def assetTypeDefs = [
     [id: '019c9fbe-25c3-71b7-90ac-057dd582fa1e', name: 'Label',
      parent: DATA_ASSET_TYPE_ID, symbol: 'ICON_CODE', color: '#3e9bd9',
      icon: 'uf-additional-icon-symbol_direction', acronym: null],
-    [id: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'Unstructured Data Query',
+    // A saved search: which DataXray files the integration keeps in sync.
+    [id: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'DataXray Sync Filter',
+     legacyName: 'Unstructured Data Query',
      parent: DATA_ASSET_TYPE_ID, symbol: 'ICON_CODE', color: '#1fb07f',
      icon: 'uf-additional-icon-tool_wrench', acronym: null],
     // displayName enabled: imported file assets carry a uniqueness suffix in
@@ -251,6 +261,7 @@ def attrTypeDefs = [
     [id: DATASOURCE_ATTR_ID,    name: 'Datasource Name',       stringType: 'PLAIN_TEXT'],
     [id: DATASOURCE_ID_ATTR_ID, name: 'DataXray Datasource ID', stringType: 'PLAIN_TEXT'],
     [id: OBJECT_ID_ATTR_ID,     name: 'DataXray Object ID',    stringType: 'PLAIN_TEXT'],
+    [id: FILE_NAME_ATTR_ID,     name: 'DataXray File Name',    stringType: 'PLAIN_TEXT'],
     [id: QUERY_ATTR_ID,         name: 'DataXray Query',        stringType: 'PLAIN_TEXT'],
     [id: FILTER_ATTR_ID,        name: 'Annotated Text Filter', stringType: 'PLAIN_TEXT'],
 ]
@@ -274,7 +285,7 @@ def assignmentDefs = [
     // via the API exist regardless, but stay invisible without this).
     // TO_TARGET = this type is the relation's source (page shows the role);
     // TO_SOURCE = this type is the target (page shows the co-role).
-    [assetTypeId: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'Unstructured Data Query',
+    [assetTypeId: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'DataXray Sync Filter',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, FILES_ATTR_ID, DXID_ATTR_ID,
                    QUERY_ATTR_ID, FILTER_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,      direction: 'TO_TARGET'],   // groups classifications
@@ -284,14 +295,14 @@ def assignmentDefs = [
     // descriptionMin 0: imported file assets carry no Description, so a
     // mandatory Description would flag every one of them as incomplete.
     [assetTypeId: FILE_TYPE_ID, name: 'DataXray File', descriptionMin: 0,
-     customAttrs: [FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
+     customAttrs: [FILE_NAME_ATTR_ID, FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
                    DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID,
                    DATASOURCE_ID_ATTR_ID, OBJECT_ID_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
                  [id: RETURNS_RELTYPE_ID, direction: 'TO_SOURCE'],   // returned by queries
                  [id: FORMERLY_GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],  // formerly groups classifications
                  [id: FORMERLY_RETURNS_RELTYPE_ID, direction: 'TO_SOURCE']], // formerly returned by queries
-     extraStatusIds: [NOT_IN_SEARCH_STATUS_ID]],
+     extraStatusIds: [NOT_IN_SEARCH_STATUS_ID, NOT_IN_DXR_STATUS_ID]],
 ]
 
 // Standard out-of-the-box statuses, Candidate first (it becomes the default).
@@ -409,7 +420,7 @@ attrTypeDefs.each { a ->
 
 // --- Phase 4b: relation type -------------------------------------------------
 
-// "Unstructured Data Query returns DataXray File". Created with a fixed
+// "DataXray Sync Filter returns DataXray File". Created with a fixed
 // canonical UUID like everything else; the search/rerun scripts reference it
 // as a constant.
 try {
@@ -432,7 +443,7 @@ try {
     loggerApi.error("ensure relation type failed: ${e.message}")
 }
 
-// "Unstructured Data Query searches text in Annotator" — scopes the query's
+// "DataXray Sync Filter searches text in Annotator" — scopes the query's
 // annotated-text filter to specific annotators (see TEXT_FILTER_RELTYPE_ID).
 try {
     def rtid = string2Uuid(TEXT_FILTER_RELTYPE_ID)
@@ -484,26 +495,33 @@ try {
     }
 }
 
-// --- Phase 4c: status ----------------------------------------------------------
+// --- Phase 4c: statuses --------------------------------------------------------
 
-// 'Not in any search': the status a file asset gets when no saved search
-// returns it any more. Fixed canonical UUID like everything else.
-try {
-    def sid = string2Uuid(NOT_IN_SEARCH_STATUS_ID)
-    if (statusApi.exists(sid)) {
-        skipped << "Status '${NOT_IN_SEARCH_STATUS_NAME}'"
-    } else {
-        statusApi.addStatus(AddStatusRequest.builder()
-            .id(sid)
-            .name(NOT_IN_SEARCH_STATUS_NAME)
-            .description('Set by the DataXray workflows on a file asset that no saved search returns any more. The file still exists in DataXray; a search that matches it again sets it back to Candidate. A status set by a person is never changed by the workflows.')
-            .build())
-        created << "Status '${NOT_IN_SEARCH_STATUS_NAME}'"
-        loggerApi.info("Created status ${NOT_IN_SEARCH_STATUS_NAME} [${NOT_IN_SEARCH_STATUS_ID}]")
+// The statuses the workflows give a file asset that has dropped out of every
+// saved search. Fixed canonical UUIDs like everything else.
+[
+    [id: NOT_IN_SEARCH_STATUS_ID, name: NOT_IN_SEARCH_STATUS_NAME,
+     description: 'Set by the DataXray workflows on a file asset that no saved search returns any more. The file still exists in DataXray; a search that matches it again sets it back to Candidate. A status set by a person is never changed by the workflows.'],
+    [id: NOT_IN_DXR_STATUS_ID, name: NOT_IN_DXR_STATUS_NAME,
+     description: 'Set by the nightly DataXray file sync (Collibra Cloud + Edge edition) on a file asset that no saved search returns and that DataXray no longer has: the file, or its whole datasource, was deleted in DataXray. If DataXray has the file again it goes back to Not in any search, or to Candidate when a search matches it. A status set by a person is never changed by the workflows.'],
+].each { st ->
+    try {
+        def sid = string2Uuid(st.id)
+        if (statusApi.exists(sid)) {
+            skipped << "Status '${st.name}'"
+        } else {
+            statusApi.addStatus(AddStatusRequest.builder()
+                .id(sid)
+                .name(st.name)
+                .description(st.description)
+                .build())
+            created << "Status '${st.name}'"
+            loggerApi.info("Created status ${st.name} [${st.id}]")
+        }
+    } catch (Exception e) {
+        failed << "Status '${st.name}': ${e.message} (a status with this name may already exist under another id — rename it and re-run)"
+        loggerApi.error("ensure status ${st.name} failed: ${e.message}")
     }
-} catch (Exception e) {
-    failed << "Status '${NOT_IN_SEARCH_STATUS_NAME}': ${e.message} (a status with this name may already exist under another id — rename it and re-run)"
-    loggerApi.error("ensure status failed: ${e.message}")
 }
 
 // --- Phase 5: assignments (best-effort, never disturb existing) -------------
@@ -704,7 +722,9 @@ ensureRole(ROLE_USER_ID,  ROLE_USER_NAME,  [])
 // --- Phase 6b: rename to the DataXray brand ---------------------------------
 
 // The product was renamed from "Data X-Ray" to "DataXray" (and the queries
-// domain from "Data X-Ray Custom Queries" to "DataXray Sync Filter"). Phases
+// domain from "Data X-Ray Custom Queries" to "DataXray Sync Filter"; in v2.7 the
+// query asset type from "Unstructured Data Query" to "DataXray Sync Filter",
+// named by its def's legacyName). Phases
 // 1-6 only create what is missing, so an existing installation still carries
 // the old names. Rename each element while it still has its OLD DEFAULT name;
 // a name someone changed in Collibra is theirs and is left alone. Everything is
@@ -712,8 +732,8 @@ ensureRole(ROLE_USER_ID,  ROLE_USER_NAME,  [])
 def legacyName = { String name ->
     name == 'DataXray Sync Filter' ? 'Data X-Ray Custom Queries' : name.replace('DataXray', 'Data X-Ray')
 }
-def renameIfLegacy = { String label, String newName, Closure currentName, Closure doRename ->
-    def oldName = legacyName(newName)
+def renameIfLegacy = { String label, String newName, Closure currentName, Closure doRename, String legacy = null ->
+    def oldName = legacy ?: legacyName(newName)
     if (oldName == newName) { return }
     try {
         def current = currentName()
@@ -740,7 +760,8 @@ domainDefs.each { d ->
 assetTypeDefs.each { t ->
     renameIfLegacy('asset type', t.name,
         { assetTypeApi.exists(string2Uuid(t.id)) ? assetTypeApi.getAssetType(string2Uuid(t.id)).getName() : null },
-        { String n -> assetTypeApi.changeAssetType(ChangeAssetTypeRequest.builder().id(string2Uuid(t.id)).name(n).build()) })
+        { String n -> assetTypeApi.changeAssetType(ChangeAssetTypeRequest.builder().id(string2Uuid(t.id)).name(n).build()) },
+        t.legacyName)
 }
 attrTypeDefs.each { a ->
     renameIfLegacy('attribute type', a.name,

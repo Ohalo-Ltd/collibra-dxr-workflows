@@ -2,7 +2,7 @@
 //
 // Nightly driver for the DataXray file sync. Two phases:
 //
-// 1. Fan-out: finds every Unstructured Data Query asset tagged
+// 1. Fan-out: finds every DataXray Sync Filter asset tagged
 //    'dataxray-keep-in-sync' (the flag set when a user ticks "keep in sync"
 //    at import time) and starts one HEADLESS Rerun DataXray Search instance
 //    per query. Each rerun re-runs its search and re-syncs its file assets in
@@ -34,11 +34,13 @@
 // before its first async task is retried 3× by Collibra and then permanently
 // disabled until redeployment. Every failure path logs and ends cleanly.
 //
-// This workflow has NO DataXray connection settings of its own: it never
-// calls DataXray, so the same script ships in both editions. Each rerun
-// instance it starts uses the connection settings configured on the Rerun
-// DataXray Search workflow — the Base URL / Bearer token on-prem, the Edge
-// HTTP connection name in the Collibra Cloud + Edge edition.
+// This script never calls DataXray, so it ships unchanged in both editions.
+// Each rerun instance it starts uses the connection settings configured on the
+// Rerun DataXray Search workflow — the Base URL / Bearer token on-prem, the
+// Edge HTTP connection name in the Collibra Cloud + Edge edition. The Edge
+// edition then runs a third phase after this script, with its own connection
+// name setting: the DataXray existence check (workflow.edge.bpmn.template,
+// shared/file_exists_edge.groovy), which sets 'Not in DataXray'.
 //
 // Process variables produced (audit only — there is no results form):
 //   nightlyQueriesFound   (Integer) – flagged query assets discovered (incl. retired)
