@@ -79,7 +79,7 @@ Sync complete: created=0 updated=69 retired=0 skipped=13 failed=0
 
 ## What it does, and what it deliberately mirrors
 
-- **Upsert by Data X-Ray ID.** Each asset is found through its *Data X-Ray ID* attribute, so a rename in Data X-Ray renames the asset rather than creating a duplicate. An existing same-named asset without the attribute is adopted once.
+- **Upsert by Data X-Ray ID.** Each asset is found through its *Data X-Ray ID* attribute, so a rename in Data X-Ray renames the asset rather than creating a duplicate. Matching is by ID only: a classification deleted in Data X-Ray and re-created under the same name is a new asset, and the old, retired asset is renamed *Name (retired 1a2b3c4d)* to free the name. A same-named asset that is not a retired Data X-Ray classification (one added by hand, say) is never taken over; that item fails with a message naming the clash.
 - **Colliding names** are suffixed with the subtype, for example `VAT Number (Named Entity)` and `VAT Number (Regular Expression)`.
 - **Tag `dataxray-classification-sync`** on every asset it writes. Assets in the domain without that tag are never touched.
 - **Retire, never delete.** Tagged assets that disappeared from Data X-Ray are set to *Obsolete*; they come back to *Candidate* if the classification reappears. A rerun of a saved search relies on this to refuse a query whose criterion was deleted. If Data X-Ray returns an empty catalogue nothing is retired.

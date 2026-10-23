@@ -184,7 +184,7 @@ def computeImportFeasibility(int total, int filesDomainCount, String totalDispla
     boolean importWarn    = importAllowed && total > dxrWarnImportFiles()
     boolean importBlocked = total > 0 && !importAllowed
     def importBlockedMessage = importBlocked
-        ? "Importing is disabled for this search: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this search matched ${totalDisplay} file(s) — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit. Narrow the query, or retire imported searches you no longer need.".toString()
+        ? "Importing is disabled for this search: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this search matched ${totalDisplay} file(s) — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit. Narrow the query, or retire imported searches you no longer need.".toString()
         : ''
     return [importAllowed: importAllowed, importWarn: importWarn, importBlocked: importBlocked,
             importBlockedMessage: importBlockedMessage, projectedTotal: projectedTotal]

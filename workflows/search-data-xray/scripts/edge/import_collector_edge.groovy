@@ -20,7 +20,6 @@ announceDxrVersion('Search Data X-Ray import')
 def ids = dxrModelIds()
 
 def queryAssetId = string2Uuid((execution.getVariable('queryAssetId') ?: '').toString())
-def keepInSync   = execution.getVariable('keepInSync') == true
 int total        = (execution.getVariable('resultCount') ?: 0) as int
 // Start no larger than the preview ended up using: if Collibra refused its
 // rows as too large at the configured size, the import pages would be too.
@@ -29,10 +28,10 @@ int pageSize     = Math.min(configuredPageSize, edgeCurrentPageSize(configuredPa
 
 // --- Re-check the instance-wide cap -------------------------------------------
 
-int filesDomainCount = countAssetsInDomain(ids.filesDomainId)
+int filesDomainCount = countFileAssets(ids)
 int projectedTotal = filesDomainCount + total
 if (projectedTotal > dxrMaxTotalFileAssets()) {
-    def msg = "Import refused: the Data X-Ray Files domain holds ${filesDomainCount} file asset(s) and this search matched ${total} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
+    def msg = "Import refused: Collibra holds ${filesDomainCount} Data X-Ray file asset(s) and this search matched ${total} — the projected ${projectedTotal} would exceed the ${dxrMaxTotalFileAssets()} instance-wide limit."
     loggerApi.error(msg)
     def wf = new WorkflowException(msg)
     wf.setTitleMessage('Data X-Ray import refused')
@@ -53,9 +52,3 @@ def items = readJsonVariable('dxrQueryItems', [])
 startEdgeFilesPage(items, 0, pageSize, null)
 loggerApi.info("Import ready: ${total} file(s) in pages of ${pageSize}; files domain currently holds ${filesDomainCount}")
 
-// --- Keep-in-sync flag ----------------------------------------------------------
-
-if (keepInSync) {
-    addAssetTagQuietly(queryAssetId, dxrKeepInSyncTag(),
-        "Tagged query asset ${queryAssetId} with ${dxrKeepInSyncTag()} — the nightly file sync will rerun this search")
-}

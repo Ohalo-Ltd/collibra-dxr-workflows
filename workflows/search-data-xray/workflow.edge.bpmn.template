@@ -15,6 +15,7 @@
       → searchOutcomeGateway
           ├─ failed → searchFailedTask (user form) → endEvent
           └─ ok     → resultsTask (user form: searchResultsForm)
+      → queryFlagsTask (script: tags the query — keep in sync / no automatic import)
       → decideImportGateway
           ├─ import unticked → endEvent
           └─ import ticked   → importCollectorTask (script, sync: cap check,
@@ -115,6 +116,13 @@
         <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
       </extensionElements>
     </exclusiveGateway>
+    <!-- Records the results task's sync options on the query asset as tags. -->
+    <scriptTask id="queryFlagsTask" name="Apply Sync Options" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:apply_query_flags.groovy}}</script>
+    </scriptTask>
     <scriptTask id="importCollectorTask" name="Prepare Import" scriptFormat="groovy" flowable:autoStoreVariables="false">
       <extensionElements>
         <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
@@ -179,7 +187,8 @@
     </sequenceFlow>
     <sequenceFlow id="flowSearchOk" sourceRef="searchOutcomeGateway" targetRef="resultsTask"/>
     <sequenceFlow id="flowFailedAck" sourceRef="searchFailedTask" targetRef="endEvent"/>
-    <sequenceFlow id="flow6" sourceRef="resultsTask" targetRef="decideImportGateway"/>
+    <sequenceFlow id="flow6" sourceRef="resultsTask" targetRef="queryFlagsTask"/>
+    <sequenceFlow id="flowFlags" sourceRef="queryFlagsTask" targetRef="decideImportGateway"/>
     <sequenceFlow id="flowSkipImport" sourceRef="decideImportGateway" targetRef="endEvent"/>
     <sequenceFlow id="flowImportYes" sourceRef="decideImportGateway" targetRef="importCollectorTask">
       <conditionExpression xsi:type="tFormalExpression"><![CDATA[${importDecision == true}]]></conditionExpression>
@@ -204,6 +213,7 @@
       <bpmndi:BPMNShape bpmnElement="searchOutcomeGateway" id="S_searchOutcomeGateway"><omgdc:Bounds height="40.0" width="40.0" x="770.0" y="160.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="searchFailedTask" id="S_searchFailedTask"><omgdc:Bounds height="80.0" width="100.0" x="740.0" y="20.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="resultsTask" id="S_resultsTask"><omgdc:Bounds height="80.0" width="100.0" x="850.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="queryFlagsTask" id="S_queryFlagsTask"><omgdc:Bounds height="80.0" width="100.0" x="850.0" y="20.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="decideImportGateway" id="S_decideImportGateway"><omgdc:Bounds height="40.0" width="40.0" x="990.0" y="160.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="996.0" y="46.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="importCollectorTask" id="S_importCollectorTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="320.0"/></bpmndi:BPMNShape>
@@ -222,7 +232,8 @@
       <bpmndi:BPMNEdge bpmnElement="flowSearchFailed" id="E_flowSearchFailed"><omgdi:waypoint x="790.0" y="160.0"/><omgdi:waypoint x="790.0" y="100.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowSearchOk" id="E_flowSearchOk"><omgdi:waypoint x="810.0" y="180.0"/><omgdi:waypoint x="850.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowFailedAck" id="E_flowFailedAck"><omgdi:waypoint x="840.0" y="60.0"/><omgdi:waypoint x="996.0" y="60.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flow6" id="E_flow6"><omgdi:waypoint x="950.0" y="180.0"/><omgdi:waypoint x="990.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow6" id="E_flow6"><omgdi:waypoint x="900.0" y="140.0"/><omgdi:waypoint x="900.0" y="100.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowFlags" id="E_flowFlags"><omgdi:waypoint x="950.0" y="60.0"/><omgdi:waypoint x="970.0" y="60.0"/><omgdi:waypoint x="970.0" y="180.0"/><omgdi:waypoint x="990.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowSkipImport" id="E_flowSkipImport"><omgdi:waypoint x="1010.0" y="160.0"/><omgdi:waypoint x="1010.0" y="74.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowImportYes" id="E_flowImportYes"><omgdi:waypoint x="1010.0" y="200.0"/><omgdi:waypoint x="1010.0" y="280.0"/><omgdi:waypoint x="180.0" y="280.0"/><omgdi:waypoint x="180.0" y="320.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow7" id="E_flow7"><omgdi:waypoint x="230.0" y="360.0"/><omgdi:waypoint x="270.0" y="360.0"/></bpmndi:BPMNEdge>

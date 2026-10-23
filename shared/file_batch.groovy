@@ -13,7 +13,9 @@
 //     names are unique per domain; 10k files WILL repeat "invoice.pdf");
 //     the display name is the clean filename.
 //   – Existing assets are refreshed: renamed if the filename changed, and
-//     reactivated (status Candidate) if a previous sync retired them.
+//     reactivated (status Candidate) if a previous sync parked them as
+//     'Not in any search' (or Obsolete, before v2.4). A status a person set
+//     (Accepted, Under Review, …) is never changed.
 //   – Attributes (Data X-Ray ID, File Path, File Size, Last Modified,
 //     Datasource Name, Link) are written with setAssetAttributes (replace-all
 //     per type — idempotent).
@@ -22,6 +24,13 @@
 //     classification. Relations for freshly created assets are added in bulk
 //     (no duplicates possible); relations for pre-existing assets are added
 //     one by one with individual catches, since Collibra rejects duplicates.
+//   – Links that stop applying are not deleted but swapped to a "formerly"
+//     relation type (query —formerly returns→ file, file —formerly groups→
+//     classification), and swapped back if they apply again. Only links the
+//     integration created (createdBy = the workflow user) are ever touched: a
+//     file→classification link a person made is left exactly as it is.
+//   – opts.createNew == false (query tagged dataxray-no-auto-import): files
+//     with no asset yet are counted as skippedNew and not created.
 //
 // A failing batch is logged, counted as failed, and the caller STILL advances
 // — one bad batch must never wedge the loop.
@@ -31,15 +40,18 @@
 // {{include:collibra_lookup.groovy}}
 
 // Upsert one batch of work-item tuples. `label` names the batch in log lines
-// (e.g. "Import batch 3/12"). Returns
-// [created:, updated:, failed:, relationsAdded:, relationsRemoved:].
-def processFileBatch(List batch, UUID queryAssetId, String label) {
+// (e.g. "Import batch 3/12"). opts.createNew (default true): false refreshes
+// existing assets only. Returns
+// [created:, updated:, failed:, relationsAdded:, relationsRemoved:, skippedNew:].
+def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]) {
     def ids = dxrModelIds()
+    boolean createNew = opts.createNew != false
     int created = 0
     int updated = 0
     int failedInBatch = 0
     int relationsAdded = 0
     int relationsRemoved = 0
+    int skippedNew = 0
 
     try {
         // --- Split the batch into new vs existing assets ------------------------
@@ -50,10 +62,16 @@ def processFileBatch(List batch, UUID queryAssetId, String label) {
             def assetId = deterministicFileAssetId(tuple[0])
             if (assetApi.exists(assetId)) {
                 existingItems << [tuple, assetId]
-            } else {
+            } else if (createNew) {
                 newItems << [tuple, assetId]
+            } else {
+                skippedNew++
             }
         }
+        if (skippedNew > 0) {
+            loggerApi.info("${label}: ${skippedNew} new matching file(s) not imported (automatic import is off for this search)")
+        }
+        def owned = integrationIdentityIds()
 
         // --- Bulk-create the missing assets -------------------------------------
 
@@ -80,13 +98,15 @@ def processFileBatch(List batch, UUID queryAssetId, String label) {
                 def asset = assetApi.getAsset(assetId)
                 def desiredName = uniqueAssetName(fileNameOf(tuple), assetId)
                 def needsRename = asset.getName() != desiredName
-                def isRetired = asset.getStatus()?.getId() == ids.obsoleteStatusId
-                if (needsRename || isRetired) {
+                // Only a status the integration set is flipped back; a status a
+                // person chose stays as it is.
+                def isParked = isParkedFileStatus(asset.getStatus()?.getId(), ids)
+                if (needsRename || isParked) {
                     def change = com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest.builder().id(assetId)
                     if (needsRename) { change.name(desiredName).displayName(fileNameOf(tuple)) }
-                    if (isRetired)   { change.statusId(ids.candidateStatusId) }
+                    if (isParked)    { change.statusId(ids.candidateStatusId) }
                     assetApi.changeAsset(change.build())
-                    if (isRetired) { loggerApi.info("Reactivated previously retired file asset ${assetId}") }
+                    if (isParked) { loggerApi.info("Reactivated file asset ${assetId} (was '${asset.getStatus()?.getName()}')") }
                 }
                 updated++
             } catch (Exception refreshEx) {
@@ -142,31 +162,49 @@ def processFileBatch(List batch, UUID queryAssetId, String label) {
                         .sourceId(queryAssetId).targetId(assetId).typeId(ids.returnsRelationTypeId).build())) {
                     relationsAdded++
                 }
+                // The query returns the file again: drop its "formerly returns".
+                def formerly = relationsByFarEnd(ids.formerlyReturnsRelationTypeId, null, assetId)[queryAssetId]
+                if (formerly != null) { removeRelationQuietly(formerly.id) }
             }
 
             // Reconcile the file→classification links against the CURRENT hit
-            // evidence: add what's missing, REMOVE what's stale — a label deleted
-            // or unassigned in Data X-Ray must drop off the file asset on the next
-            // sync. A result row carries the file's complete classification state,
-            // so the desired set is the same whichever query syncs the file.
+            // evidence. A result row carries the file's complete classification
+            // state, so the desired set is the same whichever query syncs the
+            // file. Missing links are added (or swapped back from "formerly");
+            // a link the integration made that no longer applies is swapped to
+            // "formerly groups" — a label deleted or unassigned in Data X-Ray
+            // stays visible as history instead of vanishing. Links a person
+            // created are never removed, and a person's link to a classification
+            // the file matches means nothing is added.
             def desired = [] as Set
             tuple[7].each { classId -> desired << string2Uuid(classId.toString()) }
-            def existingGroups = relationIdsByFarEnd(ids.groupsRelationTypeId, assetId, null)
+            def existingGroups = relationsByFarEnd(ids.groupsRelationTypeId, assetId, null)
+            Map formerlyGroups = null
+            def formerlyGroupsOf = {
+                if (formerlyGroups == null) { formerlyGroups = relationsByFarEnd(ids.formerlyGroupsRelationTypeId, assetId, null) }
+                return formerlyGroups
+            }
             desired.each { cid ->
                 if (!existingGroups.containsKey(cid)) {
                     if (addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
                             .sourceId(assetId).targetId(cid).typeId(ids.groupsRelationTypeId).build())) {
                         relationsAdded++
                     }
+                    def formerly = formerlyGroupsOf()[cid]
+                    if (formerly != null && owned.contains(formerly.createdBy)) { removeRelationQuietly(formerly.id) }
                 }
             }
-            existingGroups.each { cid, relId ->
-                if (!desired.contains(cid)) {
-                    try {
-                        relationApi.removeRelation(relId)
-                        relationsRemoved++
-                    } catch (Exception remEx) {
-                        loggerApi.warn("Failed to remove stale classification link ${cid} from ${assetId}: ${remEx.message}")
+            existingGroups.each { cid, rel ->
+                if (desired.contains(cid)) { return }
+                if (!owned.contains(rel.createdBy)) {
+                    loggerApi.debug("Kept classification link ${cid} on ${assetId}: created by a person (${rel.createdBy}), not the integration")
+                    return
+                }
+                if (removeRelationQuietly(rel.id)) {
+                    relationsRemoved++
+                    if (!formerlyGroupsOf().containsKey(cid)) {
+                        addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
+                            .sourceId(assetId).targetId(cid).typeId(ids.formerlyGroupsRelationTypeId).build())
                     }
                 }
             }
@@ -181,7 +219,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label) {
     }
 
     return [created: created, updated: updated, failed: failedInBatch,
-            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved]
+            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, skippedNew: skippedNew]
 }
 
 // Add the batch's counters to the running import*Count process variables.
@@ -191,15 +229,18 @@ def accumulateBatchCounters(Map r) {
     execution.setVariable('importFailedCount',  ((execution.getVariable('importFailedCount') ?: 0) as int) + r.failed)
     execution.setVariable('importRelationCount', ((execution.getVariable('importRelationCount') ?: 0) as int) + r.relationsAdded)
     execution.setVariable('importRelationsRemovedCount', ((execution.getVariable('importRelationsRemovedCount') ?: 0) as int) + r.relationsRemoved)
+    execution.setVariable('importSkippedNewCount', ((execution.getVariable('importSkippedNewCount') ?: 0) as int) + (r.skippedNew ?: 0))
 }
 
-// Files the query previously returned but no longer does are unlinked and —
-// when NO other query still returns them — RETIRED (status Obsolete). Never
+// Files the query previously returned but no longer does: the query's
+// "returns" link is swapped to "formerly returns", and — when NO other query
+// still returns the file — its status becomes 'Not in any search'. Never
 // deleted: comments, attachments, workflow tasks and other activities tied to
-// the asset must survive as records. If the file later reappears in any
-// query's results, processFileBatch reactivates it (status Candidate).
+// the asset must survive as records. A status a person set is left alone (the
+// links are still swapped). If the file later reappears in any query's
+// results, processFileBatch sets it back to Candidate and swaps the link back.
 // `currentIds` / `previousIds` hold file-asset UUID strings.
-// Returns [unlinked:, retired:].
+// Returns [unlinked:, retired:] — retired = files now in no search.
 def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId) {
     def ids = dxrModelIds()
     def orphanIds = previousIds.findAll { !currentIds.contains(it.toString()) }
@@ -221,8 +262,10 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
                 if (relId != null) {
                     relationApi.removeRelation(relId)
                     unlinked++
+                    addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
+                        .sourceId(queryAssetId).targetId(fileAssetId).typeId(ids.formerlyReturnsRelationTypeId).build())
                 }
-                // Retire only when no query at all still returns this file.
+                // Park only when no query at all still returns this file.
                 def stillReturned = relationApi.findRelations(com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest.builder()
                     .relationTypeId(ids.returnsRelationTypeId)
                     .targetId(fileAssetId)
@@ -230,21 +273,33 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
                     .build())
                 if (stillReturned.getResults().isEmpty()) {
                     def current = assetApi.getAsset(fileAssetId)
-                    if (current.getStatus()?.getId() != ids.obsoleteStatusId) {
-                        assetApi.changeAsset(com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest.builder()
-                            .id(fileAssetId)
-                            .statusId(ids.obsoleteStatusId)
-                            .build())
-                    }
+                    parkFileAsset(current, ids, 'no query returns it any more')
                     retired++
-                    loggerApi.info("Retired file asset '${current.getName()}' [${fileAssetId}] — no query returns it any more")
                 }
             } catch (Exception orphanEx) {
-                loggerApi.error("Failed to unlink/retire orphan file asset ${fileAssetId}: ${orphanEx.message}")
+                loggerApi.error("Failed to unlink/park orphan file asset ${fileAssetId}: ${orphanEx.message}")
             }
         }
     }
     return [unlinked: unlinked, retired: retired]
+}
+
+// Set a file asset no search returns to 'Not in any search' — unless a person
+// set its status (anything but Candidate / Obsolete), which is kept. Returns
+// true when the status was changed.
+def parkFileAsset(asset, Map ids, String reason) {
+    def statusId = asset.getStatus()?.getId()
+    if (statusId == ids.notInAnySearchStatusId) { return false }
+    if (!isIntegrationOwnedFileStatus(statusId, ids)) {
+        loggerApi.info("File asset '${asset.getName()}' [${asset.getId()}] is in no search (${reason}); kept its status '${asset.getStatus()?.getName()}', set by a person")
+        return false
+    }
+    assetApi.changeAsset(com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest.builder()
+        .id(asset.getId())
+        .statusId(ids.notInAnySearchStatusId)
+        .build())
+    loggerApi.info("File asset '${asset.getName()}' [${asset.getId()}] set to 'Not in any search' — ${reason}")
+    return true
 }
 
 // --- Helpers ----------------------------------------------------------------------
@@ -281,6 +336,16 @@ def setFileAssetAttr(UUID assetId, UUID typeId, value) {
             .build())
     } catch (Exception attrEx) {
         loggerApi.warn("setAssetAttributes(${typeId}) on ${assetId} failed: ${attrEx.message}")
+    }
+}
+
+def removeRelationQuietly(UUID relationId) {
+    try {
+        relationApi.removeRelation(relationId)
+        return true
+    } catch (Exception relEx) {
+        loggerApi.warn("removeRelation ${relationId} failed: ${relEx.message}")
+        return false
     }
 }
 

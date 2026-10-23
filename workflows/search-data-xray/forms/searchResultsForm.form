@@ -22,7 +22,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Import as assets",
-          "value": "<p>You can import all <b>{{resultCountDisplay}}</b> matching files as <b>Data X-Ray File</b> assets in the <b>Data X-Ray Files</b> domain, each carrying its datasource, path, size, last-modified date, a link back to Data X-Ray, and relations to the classifications it matched. The import runs in the background in batches; an <b>Import Summary</b> task will appear in your inbox when it finishes.</p><p>Tick <b>Keep in sync nightly</b> to have this search rerun automatically every night — new files are imported, changed files updated, and files that no longer match are <b>retired</b> (never deleted, so their history is kept).</p>",
+          "value": "<p>You can import all <b>{{resultCountDisplay}}</b> matching files as <b>Data X-Ray File</b> assets in the <b>Data X-Ray Files</b> domain, each carrying its datasource, path, size, last-modified date, a link back to Data X-Ray, and relations to the classifications it matched. The import runs in the background in batches; an <b>Import Summary</b> task will appear in your inbox when it finishes.</p><p>The three options are independent:</p><ul><li><b>Import now</b> creates the file assets for today's results.</li><li><b>Keep in sync nightly</b> reruns this search every night and refreshes its file assets. Files that no longer match get the status <i>Not in any search</i> (never deleted); a status you set yourself is never changed.</li><li><b>Create assets for new files found</b> lets those reruns import files that start matching later. Untick it to only refresh files already in Collibra.</li></ul><p>The two sync options are tags on the query asset (<code>dataxray-keep-in-sync</code>, <code>dataxray-no-auto-import</code>) and can be changed there at any time.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -72,7 +72,7 @@
       "cols": [
         {
           "designInfo": { "stencilSuperIds": ["cloud-boolean"], "stencilId": "cloud-boolean" },
-          "label": "Import all {{resultCountDisplay}} matching files as assets",
+          "label": "Import now: create assets for all {{resultCountDisplay}} matching files",
           "value": "{{importDecision}}",
           "defaultValue": false,
           "size": 12,
@@ -94,7 +94,7 @@
           "defaultValue": false,
           "size": 12,
           "ignore": false,
-          "visible": "{{importAllowed}}",
+          "visible": "{{syncOffered}}",
           "enabled": true,
           "isRequired": false,
           "id": "keepInSync",
@@ -105,9 +105,26 @@
     {
       "cols": [
         {
+          "designInfo": { "stencilSuperIds": ["cloud-boolean"], "stencilId": "cloud-boolean" },
+          "label": "Create assets for new files found on later reruns (untick to only refresh files already in Collibra)",
+          "value": "{{autoImportNewFiles}}",
+          "defaultValue": true,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{syncOffered}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "autoImportNewFiles",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Finish",
-          "value": "<p>Click <b>Send</b> to close this task. If you ticked the import box, the import starts immediately in the background.</p>",
+          "value": "<p>Click <b>Send</b> to close this task. The sync options are saved on the search right away; if you ticked <b>Import now</b>, the import starts immediately in the background.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,

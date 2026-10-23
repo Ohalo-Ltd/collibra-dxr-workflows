@@ -13,16 +13,19 @@
 //    sync while keeping it restorable. A manual rerun from the asset page
 //    still works on a retired query — that is explicit user intent.
 //
-// 2. Orphan sweep: retires (status Obsolete) every file asset in the Data
-//    X-Ray Files domain that NO query "returns" any more. Deleting a saved
+// 2. Orphan sweep: sets every Data X-Ray File asset that NO query "returns"
+//    any more to 'Not in any search' — wherever it lives (the scan is by asset
+//    type, so files moved to another community are included). Deleting a saved
 //    query asset in Collibra deletes its "returns" relations with it, leaving
 //    the files it exclusively returned stranded — no rerun will ever retire
 //    them because retire passes are per-query. The sweep closes that hole
 //    (and also mops up assets whose relation add once failed mid-import).
 //    Safety: the sweep only runs if the full relation scan succeeded — it
-//    never retires based on a partial view — and files already Obsolete are
-//    left alone. If a swept file reappears in any query's results, the
-//    rerun's batch stage reactivates it (deterministic asset ids converge).
+//    never parks based on a partial view. A status a person set (anything but
+//    Candidate / Obsolete) is never changed. Orphans still Obsolete from a
+//    release before v2.4 move to 'Not in any search' on the first run. If a
+//    swept file reappears in any query's results, the rerun's batch stage
+//    reactivates it (deterministic asset ids converge).
 //
 // This workflow is triggered by a timer start event (nightly at 02:30, after
 // the 02:00 classification sync so renamed/retired classifications are
@@ -42,24 +45,25 @@
 //   nightlyRerunsStarted  (Integer) – rerun instances started
 //   nightlyFailedCount    (Integer) – queries whose rerun could not be started
 //   nightlyRetiredSkipped (Integer) – flagged queries skipped because they are retired
-//   nightlyOrphansRetired (Integer) – file assets retired because no query returns them
+//   nightlyOrphansRetired (Integer) – file assets set to 'Not in any search' because no query returns them
 
-import com.collibra.dgc.core.api.dto.instance.asset.ChangeAssetRequest
 import com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest
 import com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest
 import com.collibra.dgc.core.api.dto.workflow.StartWorkflowInstancesRequest
 import com.collibra.dgc.core.api.model.workflow.WorkflowBusinessItemType
 
 // {{include:dxr_model.groovy}}
+// {{include:collibra_lookup.groovy}}
+// {{include:file_batch.groovy}}
 
 final String KEEP_IN_SYNC_TAG = 'dataxray-keep-in-sync'
 final String RERUN_PROCESS_ID = 'rerunDataXraySearch'
 
 announceDxrVersion('Sync Data X-Ray Files (Nightly)')
-def queryDomainId         = string2Uuid('019dcf96-233a-72e1-bf25-8398b8c9146e')
-def filesDomainId         = string2Uuid('019e9210-52a4-7c31-9b5e-3d8f0a6c1e42')
-def returnsRelationTypeId = string2Uuid('019e9210-f180-79dc-b5a0-6c31e94f82d5')
-def OBSOLETE_STATUS_ID    = string2Uuid('00000000-0000-0000-0000-000000005011')
+def ids = dxrModelIds()
+def queryDomainId         = ids.queryDomainId
+def returnsRelationTypeId = ids.returnsRelationTypeId
+def OBSOLETE_STATUS_ID    = ids.obsoleteStatusId
 
 def recordRunSummary = { int found, int started, int failed, int retiredSkipped, int orphansRetired, String note ->
     execution.setVariable('nightlyQueriesFound', found)
@@ -70,10 +74,15 @@ def recordRunSummary = { int found, int started, int failed, int retiredSkipped,
     loggerApi.info("Sync Data X-Ray Files (Nightly): found=${found}, started=${started}, failed=${failed}, retiredSkipped=${retiredSkipped}, orphansRetired=${orphansRetired}${note ? ', ' + note : ''}")
 }
 
-// Retire file assets that no query "returns" any more (see header, phase 2).
-// Returns the number retired; any failure while building the FULL picture of
-// returned files aborts the sweep — never retire on a partial scan.
+// Park file assets that no query "returns" any more (see header, phase 2).
+// Returns the number set to 'Not in any search'; any failure while building
+// the FULL picture of returned files aborts the sweep — never park on a
+// partial scan.
 def sweepOrphanedFiles = {
+    if (!statusApi.exists(ids.notInAnySearchStatusId)) {
+        loggerApi.warn("Orphan sweep skipped: the status 'Not in any search' does not exist. Run Configure Data X-Ray Workflows once after upgrading.")
+        return 0
+    }
     def returnedFileIds = [] as Set
     def cursor = ''
     while (true) {
@@ -87,32 +96,16 @@ def sweepOrphanedFiles = {
         if (!cursor) break
     }
 
-    int retired = 0
-    cursor = ''
-    while (true) {
-        def page = assetApi.findAssets(FindAssetsRequest.builder()
-            .domainId(filesDomainId)
-            .limit(1000)
-            .cursor(cursor)
-            .build())
-        page.getResults().each { asset ->
-            if (!returnedFileIds.contains(asset.getId()) && asset.getStatus()?.getId() != OBSOLETE_STATUS_ID) {
-                try {
-                    assetApi.changeAsset(ChangeAssetRequest.builder()
-                        .id(asset.getId())
-                        .statusId(OBSOLETE_STATUS_ID)
-                        .build())
-                    retired++
-                    loggerApi.info("Retired orphaned file asset '${asset.getName()}' [${asset.getId()}] — no query returns it")
-                } catch (Exception retireEx) {
-                    loggerApi.error("Failed to retire orphaned file asset '${asset.getName()}' [${asset.getId()}]: ${retireEx.message}")
-                }
-            }
+    int parked = 0
+    eachFileAsset(ids) { asset ->
+        if (returnedFileIds.contains(asset.getId())) { return }
+        try {
+            if (parkFileAsset(asset, ids, 'no query returns it (nightly sweep)')) { parked++ }
+        } catch (Exception parkEx) {
+            loggerApi.error("Failed to park orphaned file asset '${asset.getName()}' [${asset.getId()}]: ${parkEx.message}")
         }
-        cursor = page.getNextCursor()
-        if (!cursor) break
     }
-    return retired
+    return parked
 }
 
 // --- Phase 1: fan out one headless rerun per flagged query -----------------------

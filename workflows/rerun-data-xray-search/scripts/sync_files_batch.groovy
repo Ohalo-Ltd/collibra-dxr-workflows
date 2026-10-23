@@ -32,7 +32,9 @@ int end = Math.min(cursor + dxrBatchSize(), workItems.size())
 def batch = workItems.subList(cursor, end)
 int batchNumber = (int) (cursor / dxrBatchSize()) + 1
 
-def r = processFileBatch(batch, queryAssetId, "Import batch ${batchNumber}/${batchCount}".toString())
+// Query tagged dataxray-no-auto-import: refresh existing file assets only.
+def r = processFileBatch(batch, queryAssetId, "Import batch ${batchNumber}/${batchCount}".toString(),
+                         [createNew: execution.getVariable('rerunNoAutoImport') != true])
 
 // --- Advance the cursor ----------------------------------------------------------
 
@@ -40,4 +42,4 @@ execution.setVariable('importCursor', end)
 execution.setVariable('hasMoreWork', end < workItems.size())
 accumulateBatchCounters(r)
 
-loggerApi.info("Import batch ${batchNumber}/${batchCount}: +${r.created} created, +${r.updated} updated, +${r.failed} failed, +${r.relationsAdded}/-${r.relationsRemoved} relation(s); ${end}/${total} done")
+loggerApi.info("Import batch ${batchNumber}/${batchCount}: +${r.created} created, +${r.updated} updated, +${r.failed} failed, ${r.skippedNew} not imported, +${r.relationsAdded}/-${r.relationsRemoved} relation(s); ${end}/${total} done")

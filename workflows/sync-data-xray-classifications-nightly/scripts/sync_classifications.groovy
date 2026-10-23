@@ -2,8 +2,9 @@
 //
 // Pulls classifications/annotators/extractors/labels from the Data X-Ray API
 // and mirrors them as Collibra assets in the classifications domain. The sync
-// semantics (upsert by Data X-Ray ID, name adoption, name disambiguation,
-// retire-never-delete) live in shared/classification_sync.groovy.
+// semantics (upsert by Data X-Ray ID only, freeing names held by retired
+// assets, name disambiguation, retire-never-delete) live in
+// shared/classification_sync.groovy.
 //
 // This workflow is triggered by a timer start event (nightly at 02:00), so it
 // runs unattended with no user/initiator. On misconfiguration or a transient
