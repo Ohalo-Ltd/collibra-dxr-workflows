@@ -142,6 +142,9 @@ Owner: **Sync DataXray Classification (Nightly)** at 02:00 and
 | NIGHT-4 | The relation scan fails partway during the sweep | The sweep would change statuses | The sweep **aborts for the night** — it never acts on a partial picture | 🔹 |
 | NIGHT-5 | The Rerun workflow isn't deployed, or config is missing | The 02:30 nightly fires | The fan-out is skipped with a logged reason; the orphan sweep still runs; the timer schedule survives | 🔹 |
 | NIGHT-6 | A rerun-summary task from a manual run is open overnight | The 02:30 nightly fires | The nightly's headless rerun of that query still starts and completes (no user task in headless mode, no exclusivity conflict) | ✅ |
+| NIGHT-8 | Cloud + Edge edition: a file asset is **Not in any search** and DataXray no longer has the file (deleted in DataXray, or its whole datasource deleted) | The 02:30 nightly runs | The existence check looks it up by DataXray Datasource ID + Object ID (about 200 per request) and sets **Not in DataXray**. Files DataXray still has are unchanged | ✅ |
+| NIGHT-9 | Cloud + Edge edition: a **Not in DataXray** file asset's file is back in DataXray | The nightly runs | It goes back to **Not in any search**; a search that matches it sets it to **Candidate** | ✅ |
+| NIGHT-10 | A file asset no search returns has a status a person set (e.g. Accepted), or has no object key (Not in any search since before the upgrade) | The nightly runs | Not checked, nothing changes; the number without an object key is logged | ✅ |
 | NIGHT-7 | The workflows were upgraded from a release before v2.4, and file assets that no query returns still have status **Obsolete** | The first 02:30 nightly after the upgrade (and after Configure has been re-run, ADM-4) runs | The orphan sweep moves every such file asset to **Not in any search** (a one-off migration); after that Obsolete is never set on file assets | ✅ |
 
 ## 7. Deployment & configuration lifecycle

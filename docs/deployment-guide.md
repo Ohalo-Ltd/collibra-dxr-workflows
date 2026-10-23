@@ -281,6 +281,11 @@ set from DataXray's filename when the asset is created and can then be
 changed in Collibra. DataXray's current filename is kept in the **DataXray
 File Name** attribute.
 
+Configure also creates the **Not in DataXray** status. Only the Cloud + Edge
+edition sets it, from a nightly check against DataXray; the on-prem edition
+cannot run that check, because DataXray's public files API does not return the
+object ids it relies on.
+
 ### Upgrading to v2.4
 
 Re-import all six workflows (in place; settings and run permissions are

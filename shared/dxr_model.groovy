@@ -49,6 +49,9 @@ def dxrModelIds() {
         candidateStatusId      : string2Uuid('00000000-0000-0000-0000-000000005008'),
         // Custom status created by configure: a file asset no saved search returns any more
         notInAnySearchStatusId : string2Uuid('019e9212-0a11-7c3e-9b2f-5d4e6f7a8b90'),
+        // Custom status created by configure: a file asset no saved search returns AND
+        // DataXray no longer has (nightly existence check, Cloud + Edge)
+        notInDataXrayStatusId  : string2Uuid('019e9212-6a77-7294-b18f-bd2e3f4a5b56'),
     ]
 }
 
@@ -118,14 +121,22 @@ def dxrWorkflowUserId() { return string2Uuid('00000000-0000-0000-0000-0000009000
 // was set by a person (Accepted, Under Review, …) and is never changed by a sync.
 def isIntegrationOwnedFileStatus(UUID statusId, Map ids) {
     return statusId == null || statusId == ids.candidateStatusId ||
-        statusId == ids.notInAnySearchStatusId || statusId == ids.obsoleteStatusId
+        statusId == ids.notInAnySearchStatusId || statusId == ids.notInDataXrayStatusId ||
+        statusId == ids.obsoleteStatusId
 }
 
 // Statuses a sync flips back to Candidate when a search matches the file again:
-// 'Not in any search', and Obsolete (what releases before v2.4 used).
+// 'Not in any search', 'Not in DataXray' (DataXray has the file again), and
+// Obsolete (what releases before v2.4 used).
 def isParkedFileStatus(UUID statusId, Map ids) {
-    return statusId == ids.notInAnySearchStatusId || statusId == ids.obsoleteStatusId
+    return statusId == ids.notInAnySearchStatusId || statusId == ids.notInDataXrayStatusId ||
+        statusId == ids.obsoleteStatusId
 }
+
+// Nightly existence check (Cloud + Edge): object ids asked about per request.
+// 200 keeps both the request and the answer (~250 bytes per file found, only
+// datasource_id and object_id returned) well under Edge's 100 KB limit.
+def dxrExistsCheckBatchSize() { return 200 }
 
 // Tag stamped on every classification asset written by the classification sync.
 def dxrClassificationSyncTag() { return 'dataxray-classification-sync' }

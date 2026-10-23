@@ -404,7 +404,9 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
 // true when the status was changed.
 def parkFileAsset(asset, Map ids, String reason) {
     def statusId = asset.getStatus()?.getId()
-    if (statusId == ids.notInAnySearchStatusId) { return false }
+    // 'Not in DataXray' already says more (no search returns it, and DataXray
+    // no longer has it): keep it.
+    if (statusId == ids.notInAnySearchStatusId || statusId == ids.notInDataXrayStatusId) { return false }
     if (!isIntegrationOwnedFileStatus(statusId, ids)) {
         loggerApi.info("File asset '${asset.getName()}' [${asset.getId()}] is in no search (${reason}); kept its status '${asset.getStatus()?.getName()}', set by a person")
         return false

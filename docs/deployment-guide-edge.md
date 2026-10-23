@@ -47,7 +47,7 @@ Settings → Workflows → Definitions → select a workflow → **Variables**:
 
 | Workflow | Variable | Value |
 |---|---|---|
-| Search DataXray, Rerun DataXray Search, Sync DataXray Classifications, Sync DataXray Classification (Nightly) | **Edge HTTP connection name (DataXray)** | The connection name from Step 1 (`data-xray` unless you chose another). |
+| Search DataXray, Rerun DataXray Search, Sync DataXray Classifications, Sync DataXray Classification (Nightly), Sync DataXray Files (Nightly) | **Edge HTTP connection name (DataXray)** | The connection name from Step 1 (`data-xray` unless you chose another). |
 | Search DataXray, Rerun DataXray Search | **DataXray results per request (1-100)** | Leave at `25`. Lower it only if a DataXray page exceeds Collibra's response limit (see *Limits*). |
 | all four | **DataXray Base URL (deep links only)** | Optional. Used only to build links from Collibra assets back to DataXray; leave the placeholder to skip links. |
 
@@ -77,6 +77,8 @@ Releases before the DataXray rename call the product **Data X-Ray** and the quer
 ## Upgrading to v2.7
 
 Re-import the workflows, then **run Configure DataXray Workflows once** as an admin. It creates the **DataXray File Name** attribute type and adds it to the **DataXray File** asset type, and renames the **Unstructured Data Query** asset type to **DataXray Sync Filter** (only if it still has that name). Until it has run, **Rerun DataXray Search** refuses to start with a message saying so. From v2.7 a sync no longer renames existing file assets: the asset name is set from DataXray's filename when the asset is created and can then be changed in Collibra, and DataXray's current filename is kept in **DataXray File Name**.
+
+v2.7 also adds the **Not in DataXray** status (Configure creates it and adds it to the **DataXray File** asset type) and a nightly check that uses it. **Sync DataXray Files (Nightly)** now has an **Edge HTTP connection name (DataXray)** setting of its own (default `data-xray`): check it after importing. Every night, after the reruns and the orphan sweep, it asks DataXray about each file asset that is **Not in any search**, by its DataXray Datasource ID and Object ID. A file DataXray no longer has, because the file or its whole datasource was deleted there, gets **Not in DataXray**. A Not in DataXray file that DataXray has again goes back to Not in any search. A status a person set is never changed. File assets that were already Not in any search before the upgrade carry no object ID and are not checked. See *How are file assets orphaned?* in the file asset lifecycle guide.
 
 ## Upgrading to v2.6
 
@@ -117,6 +119,6 @@ Check all six after an upgrade: a workflow that was not re-imported still shows 
 | *Cannot search: … was deleted in DataXray (its Collibra asset is retired).* | A classification picked in the form was deleted in DataXray; the sync marked its Collibra asset Obsolete, but the pickers still offer it (they cannot filter by status). | Remove it from the search. |
 | *Cannot search: … has no DataXray Index ID in Collibra.* | The classification has no numeric index id yet: the classification sync has not run through Edge, or the standalone script ran without `--stamp-index-ids`. | Run **Sync DataXray Classifications**, or re-run the standalone script with `--stamp-index-ids` (it updates the existing assets in place), then search again. |
 | A rerun stops with *This instance is missing the status 'Not in any search' …* | The workflows were upgraded to v2.4 but Configure has not been re-run. | Run **Configure DataXray Workflows** once (see *Upgrading to v2.4*). |
-| Nightly jobs do nothing. | The connection name is unset on **Sync DataXray Classification (Nightly)** or on **Rerun DataXray Search** (they skip cleanly and log why). **Sync DataXray Files (Nightly)** has no connection variable: it starts headless reruns, which use the one set on Rerun DataXray Search. | Set the variable on both of those workflows. |
+| Nightly jobs do nothing. | The connection name is unset on **Sync DataXray Classification (Nightly)** or on **Rerun DataXray Search** (they skip cleanly and log why). **Sync DataXray Files (Nightly)** starts headless reruns, which use the connection set on Rerun DataXray Search; its own connection setting is only used for the check that sets *Not in DataXray*. | Set the variable on all three workflows. |
 
 Full detail for every run is written to Collibra's `dgc.log` (ask Collibra support for access on Cloud).
