@@ -94,11 +94,15 @@ on the query asset at any time; the change applies from the next rerun.
 
 What the import does, per matching file:
 
-1. **Works out the asset's identity.** Every file asset's UUID is derived
-   deterministically from the file's DataXray file id. The same DataXray
-   file therefore always maps to the *same* Collibra asset, no matter which
-   search imports it or how often. If the asset already exists it is updated
-   in place, wherever it lives; it is never duplicated.
+1. **Works out the asset's identity.** A new file asset's UUID is derived
+   from the file's DataXray file id, so the same DataXray file always maps
+   to the *same* Collibra asset, no matter which search imports it or how
+   often. In the Cloud + Edge edition the asset also records the file's
+   **DataXray Datasource ID** and **DataXray Object ID**, and a file whose
+   DataXray file id has changed is matched to its asset by those two (see
+   [What counts as the same file?](#what-counts-as-the-same-file)). If the
+   asset already exists it is updated in place, wherever it lives; it is
+   never duplicated.
 2. **Creates the asset** (if it does not exist) in the **DataXray Files**
    domain with type **DataXray File** and status **Candidate**. The asset's
    *display name* is the clean filename (`invoice.pdf`); its *full name* is the
@@ -141,14 +145,34 @@ The imported assets appear in the **DataXray Files** domain:
 
 ## What counts as the same file?
 
-A file asset follows the file's **DataXray file id**. As long as DataXray
-keeps the id, every sync updates the same asset, whatever else changes. When
-DataXray assigns a new id, Collibra sees a new file: the next rerun of a
-matching search creates a new asset, and the old one drops out of the search
-(see [How are file assets orphaned?](#how-are-file-assets-orphaned)).
+A file asset follows the file's **DataXray file id**, and in the Cloud +
+Edge edition also its **object key**: the datasource's id in DataXray plus
+the object id the source system gives the file (its path on file shares and
+buckets, its item id on SharePoint Online, OneDrive and similar). Every sync
+stores both on the asset (attributes **DataXray ID**, **DataXray Datasource
+ID** and **DataXray Object ID**).
 
-Whether a file keeps its id depends on the DataXray connector of its
-datasource:
+- As long as DataXray keeps the file id, every sync updates the same asset,
+  whatever else changes.
+- **Cloud + Edge:** when DataXray assigns a new file id but the object key is
+  unchanged, the sync finds the asset by its object key and keeps updating
+  it, and the DataXray ID attribute takes the new id. This is what happens
+  when a datasource's scanned data is dropped from DataXray's index and the
+  datasource is scanned again: the files come back with new ids, and keep
+  their assets, comments, attachments, history and community placement.
+- When both change, Collibra sees a new file: the next rerun of a matching
+  search creates a new asset, and the old one drops out of the search (see
+  [How are file assets orphaned?](#how-are-file-assets-orphaned)).
+- **On-prem:** DataXray's public files API does not return the object id
+  (October 2026), so the on-prem edition follows the file id only.
+
+An asset created by a release before v2.6 gets its object key the next time
+a sync updates it. Rerun your searches (or let the nightly sync run) once
+after upgrading, before you drop a datasource's data from the index, so that
+every asset has one.
+
+Whether a file keeps its id (or its object id) depends on the DataXray
+connector of its datasource:
 
 | Connector | DataXray identifies a file by | Rename or move within the datasource |
 |---|---|---|
@@ -160,8 +184,11 @@ datasource:
 | Connector plugins | whatever id the plugin reports | Depends on the plugin |
 
 For **every** connector, a file gets a new id when it is copied or moved to
-another datasource, or when its datasource is deleted and scanned again. A copy
-is a separate file: the original keeps its asset, and the copy gets its own.
+another datasource, or when its datasource is deleted and created again (the
+new datasource has a new id, so the object key changes too). A copy is a
+separate file: the original keeps its asset, and the copy gets its own.
+Dropping a datasource's scanned data and scanning it again also gives every
+file a new id, but keeps the object key: see above.
 
 A new asset starts clean. Comments, attachments, history and any move to
 another community stay with the old asset.

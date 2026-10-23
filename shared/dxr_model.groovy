@@ -38,6 +38,8 @@ def dxrModelIds() {
         datasourceAttrTypeId   : string2Uuid('019e9210-be62-7a89-90d3-48b6f57e0c21'),
         dataxrayIdAttrTypeId   : string2Uuid('019e73ae-1aa8-700c-8086-626326822c22'),  // DataXray ID (public UUID)
         dataxrayIndexIdAttrTypeId: string2Uuid('019e9211-4a7c-7b1e-9d3f-2c8e5f6a0b41'), // DataXray Index ID (numeric id in DXR's search index; stamped by the Edge-edition sync)
+        datasourceIdAttrTypeId : string2Uuid('019e9212-3d44-7f61-8e5c-8a9b0c1d2e23'),  // DataXray Datasource ID (file assets; Cloud + Edge)
+        objectIdAttrTypeId     : string2Uuid('019e9212-4e55-7072-9f6d-9b0c1d2e3f34'),  // DataXray Object ID (file assets; Cloud + Edge)
         linkAttrTypeId         : string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba'),
         searchLinkAttrTypeId   : string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254'),
         subtypeAttrTypeId      : string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad'),
@@ -135,6 +137,8 @@ def rerunModelGap(Map ids) {
     if (!statusApi.exists(ids.notInAnySearchStatusId)) { missing << "the status 'Not in any search'" }
     if (!relationTypeApi.exists(ids.formerlyReturnsRelationTypeId)) { missing << "the relation type 'formerly returns'" }
     if (!relationTypeApi.exists(ids.formerlyGroupsRelationTypeId)) { missing << "the relation type 'formerly groups'" }
+    if (!attributeTypeApi.exists(ids.datasourceIdAttrTypeId)) { missing << "the attribute type 'DataXray Datasource ID'" }
+    if (!attributeTypeApi.exists(ids.objectIdAttrTypeId)) { missing << "the attribute type 'DataXray Object ID'" }
     if (missing.isEmpty()) { return '' }
     return "This instance is missing ${missing.join(', ')}. Run Configure DataXray Workflows once (as an admin) after upgrading the DataXray workflows, then rerun.".toString()
 }

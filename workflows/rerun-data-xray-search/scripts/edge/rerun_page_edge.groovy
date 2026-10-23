@@ -55,8 +55,7 @@ def opts = [
         }
         return null
     },
-    afterPage   : { List tuples, int pageNo ->
-        def seen = tuples.collect { deterministicFileAssetId(it[0]).toString() }
+    afterPage   : { List tuples, int pageNo, List seen ->
         int chunk = (execution.getVariable('rerunPageCount') ?: 0) as int
         execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson(seen))
         execution.setVariable('rerunPageCount', chunk + 1)
@@ -70,11 +69,13 @@ def opts = [
     },
 ]
 // A skipped result still matches the query: count it as seen so the retire
-// pass does not unlink it. If its id could not be read, nothing can be known
-// to be gone, so the retire pass is skipped for this run.
+// pass does not unlink it. If its id could not be read, or no asset has the
+// UUID derived from it (a new file, or one DataXray gave a new id whose asset
+// only its object key would find, and the row was not read), nothing can be
+// known to be gone, so the retire pass is skipped for this run.
 opts.onSkip = { String fileId ->
     execution.setVariable('importFailedCount', ((execution.getVariable('importFailedCount') ?: 0) as int) + 1)
-    if (fileId) {
+    if (fileId && assetApi.exists(deterministicFileAssetId(fileId))) {
         int chunk = (execution.getVariable('rerunPageCount') ?: 0) as int
         execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson([deterministicFileAssetId(fileId).toString()]))
         execution.setVariable('rerunPageCount', chunk + 1)

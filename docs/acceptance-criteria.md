@@ -104,7 +104,7 @@ via the nightly).
 | FILE-11 | A rerun gets **0 results** from DataXray | The pass that swaps links and sets Not in any search would run | The pass is skipped entirely — a transient empty answer must never mark a query's whole population as no longer returned | ✅ |
 | FILE-12 | A rerun's projected number of DataXray File assets (wherever they live) exceeds 25,000 | The rerun starts | Interactive: refused with the projection; headless: logged and skipped | 🔹 |
 | FILE-13 | A rerun's summary task is left **open** in someone's inbox | The user revisits the query asset / the nightly fires | The Rerun action is still available and the nightly still runs (workflow exclusivity is UNCONSTRAINED) | ✅ |
-| FILE-14 | DataXray reassigns **file ids** (e.g. datasource deleted and re-scanned) | The next sync runs | New assets are created and the old generation becomes **Not in any search** as orphans, keeping its history — file identity follows the DataXray file id. **Accepted by TRC** (see D-3) | 🔹 |
+| FILE-14 | DataXray reassigns **file ids** (e.g. datasource deleted and re-scanned) | The next sync runs | New assets are created and the old generation becomes **Not in any search** as orphans, keeping its history. Exception in the Cloud + Edge edition: a file whose object key (datasource id + object id) is unchanged keeps its asset (FILE-25). **Accepted by TRC** (see D-3) | 🔹 |
 | FILE-15 | A matched file was **renamed or moved** on a connector that identifies files by **path** (SMB, local/NFS, SFTP, Amazon S3, Azure Blob, Google Cloud Storage, SharePoint on-prem), moved to another SharePoint Online library, or copied/moved to **another datasource** (any connector) | DataXray rescans and the query is rerun | DataXray has assigned a new file id, so this is FILE-14 for one file: a new asset is created in the DataXray Files domain, and the old asset gets a `formerly returns` link and Not in any search where it is (history kept; comments, attachments and a manual domain/community placement do not carry over) | 🔹 |
 | FILE-16 | A user **moves** an active file asset to a domain in another community | The query is rerun | The asset is updated in place (attributes, classification and `returns` relations) and never moved back — the integration tracks file assets by UUID, not by domain (verified Sept 2026) | ✅ |
 | FILE-17 | A **community or domain** holding file assets is deleted in Collibra (Collibra deletes its assets with it) | A query that still matches one of those files is rerun | The asset is recreated in the DataXray Files domain (same UUID). Only the rerun query's `returns` relation comes back; other queries' relations return as each of them reruns. Comments and history are gone (verified Sept 2026) | ✅ |
@@ -115,6 +115,7 @@ via the nightly).
 | FILE-22 | A `returns` or integration-made `groups` link stops applying (FILE-8, EVID-2) | The rerun runs; later the link applies again (the search matches the file, or DataXray reports the classification again) | The link is swapped to **formerly returns** / **formerly groups** (shown as *formerly returned by* / *formerly grouped by* on the other asset), never deleted. When it applies again it is swapped back, so there is never both a link and its *formerly* twin | ✅ |
 | FILE-23 | A rerun would create more than **10,000** new file assets (files the query does not return yet; on Cloud + Edge estimated from DataXray's total) | The rerun starts | Refused, naming the number, and nothing is changed: *"… more than the 10,000 one run may create. Refine the search, or tag it dataxray-no-auto-import …"*. A rerun that creates no new assets is not affected | ✅ |
 | FILE-24 | Any import or rerun writes a file asset's attributes | It finishes | **File Size** reads like `27.2 KB (27,885 bytes)` (1 KB = 1,024 bytes; under 1 KB just `512 bytes`) and **Last Modified** like `10 Apr 2025, 17:22 UTC`. A value DataXray sends in another shape is kept as is. Assets written by an earlier release change to this format the next time they sync | ✅ |
+| FILE-25 | Cloud + Edge edition: a file's DataXray file id changes but its datasource and object id do not (the datasource's scanned data was dropped from the index and the datasource scanned again) | A search is imported or rerun | The existing asset is found by its **DataXray Datasource ID** + **DataXray Object ID** attributes and updated in place (DataXray ID takes the new id); no new asset is created and the asset keeps its query links, comments, attachments and community. Every asset a sync writes stores both attributes; on-prem rows carry no object id and leave them unset | ✅ |
 
 ## 5. Query asset lifecycle (Collibra side)
 
@@ -175,7 +176,10 @@ Owner: **Sync DataXray Classification (Nightly)** at 02:00 and
   starts clean." If DataXray reassigns file ids (e.g. a datasource is deleted
   and re-scanned), Collibra creates new assets and the old generation gets
   Not in any search (Obsolete before v2.4) — records preserved, no migration
-  attempted. (A content-hash
+  attempted. **Since v2.6 (Cloud + Edge):** a file whose datasource id and
+  object id are unchanged keeps its asset (FILE-25), which covers a
+  datasource's data being dropped from the index and rescanned (agreed with
+  TRC, Oct 2026). (A content-hash
   based migration remains possible later if ever needed.)
   Which events assign a new file id depends on the DataXray connector
   (verified in the DataXray source, Sept 2026): connectors that identify

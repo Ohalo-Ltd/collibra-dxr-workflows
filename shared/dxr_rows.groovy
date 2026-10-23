@@ -18,6 +18,11 @@
 //       carry no UI link field)
 //   [7] matched classifications: [dxrId, name] pairs after extraction, replaced
 //       by a list of Collibra asset UUID strings by resolveTupleClassifications()
+//   [8] datasource id      (String, '' when unknown)  } together the file's
+//   [9] object id          (String, '' when unknown)  } object key, see
+//       fileObjectKey() in file_batch.groovy. Only search-index rows (Cloud +
+//       Edge) carry them: /api/v1/files rows have no object id (checked on
+//       demo, Oct 2026), so on-prem rows leave both empty.
 //
 // Hit evidence vs "checked with zero": a result row may list a classification
 // that was checked but produced no hits — that is NOT a match and must not
@@ -51,7 +56,7 @@ def extractFileTuple(row, String baseUrl) {
     classifications.addAll(extractClassifications(row?.extractedMetadata))
     classifications.addAll(extractClassifications(row?.annotators))
     return [id.toString(), datasource.toString(), path.toString(), fileName.toString(),
-            size.toString(), modified.toString(), deepLink, classifications]
+            size.toString(), modified.toString(), deepLink, classifications, '', '']
 }
 
 // Map a row's classification entries to [dxrId, name] pairs, keeping only
@@ -111,9 +116,10 @@ def resolveTupleClassifications(List workItems, Map classIndex) {
     return unresolved
 }
 
-// Same file, same asset — forever. The UUID is derived from the DataXray
-// file id, so upsert needs no lookup index and reruns/imports from any query
-// converge on the same asset.
+// The UUID a new file asset gets, derived from the DataXray file id, so reruns
+// and imports from any query converge on the same asset. A file DataXray has
+// given a new id is found again by its object key instead (resolveFileAssetIds
+// in file_batch.groovy).
 def deterministicFileAssetId(fileId) {
     return UUID.nameUUIDFromBytes(("dxr-file:" + fileId).getBytes(java.nio.charset.StandardCharsets.UTF_8))
 }

@@ -124,6 +124,11 @@ def LAST_MODIFIED_ATTR_ID = '019e9210-ad15-73f8-bc06-7e94a1d52c37'
 def DATASOURCE_ATTR_ID    = '019e9210-be62-7a89-90d3-48b6f57e0c21'
 def QUERY_ATTR_ID         = '019e9210-cf9b-751a-85f2-d30c7a48b9e6'
 def FILTER_ATTR_ID        = '019e9210-e04d-7c6b-a481-5f29d8036c7a'
+// A file's object key (Cloud + Edge): DataXray's datasource id and the source
+// system's object id. A file asset is found by them when DataXray gives the
+// file a new id (its index dropped and rescanned).
+def DATASOURCE_ID_ATTR_ID = '019e9212-3d44-7f61-8e5c-8a9b0c1d2e23'
+def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
 
 // "returns / returned by" — links an Unstructured Data Query asset (source) to
 // each DataXray File asset (target) it currently returns. Deliberately NOT
@@ -244,6 +249,8 @@ def attrTypeDefs = [
     [id: FILE_SIZE_ATTR_ID,     name: 'File Size',             stringType: 'PLAIN_TEXT'],
     [id: LAST_MODIFIED_ATTR_ID, name: 'Last Modified',         stringType: 'PLAIN_TEXT'],
     [id: DATASOURCE_ATTR_ID,    name: 'Datasource Name',       stringType: 'PLAIN_TEXT'],
+    [id: DATASOURCE_ID_ATTR_ID, name: 'DataXray Datasource ID', stringType: 'PLAIN_TEXT'],
+    [id: OBJECT_ID_ATTR_ID,     name: 'DataXray Object ID',    stringType: 'PLAIN_TEXT'],
     [id: QUERY_ATTR_ID,         name: 'DataXray Query',        stringType: 'PLAIN_TEXT'],
     [id: FILTER_ATTR_ID,        name: 'Annotated Text Filter', stringType: 'PLAIN_TEXT'],
 ]
@@ -278,7 +285,8 @@ def assignmentDefs = [
     // mandatory Description would flag every one of them as incomplete.
     [assetTypeId: FILE_TYPE_ID, name: 'DataXray File', descriptionMin: 0,
      customAttrs: [FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
-                   DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID],
+                   DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID,
+                   DATASOURCE_ID_ATTR_ID, OBJECT_ID_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
                  [id: RETURNS_RELTYPE_ID, direction: 'TO_SOURCE'],   // returned by queries
                  [id: FORMERLY_GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],  // formerly groups classifications
