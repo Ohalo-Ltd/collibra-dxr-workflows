@@ -270,6 +270,13 @@ name: one you renamed yourself keeps your name. The workflows refer to all of th
 settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
 (`data-xray` by default) stay as they are.
 
+### Upgrading to v2.8.1
+
+Re-import the workflows. Nothing else is needed: the **DataXray Extracted Values**
+table now has borders, cell padding and fixed column widths, and long values
+wrap inside their cell. A file asset's table gets the new look the next time a
+sync refreshes it (its search's rerun, or the nightly sync).
+
 ### Upgrading to v2.8
 
 Re-import the workflows. Nothing else is needed: v2.8 adds one optional

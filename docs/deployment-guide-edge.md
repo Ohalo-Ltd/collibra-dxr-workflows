@@ -75,6 +75,10 @@ The same guidance as the on-prem edition applies:
 
 Releases before the DataXray rename call the product **Data X-Ray** and the queries domain **Data X-Ray Custom Queries**. After re-importing the workflows, run **Configure DataXray Workflows** once: it renames the community, the three domains (the queries domain becomes **DataXray Sync Filter**), the **DataXray File** asset type, the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute types, the **DataXray Admin** and **DataXray User** roles and the six workflow definitions. It only renames an element that still has its old default name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes: settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name (`data-xray` by default) stay as they are.
 
+## Upgrading to v2.8.1
+
+Re-import the workflows. Nothing else is needed: the **DataXray Extracted Values** table now has borders, cell padding and fixed column widths, and long values wrap inside their cell. A file asset's table gets the new look the next time a sync refreshes it (its search's rerun, or the nightly sync).
+
 ## Upgrading to v2.8
 
 Re-import the workflows. Nothing else is needed: v2.8 adds one optional feature, extractor values on file assets, which is off until an admin sets **Configure DataXray Workflows**' new **Sync extractor values to file assets (true/false)** variable to `true` and runs it. See [Optional: extractor values on file assets](file-asset-lifecycle.md#optional-extractor-values-on-file-assets).

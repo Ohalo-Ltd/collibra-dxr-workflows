@@ -520,19 +520,34 @@ def replaceFileAssetAttr(UUID assetId, UUID typeId, String value) {
 
 // The DataXray Extracted Values table: one row per extractor, its values one
 // per line. '' when the file has none.
+//
+// Styled inline: Collibra's rich-text view has no table CSS of its own. Its
+// sanitizer keeps style attributes (normalised: 1px → 1.0px, #hex → rgb())
+// but drops word-break and overflow-wrap; the fixed layout with set column
+// widths plus word-wrap is what makes long JSON values wrap (checked on
+// ohalo.collibra.com, 26 Oct 2026).
 def renderExtractedValuesHtml(List pairs) {
     if (!pairs) { return '' }
     def byExtractor = [:]
     pairs.each { p -> byExtractor.get(p[0].toString(), []) << p[1].toString() }
+    def border = 'border:1px solid #c8c8c8;'
+    def cell = border + 'padding:4px 8px;text-align:left;vertical-align:top;word-wrap:break-word;'
     def writer = new StringWriter()
     def html = new groovy.xml.MarkupBuilder(new groovy.util.IndentPrinter(writer, '', false))
-    html.table {
-        thead { tr { th('Extractor'); th('Value') } }
+    html.doubleQuotes = true
+    html.table(style: border + 'border-collapse:collapse;width:100%;table-layout:fixed;') {
+        colgroup { col(style: 'width:30%;'); col(style: 'width:70%;') }
+        thead {
+            tr {
+                th(style: cell + 'background-color:#f2f2f2;font-weight:bold;', 'Extractor')
+                th(style: cell + 'background-color:#f2f2f2;font-weight:bold;', 'Value')
+            }
+        }
         tbody {
             byExtractor.each { name, values ->
                 tr {
-                    td(name)
-                    td {
+                    td(style: cell, name)
+                    td(style: cell) {
                         values.eachWithIndex { v, i ->
                             if (i > 0) { br() }
                             mkp.yield(v)
