@@ -174,8 +174,10 @@ Collibra until an admin turns it on:
    Values** attribute and adds it to the **DataXray File** asset type.
 3. From then on every import and rerun (including the nightly ones) writes a
    table of the file's extractor values into that attribute: one row per
-   extractor, each value on its own line. Text, numbers and yes/no values are
-   all stored as text. Existing file assets get theirs on their next sync.
+   extractor, each value on its own line, with borders and fixed column widths
+   so long values (JSON, for example) wrap inside their cell. Text, numbers and
+   yes/no values are all stored as text. Existing file assets get theirs on
+   their next sync.
 
 **Values are kept current.** Like the other file attributes, the table is
 rewritten from DataXray on every sync, and cleared when the file no longer has
