@@ -7,7 +7,7 @@
   "businessItemResourceType": "GLOBAL",
   "variants": {
     "edge": {
-      "description": "Rerun every DataXray search flagged 'keep in sync' each night, re-syncing its imported file assets automatically, then check that DataXray still has the files no search returns (those it no longer has become 'Not in DataXray'). DataXray workflows {{pack:version}} ({{pack:variant}})."
+      "description": "Rerun every DataXray search flagged 'keep in sync' each night, re-syncing its imported file assets automatically, then check the files no search returns against DataXray: those it no longer has become 'Not in DataXray', the others get their attributes and classification links refreshed. DataXray workflows {{pack:version}} ({{pack:variant}})."
     }
   }
 }

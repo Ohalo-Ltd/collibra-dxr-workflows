@@ -270,6 +270,14 @@ name: one you renamed yourself keeps your name. The workflows refer to all of th
 settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
 (`data-xray` by default) stay as they are.
 
+### Upgrading to v2.9
+
+Nothing changes in the on-prem edition. v2.9 makes the Cloud + Edge edition's
+nightly check also refresh the classification links of file assets no search
+returns; the on-prem edition has no such check (see *Upgrading to v2.7*), so a
+file no search returns keeps its links as they were when a search last
+returned it. Re-importing the on-prem workflows is optional.
+
 ### Upgrading to v2.8.1
 
 Re-import the workflows. Nothing else is needed: the **DataXray Extracted Values**
@@ -304,7 +312,9 @@ File Name** attribute.
 Configure also creates the **Not in DataXray** status. Only the Cloud + Edge
 edition sets it, from a nightly check against DataXray; the on-prem edition
 cannot run that check, because DataXray's public files API does not return the
-object ids it relies on.
+object ids it relies on. For the same reason the on-prem edition does not
+refresh the classification links of files no search returns (the Cloud + Edge
+edition does, from v2.9).
 
 ### Upgrading to v2.4
 

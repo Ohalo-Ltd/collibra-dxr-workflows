@@ -134,9 +134,10 @@ def isParkedFileStatus(UUID statusId, Map ids) {
         statusId == ids.obsoleteStatusId
 }
 
-// Nightly existence check (Cloud + Edge): object ids asked about per request.
-// 200 keeps both the request and the answer (~250 bytes per file found, only
-// datasource_id and object_id returned) well under Edge's 100 KB limit.
+// Nightly existence check (Cloud + Edge): object ids asked about per query.
+// The answer carries full rows (classification evidence for the link refresh),
+// so it is paged like a rerun (dxrEdgeDefaultPageSize() rows per request); 200
+// ids keep the request itself small.
 def dxrExistsCheckBatchSize() { return 200 }
 
 // Optional extractor values (v2.8, off by default). The switch is Configure's

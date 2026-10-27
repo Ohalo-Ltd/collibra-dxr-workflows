@@ -10,7 +10,9 @@ written as Given / When / Then and carries a status:
   people, the `dataxray-no-auto-import` tag) were verified on 22 October 2026
   in both editions (on-prem, and Cloud + Edge through an Edge HTTP
   connection). The one-off Obsolete → *Not in any search* migration (NIGHT-7)
-  was verified once; it runs identically in both editions.
+  was verified once; it runs identically in both editions. The nightly
+  refresh of files no search returns (NIGHT-11, v2.9) was verified on 27
+  October 2026 in the Cloud + Edge edition.
 - 🔹 **Implemented** — behavior is coded and reviewed but has not been
   individually demonstrated.
 - ⚠️ **Decision needed** — a gap or product decision, listed in
@@ -55,7 +57,7 @@ DataXray `/api/v1/files` response asserts.
 | ID | Given | When | Then | Status |
 |---|---|---|---|---|
 | EVID-1 | A **label** is applied to a file (present on its result row) | The file is imported or re-synced | The file asset has a `groups` relation to the Label asset | ✅ |
-| EVID-2 | A label is **removed from a file** (or deleted) in DataXray, so its row no longer lists it | The file is re-synced (rerun or nightly) | The file asset's `groups` relation to the label becomes **formerly groups** (if the integration created it, see EVID-9) | ✅ |
+| EVID-2 | A label is **removed from a file** (or deleted) in DataXray, so its row no longer lists it | The file is re-synced: by the rerun of a search that still returns it, or, in the Cloud + Edge edition, by the nightly existence check if no search returns it any more (NIGHT-11) | The file asset's `groups` relation to the label becomes **formerly groups** (if the integration created it, see EVID-9). On-prem edition: a file no search returns keeps its links until a search returns it again | ✅ |
 | EVID-3 | An **annotator** produced hits on a file (`uniquePhrases` > 0 / non-empty `annotations`) | The file is imported or re-synced | The file asset has a `groups` relation to the Annotator asset | ✅ |
 | EVID-4 | An annotator was **checked but produced zero hits** on a file | The file is imported or re-synced | **No** relation is created — checked-with-zero is not a match, and an existing relation the integration created becomes **formerly groups** | ✅ |
 | EVID-5 | An **extractor** produced metadata for a file (an `extractedMetadata` entry, any value) | The file is imported or re-synced | The file asset has a `groups` relation to the Extractor asset | 🔹 |
@@ -143,9 +145,10 @@ Owner: **Sync DataXray Classification (Nightly)** at 02:00 and
 | NIGHT-4 | The relation scan fails partway during the sweep | The sweep would change statuses | The sweep **aborts for the night** — it never acts on a partial picture | 🔹 |
 | NIGHT-5 | The Rerun workflow isn't deployed, or config is missing | The 02:30 nightly fires | The fan-out is skipped with a logged reason; the orphan sweep still runs; the timer schedule survives | 🔹 |
 | NIGHT-6 | A rerun-summary task from a manual run is open overnight | The 02:30 nightly fires | The nightly's headless rerun of that query still starts and completes (no user task in headless mode, no exclusivity conflict) | ✅ |
-| NIGHT-8 | Cloud + Edge edition: a file asset is **Not in any search** and DataXray no longer has the file (deleted in DataXray, or its whole datasource deleted) | The 02:30 nightly runs | The existence check looks it up by DataXray Datasource ID + Object ID (about 200 per request) and sets **Not in DataXray**. Files DataXray still has are unchanged | ✅ |
+| NIGHT-8 | Cloud + Edge edition: a file asset is **Not in any search** and DataXray no longer has the file (deleted in DataXray, or its whole datasource deleted) | The 02:30 nightly runs | The existence check looks it up by DataXray Datasource ID + Object ID (up to 200 per query, 25 results per request) and sets **Not in DataXray**. Files DataXray still has keep their status and are refreshed (NIGHT-11) | ✅ |
 | NIGHT-9 | Cloud + Edge edition: a **Not in DataXray** file asset's file is back in DataXray | The nightly runs | It goes back to **Not in any search**; a search that matches it sets it to **Candidate** | ✅ |
 | NIGHT-10 | A file asset no search returns has a status a person set (e.g. Accepted), or has no object key (Not in any search since before the upgrade) | The nightly runs | Not checked, nothing changes; the number without an object key is logged | ✅ |
+| NIGHT-11 | Cloud + Edge edition: a file asset is **Not in any search** (or Not in DataXray) and DataXray still has the file, but its labels, extractors or annotators changed there — typically the label a search selected on was removed, which is why no search returns it | The nightly runs | The existence check refreshes it like a rerun refreshes a file it returns, without the search link or the status: an integration-made `groups` link that no longer applies becomes **formerly groups**, a new one is added (or swapped back), and the attributes (incl. DataXray Extracted Values) are rewritten. Links a person created are kept; the status stays Not in any search | ✅ |
 | NIGHT-7 | The workflows were upgraded from a release before v2.4, and file assets that no query returns still have status **Obsolete** | The first 02:30 nightly after the upgrade (and after Configure has been re-run, ADM-4) runs | The orphan sweep moves every such file asset to **Not in any search** (a one-off migration); after that Obsolete is never set on file assets | ✅ |
 
 ## 7. Deployment & configuration lifecycle

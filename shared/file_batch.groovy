@@ -134,21 +134,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
 
         (newItems + existingItems).each { pair ->
             def (tuple, assetId) = pair
-            setFileAssetAttr(assetId, ids.dataxrayIdAttrTypeId,   tuple[0])
-            setFileAssetAttr(assetId, ids.fileNameAttrTypeId,     fileNameOf(tuple))
-            setFileAssetAttr(assetId, ids.filePathAttrTypeId,     tuple[2])
-            setFileAssetAttr(assetId, ids.fileSizeAttrTypeId,     readableFileSize(tuple[4]))
-            setFileAssetAttr(assetId, ids.lastModifiedAttrTypeId, readableTimestamp(tuple[5]))
-            setFileAssetAttr(assetId, ids.datasourceAttrTypeId,   tuple[1])
-            setFileAssetAttr(assetId, ids.linkAttrTypeId,         tuple[6])
-            if (fileObjectKey(tuple) != null) {
-                setFileAssetAttr(assetId, ids.datasourceIdAttrTypeId, tuple[8])
-                setFileAssetAttr(assetId, ids.objectIdAttrTypeId,     tuple[9])
-            }
-            if (valuesOn) {
-                replaceFileAssetAttr(assetId, ids.extractedValuesAttrTypeId,
-                                     renderExtractedValuesHtml(tuple.size() > 10 ? tuple[10] : []))
-            }
+            writeFileAssetAttrs(assetId, tuple, ids, valuesOn)
         }
 
         // --- Relations ------------------------------------------------------------
@@ -191,47 +177,9 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
                 if (formerly != null) { removeRelationQuietly(formerly.id) }
             }
 
-            // Reconcile the file→classification links against the CURRENT hit
-            // evidence. A result row carries the file's complete classification
-            // state, so the desired set is the same whichever query syncs the
-            // file. Missing links are added (or swapped back from "formerly");
-            // a link the integration made that no longer applies is swapped to
-            // "formerly groups" — a label deleted or unassigned in DataXray
-            // stays visible as history instead of vanishing. Links a person
-            // created are never removed, and a person's link to a classification
-            // the file matches means nothing is added.
-            def desired = [] as Set
-            tuple[7].each { classId -> desired << string2Uuid(classId.toString()) }
-            def existingGroups = relationsByFarEnd(ids.groupsRelationTypeId, assetId, null)
-            Map formerlyGroups = null
-            def formerlyGroupsOf = {
-                if (formerlyGroups == null) { formerlyGroups = relationsByFarEnd(ids.formerlyGroupsRelationTypeId, assetId, null) }
-                return formerlyGroups
-            }
-            desired.each { cid ->
-                if (!existingGroups.containsKey(cid)) {
-                    if (addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
-                            .sourceId(assetId).targetId(cid).typeId(ids.groupsRelationTypeId).build())) {
-                        relationsAdded++
-                    }
-                    def formerly = formerlyGroupsOf()[cid]
-                    if (formerly != null && owned.contains(formerly.createdBy)) { removeRelationQuietly(formerly.id) }
-                }
-            }
-            existingGroups.each { cid, rel ->
-                if (desired.contains(cid)) { return }
-                if (!owned.contains(rel.createdBy)) {
-                    loggerApi.debug("Kept classification link ${cid} on ${assetId}: created by a person (${rel.createdBy}), not the integration")
-                    return
-                }
-                if (removeRelationQuietly(rel.id)) {
-                    relationsRemoved++
-                    if (!formerlyGroupsOf().containsKey(cid)) {
-                        addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
-                            .sourceId(assetId).targetId(cid).typeId(ids.formerlyGroupsRelationTypeId).build())
-                    }
-                }
-            }
+            def links = reconcileFileGroups(assetId, tuple[7], ids, owned)
+            relationsAdded += links.added
+            relationsRemoved += links.removed
         }
     } catch (Exception batchEx) {
         // Count the whole batch as failed but keep the loop moving — one bad batch
@@ -489,6 +437,74 @@ def readableTimestamp(value) {
     }
     return java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm 'UTC'", Locale.ENGLISH)
         .withZone(java.time.ZoneOffset.UTC).format(instant)
+}
+
+// The attributes a sync writes from a work-item tuple (replace-all per type —
+// idempotent). Shared by processFileBatch and the Edge nightly existence check.
+def writeFileAssetAttrs(UUID assetId, List tuple, Map ids, boolean valuesOn) {
+    setFileAssetAttr(assetId, ids.dataxrayIdAttrTypeId,   tuple[0])
+    setFileAssetAttr(assetId, ids.fileNameAttrTypeId,     fileNameOf(tuple))
+    setFileAssetAttr(assetId, ids.filePathAttrTypeId,     tuple[2])
+    setFileAssetAttr(assetId, ids.fileSizeAttrTypeId,     readableFileSize(tuple[4]))
+    setFileAssetAttr(assetId, ids.lastModifiedAttrTypeId, readableTimestamp(tuple[5]))
+    setFileAssetAttr(assetId, ids.datasourceAttrTypeId,   tuple[1])
+    setFileAssetAttr(assetId, ids.linkAttrTypeId,         tuple[6])
+    if (fileObjectKey(tuple) != null) {
+        setFileAssetAttr(assetId, ids.datasourceIdAttrTypeId, tuple[8])
+        setFileAssetAttr(assetId, ids.objectIdAttrTypeId,     tuple[9])
+    }
+    if (valuesOn) {
+        replaceFileAssetAttr(assetId, ids.extractedValuesAttrTypeId,
+                             renderExtractedValuesHtml(tuple.size() > 10 ? tuple[10] : []))
+    }
+}
+
+// Reconcile a file asset's file→classification links against the CURRENT hit
+// evidence (`classIds`: the Collibra classification asset ids the file's row
+// lists). A result row carries the file's complete classification state, so
+// the desired set is the same whichever query — or the nightly existence
+// check — syncs the file. Missing links are added (or swapped back from
+// "formerly"); a link the integration made that no longer applies is swapped
+// to "formerly groups" — a label deleted or unassigned in DataXray stays
+// visible as history instead of vanishing. Links a person created are never
+// removed, and a person's link to a classification the file matches means
+// nothing is added. `owned`: integrationIdentityIds(). Returns [added:, removed:].
+def reconcileFileGroups(UUID assetId, Collection classIds, Map ids, Set owned) {
+    int added = 0
+    int removed = 0
+    def desired = [] as Set
+    classIds.each { classId -> desired << string2Uuid(classId.toString()) }
+    def existingGroups = relationsByFarEnd(ids.groupsRelationTypeId, assetId, null)
+    Map formerlyGroups = null
+    def formerlyGroupsOf = {
+        if (formerlyGroups == null) { formerlyGroups = relationsByFarEnd(ids.formerlyGroupsRelationTypeId, assetId, null) }
+        return formerlyGroups
+    }
+    desired.each { cid ->
+        if (!existingGroups.containsKey(cid)) {
+            if (addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
+                    .sourceId(assetId).targetId(cid).typeId(ids.groupsRelationTypeId).build())) {
+                added++
+            }
+            def formerly = formerlyGroupsOf()[cid]
+            if (formerly != null && owned.contains(formerly.createdBy)) { removeRelationQuietly(formerly.id) }
+        }
+    }
+    existingGroups.each { cid, rel ->
+        if (desired.contains(cid)) { return }
+        if (!owned.contains(rel.createdBy)) {
+            loggerApi.debug("Kept classification link ${cid} on ${assetId}: created by a person (${rel.createdBy}), not the integration")
+            return
+        }
+        if (removeRelationQuietly(rel.id)) {
+            removed++
+            if (!formerlyGroupsOf().containsKey(cid)) {
+                addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
+                    .sourceId(assetId).targetId(cid).typeId(ids.formerlyGroupsRelationTypeId).build())
+            }
+        }
+    }
+    return [added: added, removed: removed]
 }
 
 def setFileAssetAttr(UUID assetId, UUID typeId, value) {

@@ -75,6 +75,10 @@ The same guidance as the on-prem edition applies:
 
 Releases before the DataXray rename call the product **Data X-Ray** and the queries domain **Data X-Ray Custom Queries**. After re-importing the workflows, run **Configure DataXray Workflows** once: it renames the community, the three domains (the queries domain becomes **DataXray Sync Filter**), the **DataXray File** asset type, the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute types, the **DataXray Admin** and **DataXray User** roles and the six workflow definitions. It only renames an element that still has its old default name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes: settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name (`data-xray` by default) stay as they are.
 
+## Upgrading to v2.9
+
+Re-import the workflows. Nothing else is needed. The nightly check of file assets no search returns (see *Upgrading to v2.7*) now also refreshes the ones DataXray still has: their attributes, and their links to labels, extractors and annotators. When a label is removed from a file in DataXray and that takes the file out of its only search, the rerun sets it to **Not in any search** and that night its link to the label becomes **formerly groups**. Before v2.9 the link stayed as it was. The check now reads full results, 25 per request like a rerun, so it sends more requests than before: about 80 for 2,000 such files.
+
 ## Upgrading to v2.8.1
 
 Re-import the workflows. Nothing else is needed: the **DataXray Extracted Values** table now has borders, cell padding and fixed column widths, and long values wrap inside their cell. A file asset's table gets the new look the next time a sync refreshes it (its search's rerun, or the nightly sync).
