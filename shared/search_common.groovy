@@ -4,6 +4,7 @@
 
 // {{include:dxr_rows.groovy}}
 // {{include:collibra_lookup.groovy}}
+// {{include:query_preview.groovy}}
 
 // Normalize an asset-picker value to a list of trimmed, non-empty ID strings.
 // Pickers may hand back a List, a single String, or a comma-separated String.
@@ -148,28 +149,6 @@ def attachFileToAsset(UUID assetId, String fileName, byte[] bytes) {
         loggerApi.warn("Failed to attach ${fileName} to asset ${assetId}: ${attachEx.message}")
         return false
     }
-}
-
-// The "Files" attribute on the query asset: an HTML preview table of the first
-// matches (or a plain sentence for an empty result).
-def renderPreviewHtml(List shown, String totalDisplay, String moreNote) {
-    if (shown.isEmpty()) {
-        return 'Query returned 0 results'
-    }
-    def writer = new StringWriter()
-    def html = new groovy.xml.MarkupBuilder(writer)
-    html.div {
-        p("Preview — first ${shown.size()} of ${totalDisplay} matching file(s).${moreNote}".toString())
-        table {
-            thead { tr { th('Datasource'); th('Path') } }
-            tbody {
-                shown.each { f ->
-                    tr { td(dataSourceName(f)); td(filePath(f)) }
-                }
-            }
-        }
-    }
-    return writer.toString()
 }
 
 // Import feasibility against the INSTANCE-WIDE cap. The cap applies to the

@@ -322,6 +322,11 @@ that returns it:
   after the 02:00 classification sync so renamed or removed classifications are
   already current when the queries are rebuilt.
 
+Each rerun also replaces the query asset's **Files** preview with the first
+matches it found and its total, so the preview follows the search rather than
+showing what it returned when it was created. The attached results file is not
+rebuilt by a rerun.
+
 ![Starting a rerun from a saved query asset's Actions menu](images/file-lifecycle-query-asset.png)
 
 A rerun rebuilds the search from the query asset's linked classifications (so

@@ -345,11 +345,6 @@ def unknownDatasourceIds(List hits, Map dsNames) {
     return out as List
 }
 
-// Preview rows for renderPreviewHtml(), which expects /api/v1/files-shaped maps.
-def tuplesAsPreviewRows(List tuples) {
-    return tuples.collect { t -> [datasource: [name: t[1]], path: t[2]] }
-}
-
 // --- Criteria → query_items ---------------------------------------------------
 
 // criteria: [labelIndexIds:, labelNames:, extractorIndexIds:, extractorNames:,

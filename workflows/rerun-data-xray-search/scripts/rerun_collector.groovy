@@ -30,6 +30,7 @@
 //   queryAssetId    (String)  – the query asset's UUID
 //   rerunRetiredCount / rerunUnlinkedCount (Integer) – zeroed here, advanced
 //                               by retire_orphans.groovy
+// and replaces the query asset's "Files" preview with this run's results.
 
 import com.collibra.dgc.workflow.api.exception.WorkflowException
 import groovy.json.JsonOutput
@@ -40,6 +41,7 @@ import groovy.json.JsonOutput
 // {{include:dxr_http_direct.groovy}}
 // {{include:collibra_lookup.groovy}}
 // {{include:rerun_common.groovy}}
+// {{include:query_preview.groovy}}
 // {{include:worklist.groovy}}
 
 announceDxrVersion('Rerun DataXray Search')
@@ -204,6 +206,10 @@ if (newFiles > 0 && projectedTotal > dxrMaxTotalFileAssets()) {
         "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} DataXray file asset(s) and this rerun would add ${newFiles} more — the projected ${projectedTotal} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.")
     return
 }
+
+// --- Refresh the Files preview (the whole answer is in hand) -----------------------------
+
+refreshQueryPreview(queryId, ids.filesAttrTypeId, workItems, workItems.size() + skippedNoId)
 
 // --- Resolve classifications and store the work list -------------------------------------
 
