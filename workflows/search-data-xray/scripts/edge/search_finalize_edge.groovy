@@ -68,7 +68,7 @@ if (fileStatus == 'complete') {
     def bytes = new ByteArrayOutputStream()
     new ZipOutputStream(bytes).withCloseable { zos ->
         zos.putNextEntry(new ZipEntry('results.csv'))
-        zos.write('Datasource,Path\r\n'.getBytes('UTF-8'))
+        zos.write('Datasource,Path,Full Object ID\r\n'.getBytes('UTF-8'))
         for (int n = 0; n < chunks; n++) {
             zos.write((execution.getVariable("resultsFileChunk_${n}".toString()) ?: '').toString().getBytes('UTF-8'))
         }

@@ -134,11 +134,11 @@ def edgeExcludedFields() {
             'metadata#OWNER_GROUP*', 'metadata#binary_hash', 'dxr#sha_256*', 'folder_id', 'dxr#manually_removed_tags']
 }
 
-// The Cloud + Edge results file needs only datasource and path: exclude every
-// other field family, which brings a row from ~1.2 KB to ~280 bytes (demo,
-// Sept 2026), so 100 rows fit easily under the 100 KB cap.
+// The Cloud + Edge results file needs only datasource, path and object id:
+// exclude every other field family, which brings a row from ~1.2 KB to ~300
+// bytes (demo, Sept 2026), so 100 rows fit easily under the 100 KB cap.
 def edgeResultsFileExcludedFields() {
-    return ['dxr#*', 'metadata#*', 'annotation*', 'extracted_metadata#*', 'computed*', 'object_id',
+    return ['dxr#*', 'metadata#*', 'annotation*', 'extracted_metadata#*', 'computed*',
             'ai#*', 'external*', 'folder_id', 'ds#file_size']
 }
 

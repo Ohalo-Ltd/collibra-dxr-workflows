@@ -64,7 +64,7 @@
     </scriptTask>
 
     <userTask id="resultsTask"
-              name="Sync Results"
+              name="Sync Results (${dxrRunStartedAt})"
               flowable:candidateUsers="user(${initiator})"
               flowable:formKey="syncResultsForm">
       <extensionElements>

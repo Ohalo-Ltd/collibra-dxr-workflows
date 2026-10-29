@@ -222,6 +222,21 @@ ID** and **DataXray Object ID**).
 - **On-prem:** DataXray's public files API does not return the object id
   (October 2026), so the on-prem edition follows the file id only.
 
+Together, the datasource id and the object id are how DataXray identifies a
+file in its UI and its internal APIs: the datasource id is the prefix that
+makes an object id (a path, or the source system's item id) unique. The
+public `/api/v1/files` API identifies files differently, by a file id based
+on DataXray's search index — the **DataXray ID** attribute — which changes
+when a datasource's index is dropped and scanned again, so it is not a
+stable key to join on. From v2.9 each file
+asset in the Cloud + Edge edition therefore also carries **DataXray Full
+Object ID** = `<datasource id>:<object id>` (for example
+`108:Documents/Invoices/Invoice 1.pdf`), one value to join Collibra file
+assets with DataXray exports and other processes. The search results file
+(`results.csv`) has the same value in its *Full Object ID* column. The
+attribute exists once Configure has been run on v2.9 or later; until then a
+sync simply does not write it.
+
 An asset created by a release before v2.6 gets its object key the next time
 a sync updates it. Rerun your searches (or let the nightly sync run) once
 after upgrading, before you drop a datasource's data from the index, so that
@@ -409,12 +424,12 @@ returned* vs *In no search*):
 
 | Scenario | Outcome |
 |---|---|
-| File deleted in DataXray | Disappears from every search's results → each search's link becomes *formerly returns* as it reruns → Not in any search once the last one has rerun → in the Cloud + Edge edition, **Not in DataXray** at the next nightly check (see [3](#3-dataxray-no-longer-has-the-file-cloud--edge)). |
-| File changed so it no longer meets the criteria (e.g. a label removed) | That query's link becomes *formerly returns*; the status changes only if no other query returns it. Its link to the removed label becomes *formerly groups* when the file is next re-synced: by the rerun of another search that still returns it, or, if none does, by the nightly check in the Cloud + Edge edition (see [3](#3-dataxray-no-longer-has-the-file-cloud--edge)). |
+| File deleted in DataXray | Disappears from every search's results → each search's link becomes *formerly returns* as it reruns → Not in any search once the last one has rerun → in the Cloud + Edge edition, **Not in DataXray** at the end of that same rerun, which asks DataXray about every file it parks (see [3](#3-dataxray-no-longer-has-the-file-cloud--edge)). |
+| File changed so it no longer meets the criteria (e.g. a label removed) | That query's link becomes *formerly returns*; the status changes only if no other query returns it. Its link to the removed label becomes *formerly groups* when the file is next re-synced: by the rerun of another search that still returns it, or, in the Cloud + Edge edition, by the check the rerun that parked it runs at its end (see [3](#3-dataxray-no-longer-has-the-file-cloud--edge)). In the on-prem edition a file no search returns keeps its links as they were. |
 | Search criteria narrowed (a criterion removed in DataXray is *not* silently dropped — the rerun fails instead, see the deployment guide) | Files outside the new criteria get *formerly returns* links, then Not in any search if no query returns them. |
 | DataXray re-scanned a datasource and assigned **new file ids** | The new generation is created as new assets; the old generation becomes orphaned and gets Not in any search, with its history intact. |
 | File renamed or moved on a connector that identifies files by path, or moved to another datasource | The same, for that one file: a new asset for the new file id, the old asset Not in any search. |
-| Datasource deleted in DataXray | Its files disappear from every search's results and get Not in any search as each search reruns, then (Cloud + Edge) Not in DataXray at the next nightly check. A search that matched *only* that datasource now returns nothing, so the zero-results rule below leaves its files as they are; delete the query asset to release them. |
+| Datasource deleted in DataXray | Its files disappear from every search's results and get Not in any search as each search reruns, then (Cloud + Edge) Not in DataXray from the check at the end of that rerun. A search that matched *only* that datasource now returns nothing: on-prem the zero-results rule below leaves its files as they are (delete the query asset to release them); in the Cloud + Edge edition the rerun asks DataXray about every file it returned before and, once DataXray confirms it has none of them, unlinks them and sets Not in DataXray. |
 
 ### 2. The query asset itself was deleted
 
@@ -441,10 +456,18 @@ Obsolete is never set on file assets.
 
 A search can only say that a file no longer matches it. It cannot say why: the
 file may still be in DataXray and simply have stopped matching (a label was
-removed), or it may have been deleted. So in the Cloud + Edge edition the
-nightly file sync ends with an **existence check**: it asks DataXray about
-every file asset that is **Not in any search** or **Not in DataXray**, and
-refreshes the ones DataXray still has.
+removed), or it may have been deleted. So in the Cloud + Edge edition an
+**existence check** asks DataXray about such files and refreshes the ones it
+still has. It runs twice over:
+
+- at the **end of every rerun**, for the files that rerun just stopped
+  returning and parked, so their state is settled before the rerun's summary
+  appears — a deleted file is Not in DataXray at once, and a file that merely
+  stopped matching has its links brought up to date at once;
+- in the **nightly file sync**, after the reruns and the orphan sweep, for
+  every file asset that is **Not in any search** or **Not in DataXray** —
+  files the sweep parked (deleted query), files that are back in DataXray,
+  and anything a rerun's check could not finish.
 
 - Each file is looked up by its **DataXray Datasource ID** and **DataXray
   Object ID**, the identity that survives DataXray dropping a datasource's
@@ -492,15 +515,28 @@ returned it.
 
 ### Safety rails — when files are deliberately left alone
 
-- **A rerun that returns zero results changes no statuses or links.** An empty
-  answer from DataXray is far more likely to be an outage or truncated
-  response than a search that genuinely matches nothing; marking a query's
-  whole population as no longer returned on that basis would be wrong. The
-  result set is fetched with up to three attempts, and if all fail the rerun
-  stops with an error and changes nothing. The flip side: a search that
-  genuinely matches nothing any more (for example, its only datasource was
-  deleted in DataXray) keeps its files as they are until it matches
-  something again or the query asset is deleted.
+- **A rerun that returns zero results never acts on that answer alone.** An
+  empty answer from DataXray is far more likely to be an outage, a broken
+  index or a truncated response than a search that genuinely matches
+  nothing; marking a query's whole population as no longer returned on that
+  basis would be wrong. The result set is fetched with up to three attempts,
+  and if all fail the rerun stops with an error and changes nothing.
+  - **On-prem**: the files stay as they are until the search matches
+    something again or the query asset is deleted. The **Rerun complete**
+    summary says so ("No file was unlinked from this search") and how many
+    files stay linked, so *No longer returned: 0* is not mistaken for
+    "nothing changed".
+  - **Cloud + Edge**: the rerun asks DataXray about every file the search
+    returned before, by Datasource ID and Object ID. Files DataXray still has
+    are refreshed and keep their status and links, and the summary says how
+    many there are: the search is empty but its files are not gone, which
+    points at the search's index or criteria. Only when DataXray answered
+    every question and has **none** of them — the search's whole datasource
+    was deleted in DataXray — are the files unlinked (*formerly returns*) and
+    set to **Not in DataXray** (a status a person set, or a file another
+    search still returns, keeps its status). A file without an object key, or
+    an answer DataXray did not finish, means nothing is decided and the
+    nightly checks again.
 - **An aborted or partial rerun changes nothing.** If the run is refused (cap
   exceeded, connection not configured, a criterion deleted in DataXray,
   started on the wrong asset type, Configure not yet re-run after an
@@ -673,8 +709,8 @@ needed).
 | Maximum number? | **10,000** new file assets per import or rerun, and **25,000** DataXray File assets in total, wherever they live and whatever their status; warning above **5,000** per import. Fixed in the scripts. |
 | What keeps them current? | Manual **Rerun DataXray Search** on the query asset, or the **02:30 nightly** for queries tagged `dataxray-keep-in-sync`. |
 | When does one get Not in any search? | When no query returns it any more — after a rerun stops returning it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). Never if a person set its status. |
-| What happens to links that stop applying? | *returns* becomes *formerly returns*, and an integration-made *groups* becomes *formerly groups*. Both swap back if they apply again. Links a person created are never touched. For a file no search returns, the Cloud + Edge nightly check keeps the *groups* links current. |
-| When does one get Not in DataXray? | Cloud + Edge only: when it is Not in any search and the nightly check finds DataXray no longer has the file, or its datasource. Never if a person set its status. |
+| What happens to links that stop applying? | *returns* becomes *formerly returns*, and an integration-made *groups* becomes *formerly groups*. Both swap back if they apply again. Links a person created are never touched. For a file no search returns, the Cloud + Edge existence check (at the end of the rerun that parked it, and nightly) keeps the *groups* links current. |
+| When does one get Not in DataXray? | Cloud + Edge only: when it is Not in any search and the existence check — at the end of the rerun that parked it, or nightly — finds DataXray no longer has the file, or its datasource; or when a rerun gets 0 results and DataXray confirms it has none of the files the search returned. Never if a person set its status. |
 | When is one deleted? | Only by a person. The integration never deletes. |
 | When does one go back to Candidate? | As soon as any search's import or rerun matches it again, unless a person set its status. |
 | How do I free capacity? | Delete file assets that are Not in any search; to release active ones, delete their query asset and let the nightly sweep run, then delete. |

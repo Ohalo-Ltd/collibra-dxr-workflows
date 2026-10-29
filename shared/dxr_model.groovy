@@ -41,6 +41,7 @@ def dxrModelIds() {
         datasourceIdAttrTypeId : string2Uuid('019e9212-3d44-7f61-8e5c-8a9b0c1d2e23'),  // DataXray Datasource ID (file assets; Cloud + Edge)
         objectIdAttrTypeId     : string2Uuid('019e9212-4e55-7072-9f6d-9b0c1d2e3f34'),  // DataXray Object ID (file assets; Cloud + Edge)
         fileNameAttrTypeId     : string2Uuid('019e9212-5f66-7183-a07e-ac1d2e3f4a45'),  // DataXray File Name (file assets: DataXray's name, kept in sync; the asset name is the user's)
+        objectKeyAttrTypeId    : string2Uuid('019e9212-8c99-74b6-b3d1-df3a5b6c7d78'),  // DataXray Full Object ID (file assets; "<datasource id>:<object id>", the one value that identifies a file to DataXray's APIs; Cloud + Edge)
         extractedValuesAttrTypeId: string2Uuid('019e9212-7b88-73a5-a2c0-ce2f4a5b6c67'), // DataXray Extracted Values (optional, see extractedValuesOn)
         linkAttrTypeId         : string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba'),
         searchLinkAttrTypeId   : string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254'),
@@ -99,10 +100,21 @@ def dxrPackVersion() { return '{{pack:version}}' }
 def dxrPackEdition() { return '{{pack:variant}}' }
 def dxrVersionLabel() { return "DataXray workflows ${dxrPackVersion()} (${dxrPackEdition()})".toString() }
 
-// Log which release is running and publish it for the task forms' footer.
+// Log which release is running and publish it for the task forms' footer, and
+// stamp when this run started (dxrRunStartedAt, "29 Oct 2026, 14:05 UTC"): the
+// user tasks carry it in their title, with the search's name, so several open
+// tasks can be told apart in the task list without opening each one (TRC, Oct
+// 2026). Called once, by the first script of every workflow.
 def announceDxrVersion(String workflowName) {
     execution.setVariable('dxrVersionLabel', dxrVersionLabel())
+    execution.setVariable('dxrRunStartedAt', dxrRunTimestamp())
     loggerApi.info("${workflowName}: ${dxrVersionLabel()}")
+}
+
+// Now, for people: "29 Oct 2026, 14:05 UTC" (same form as a file's Last Modified).
+def dxrRunTimestamp() {
+    return java.time.format.DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm 'UTC'", Locale.ENGLISH)
+        .withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.now())
 }
 
 // Tag on a query asset that opts it into the nightly file sync.
@@ -156,6 +168,28 @@ def extractedValuesOn() {
         loggerApi.warn("Could not check for the DataXray Extracted Values attribute type: ${lookupEx.message}")
     }
     execution.setVariable('dxrExtractedValuesOn', on.toString())
+    return on
+}
+
+// The DataXray Full Object ID attribute (TRC requirement R1, Oct 2026: "expose the
+// full object id — the datasource prefix is missing"). DataXray's object id is
+// only meaningful together with its datasource (every DataXray API that takes
+// one takes both), so the attribute carries "<datasource id>:<object id>" —
+// the same key the syncs match files on (fileObjectKey) — for joining Collibra
+// file assets with DataXray exports and other processes. Configure creates the
+// attribute type; a sync writes it only while the type exists, checked once
+// per process and cached in dxrObjectKeyAttrOn, so an instance that has not
+// re-run Configure simply does not get the attribute.
+def objectKeyAttrOn() {
+    def cached = execution.getVariable('dxrObjectKeyAttrOn')
+    if (cached != null) { return cached.toString() == 'true' }
+    boolean on = false
+    try {
+        on = attributeTypeApi.exists(dxrModelIds().objectKeyAttrTypeId)
+    } catch (Exception lookupEx) {
+        loggerApi.warn("Could not check for the DataXray Full Object ID attribute type: ${lookupEx.message}")
+    }
+    execution.setVariable('dxrObjectKeyAttrOn', on.toString())
     return on
 }
 

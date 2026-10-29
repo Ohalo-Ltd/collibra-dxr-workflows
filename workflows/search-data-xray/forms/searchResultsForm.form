@@ -141,7 +141,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "",
-          "value": "<p style=\"color:#888;font-size:smaller\">{{dxrVersionLabel}}</p>",
+          "value": "<p style=\"color:#888;font-size:smaller\">{{dxrVersionLabel}} · started {{dxrRunStartedAt}}</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,

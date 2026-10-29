@@ -152,9 +152,10 @@ everything without being added to these roles.
   works with file or query assets. A user who cannot view a classification
   asset cannot see relations to it either (Collibra: "View permissions also
   impact asset relations"), so classifications moved into a restricted
-  community silently disappear from file assets. Do not move classification
-  assets out of this domain: the classification sync only looks for them
-  there.
+  community silently disappear from file assets. From v2.9 the syncs find a
+  classification wherever it lives (by asset type, matched by DataXray ID):
+  one moved to another domain or community is updated in place, never
+  duplicated, and keeps its file links — but keep it readable by everyone.
 - **File assets and saved searches can be private.** Set view permissions on
   the **DataXray Files** and **DataXray Sync Filter** domains (view
   permissions can be set per domain, not only per community); no separate
@@ -272,11 +273,32 @@ settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-impo
 
 ### Upgrading to v2.9
 
-Nothing changes in the on-prem edition. v2.9 makes the Cloud + Edge edition's
-nightly check also refresh the classification links of file assets no search
-returns; the on-prem edition has no such check (see *Upgrading to v2.7*), so a
-file no search returns keeps its links as they were when a search last
-returned it. Re-importing the on-prem workflows is optional.
+Re-import the workflows. Nothing else is needed. In both editions:
+
+- **Task titles** now name the search and the time the run started —
+  *Search Results: Contracts 2026 (29 Oct 2026, 14:05 UTC)*, *Import
+  Summary: …*, *Rerun Summary: …* — so several open tasks can be told apart
+  in the task list without opening each one. Every task also shows the start
+  time in its footer.
+- **Classifications are found wherever they live.** The classification sync
+  and the file syncs look classification assets up by asset type across the
+  whole instance (matched by DataXray ID), so a classification moved out of
+  the DataXray Classifications domain is updated in place, never duplicated
+  there, retired there if deleted in DataXray, and keeps its links to file
+  assets. New classifications are still created in that domain, and the
+  search form's pickers offer every classification wherever it lives. Keep
+  them readable by everyone (see *Who can see what*).
+
+Running **Configure DataXray Workflows** once more is optional: it creates the
+**DataXray Full Object ID** attribute type (`<datasource id>:<object id>`),
+which only the Cloud + Edge edition fills in — DataXray's public files API
+returns no object ids, so in the on-prem edition it stays empty, like
+DataXray Datasource ID and DataXray Object ID.
+
+The Cloud + Edge edition also gains the existence check at the end of each
+rerun and the zero-results rule for deleted datasources (see its guide); the
+on-prem edition has no existence check (see *Upgrading to v2.7*), so a file no
+search returns keeps its links as they were when a search last returned it.
 
 ### Upgrading to v2.8.1
 

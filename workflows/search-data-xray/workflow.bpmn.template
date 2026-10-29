@@ -76,7 +76,7 @@
     </scriptTask>
 
     <userTask id="resultsTask"
-              name="Search Results"
+              name="Search Results: ${conditionName} (${dxrRunStartedAt})"
               flowable:candidateUsers="user(${initiator})"
               flowable:formKey="searchResultsForm">
       <extensionElements>
@@ -136,7 +136,7 @@
     </exclusiveGateway>
 
     <userTask id="importSummaryTask"
-              name="Import Summary"
+              name="Import Summary: ${conditionName} (${dxrRunStartedAt})"
               flowable:candidateUsers="user(${initiator})"
               flowable:formKey="importSummaryForm">
       <extensionElements>

@@ -86,12 +86,12 @@
         <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
       </extensionElements>
     </exclusiveGateway>
-    <userTask id="syncFailedTask" name="Sync Failed" flowable:candidateUsers="user(${initiator})" flowable:formKey="syncFailedForm">
+    <userTask id="syncFailedTask" name="Sync Failed (${dxrRunStartedAt})" flowable:candidateUsers="user(${initiator})" flowable:formKey="syncFailedForm">
       <extensionElements>
         <design:stencilid><![CDATA[FormTask]]></design:stencilid>
       </extensionElements>
     </userTask>
-    <userTask id="resultsTask" name="Sync Results" flowable:candidateUsers="user(${initiator})" flowable:formKey="syncResultsForm">
+    <userTask id="resultsTask" name="Sync Results (${dxrRunStartedAt})" flowable:candidateUsers="user(${initiator})" flowable:formKey="syncResultsForm">
       <extensionElements>
         <design:stencilid><![CDATA[FormTask]]></design:stencilid>
       </extensionElements>

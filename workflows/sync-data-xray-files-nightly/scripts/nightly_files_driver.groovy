@@ -21,7 +21,11 @@
 //    them because retire passes are per-query. The sweep closes that hole
 //    (and also mops up assets whose relation add once failed mid-import).
 //    Safety: the sweep only runs if the full relation scan succeeded — it
-//    never parks based on a partial view. A status a person set (anything but
+//    never parks based on a partial view, and re-checks each asset's "returns"
+//    relations just before parking it, because the reruns started in phase 1
+//    run alongside the sweep and may have created or linked it since the scan
+//    (otherwise a brand-new asset could be parked with a live link, TRC
+//    stories #28/#29). A status a person set (anything but
 //    Candidate / Obsolete) is never changed. Orphans still Obsolete from a
 //    release before v2.4 move to 'Not in any search' on the first run. If a
 //    swept file reappears in any query's results, the rerun's batch stage
@@ -40,7 +44,11 @@
 // Edge HTTP connection name in the Collibra Cloud + Edge edition. The Edge
 // edition then runs a third phase after this script, with its own connection
 // name setting: the DataXray existence check (workflow.edge.bpmn.template,
-// shared/file_exists_edge.groovy), which sets 'Not in DataXray'.
+// shared/file_exists_edge.groovy), which sets 'Not in DataXray' and refreshes
+// the files DataXray still has. The Cloud + Edge rerun runs the same check
+// for the files it parks, so by the time the nightly runs most of them are
+// settled; the nightly covers the rest (files parked by the sweep, files
+// back in DataXray, checks that could not complete).
 //
 // Process variables produced (audit only — there is no results form):
 //   nightlyQueriesFound   (Integer) – flagged query assets discovered (incl. retired)
@@ -101,8 +109,20 @@ def sweepOrphanedFiles = {
     int parked = 0
     eachFileAsset(ids) { asset ->
         if (returnedFileIds.contains(asset.getId())) { return }
+        def sid = asset.getStatus()?.getId()
+        // Nothing to change (already parked, or a person's status): no further lookups.
+        if (!isIntegrationOwnedFileStatus(sid, ids) || sid == ids.notInAnySearchStatusId || sid == ids.notInDataXrayStatusId) { return }
         try {
-            if (parkFileAsset(asset, ids, 'no query returns it (nightly sweep)')) { parked++ }
+            // The reruns started above run alongside this sweep: a file asset one
+            // of them created or linked after the relation scan is not an orphan.
+            // Re-ask for this one asset before changing it.
+            def returnedNow = relationApi.findRelations(FindRelationsRequest.builder()
+                .relationTypeId(returnsRelationTypeId)
+                .targetId(asset.getId())
+                .limit(1)
+                .build())
+            if (!returnedNow.getResults().isEmpty()) { return }
+            if (parkFileAsset(assetApi.getAsset(asset.getId()), ids, 'no query returns it (nightly sweep)')) { parked++ }
         } catch (Exception parkEx) {
             loggerApi.error("Failed to park orphaned file asset '${asset.getName()}' [${asset.getId()}]: ${parkEx.message}")
         }

@@ -114,7 +114,7 @@
     </exclusiveGateway>
 
     <userTask id="rerunSummaryTask"
-              name="Rerun Summary"
+              name="Rerun Summary: ${conditionName} (${dxrRunStartedAt})"
               flowable:candidateUsers="user(${initiator})"
               flowable:formKey="rerunSummaryForm">
       <extensionElements>

@@ -21,7 +21,8 @@
 //     parked them as 'Not in any search' (or Obsolete, before v2.4). A status
 //     a person set (Accepted, Under Review, …) is never changed.
 //   – Attributes (DataXray ID, DataXray File Name, File Path, File Size, Last
-//     Modified, Datasource Name, Link) are written with setAssetAttributes (replace-all
+//     Modified, Datasource Name, Link, and on Cloud + Edge DataXray Datasource
+//     ID / Object ID / Full Object ID) are written with setAssetAttributes (replace-all
 //     per type — idempotent); size and date in readable form (see below).
 //     DataXray Extracted Values (optional, extractedValuesOn) is rewritten as a
 //     table of the file's extractor values, or cleared when it has none.
@@ -311,12 +312,15 @@ def accumulateBatchCounters(Map r) {
 // links are still swapped). If the file later reappears in any query's
 // results, processFileBatch sets it back to Candidate and swaps the link back.
 // `currentIds` / `previousIds` hold file-asset UUID strings.
-// Returns [unlinked:, retired:] — retired = files now in no search.
+// Returns [unlinked:, retired:, parkedIds:] — retired = files now in no search;
+// parkedIds = those whose status is now Not in any search / Not in DataXray
+// (the Cloud + Edge rerun then asks DataXray whether it still has them).
 def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId) {
     def ids = dxrModelIds()
     def orphanIds = previousIds.findAll { !currentIds.contains(it.toString()) }
     int unlinked = 0
     int retired = 0
+    def parkedIds = []
 
     if (!orphanIds.isEmpty()) {
         // Map file-asset id → relation id for this query's "returns" relations, so
@@ -344,15 +348,19 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
                     .build())
                 if (stillReturned.getResults().isEmpty()) {
                     def current = assetApi.getAsset(fileAssetId)
-                    parkFileAsset(current, ids, 'no query returns it any more')
+                    boolean parked = parkFileAsset(current, ids, 'no query returns it any more')
                     retired++
+                    def sid = parked ? ids.notInAnySearchStatusId : current.getStatus()?.getId()
+                    if (sid == ids.notInAnySearchStatusId || sid == ids.notInDataXrayStatusId) {
+                        parkedIds << fileAssetId.toString()
+                    }
                 }
             } catch (Exception orphanEx) {
                 loggerApi.error("Failed to unlink/park orphan file asset ${fileAssetId}: ${orphanEx.message}")
             }
         }
     }
-    return [unlinked: unlinked, retired: retired]
+    return [unlinked: unlinked, retired: retired, parkedIds: parkedIds]
 }
 
 // Set a file asset no search returns to 'Not in any search' — unless a person
@@ -449,9 +457,13 @@ def writeFileAssetAttrs(UUID assetId, List tuple, Map ids, boolean valuesOn) {
     setFileAssetAttr(assetId, ids.lastModifiedAttrTypeId, readableTimestamp(tuple[5]))
     setFileAssetAttr(assetId, ids.datasourceAttrTypeId,   tuple[1])
     setFileAssetAttr(assetId, ids.linkAttrTypeId,         tuple[6])
-    if (fileObjectKey(tuple) != null) {
+    def objectKey = fileObjectKey(tuple)
+    if (objectKey != null) {
         setFileAssetAttr(assetId, ids.datasourceIdAttrTypeId, tuple[8])
         setFileAssetAttr(assetId, ids.objectIdAttrTypeId,     tuple[9])
+        // "<datasource id>:<object id>": the one value DataXray's APIs identify
+        // a file by (TRC R1). Only while Configure has created the attribute type.
+        if (objectKeyAttrOn()) { setFileAssetAttr(assetId, ids.objectKeyAttrTypeId, objectKey) }
     }
     if (valuesOn) {
         replaceFileAssetAttr(assetId, ids.extractedValuesAttrTypeId,

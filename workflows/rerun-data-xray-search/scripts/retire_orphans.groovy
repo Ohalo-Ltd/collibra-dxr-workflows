@@ -13,13 +13,14 @@
 //   – A file returned by two queries is only retired once BOTH drop it.
 //
 // Reads:  rerunAborted, importTotal, importWorkList, previousFileIds, queryAssetId
-// Writes: rerunRetiredCount, rerunUnlinkedCount
+// Writes: rerunRetiredCount, rerunUnlinkedCount, rerunRetireSkipped/rerunRetireSkipReason
 
 import groovy.json.JsonSlurper
 
 // {{include:dxr_model.groovy}}
 // {{include:worklist.groovy}}
 // {{include:file_batch.groovy}}
+// {{include:rerun_common.groovy}}
 
 if (execution.getVariable('rerunAborted') == true) {
     loggerApi.info('Retire pass skipped: the rerun was aborted')
@@ -29,6 +30,7 @@ if (execution.getVariable('rerunAborted') == true) {
 int total = (execution.getVariable('importTotal') ?: 0) as int
 if (total == 0) {
     loggerApi.warn('Retire pass skipped: the rerun returned 0 results — not retiring anything in case DataXray answered incompletely')
+    noteRetireSkipped(zeroResultsRetireSkipReason(previousFileCount()))
     return
 }
 
