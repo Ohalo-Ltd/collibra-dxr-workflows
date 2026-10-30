@@ -12,7 +12,13 @@ written as Given / When / Then and carries a status:
   connection). The one-off Obsolete → *Not in any search* migration (NIGHT-7)
   was verified once; it runs identically in both editions. The nightly
   refresh of files no search returns (NIGHT-11, v2.9) was verified on 27
-  October 2026 in the Cloud + Edge edition.
+  October 2026 in the Cloud + Edge edition. From v2.9 the Cloud + Edge file
+  lifecycle (stories 22, 28, 29 and 31 of the TRC review; FILE-9, -11, -16,
+  -20, -27, -28, -29; NIGHT-8 and -10; ADM-3 with hand-renamed domains) is
+  re-verified live by an automated suite before each release (first run 30
+  October 2026), and every change is checked by offline regression tests that
+  run the released workflows end to end against a simulated Collibra and
+  DataXray.
 - 🔹 **Implemented** — behavior is coded and reviewed but has not been
   individually demonstrated.
 - ⚠️ **Decision needed** — a gap or product decision, listed in
@@ -104,7 +110,7 @@ via the nightly).
 | FILE-8 | A file **no longer matches** the query (changed, deleted, or no longer hits the criteria) | The query is rerun | The query's `returns` relation becomes **formerly returns**; the asset's status becomes **Not in any search** only if no other query returns it. Cloud + Edge: the rerun then asks DataXray about every file it parked, before its summary (FILE-27) | ✅ |
 | FILE-9 | A file is returned by **two** queries and one stops matching it | That query is rerun | The file stays active (Candidate) and keeps the other query's relation (see FILE-21) | ✅ |
 | FILE-10 | A file asset with status **Not in any search** (or **Obsolete**, set by a release before v2.4) matches any query again | That query is rerun / imported | The same asset goes back to **Candidate** — history intact — and that query's `formerly returns` link, if any, becomes `returns` again | ✅ |
-| FILE-11 | A rerun gets **0 results** from DataXray | The pass that swaps links and sets Not in any search would run | The pass is skipped — a transient empty answer must never mark a query's whole population as no longer returned. On-prem the summary says so (*No file was unlinked from this search*, with how many files stay linked and what to do if DataXray really has none of them). Cloud + Edge: the rerun asks DataXray about every file it returned before (FILE-28); the same skip applies to a run whose pages were not all read or whose skipped result could not be identified | 🔹 |
+| FILE-11 | A rerun gets **0 results** from DataXray | The pass that swaps links and sets Not in any search would run | The pass is skipped — a transient empty answer must never mark a query's whole population as no longer returned. On-prem the summary says so (*No file was unlinked from this search*, with how many files stay linked and what to do if DataXray really has none of them). Cloud + Edge: the rerun asks DataXray about every file it returned before (FILE-28); the same skip applies to a run whose pages were not all read or whose skipped result could not be identified | ✅ |
 | FILE-12 | A rerun's projected number of DataXray File assets (wherever they live) exceeds 25,000 | The rerun starts | Interactive: refused with the projection; headless: logged and skipped | 🔹 |
 | FILE-13 | A rerun's summary task is left **open** in someone's inbox | The user revisits the query asset / the nightly fires | The Rerun action is still available and the nightly still runs (workflow exclusivity is UNCONSTRAINED) | ✅ |
 | FILE-14 | DataXray reassigns **file ids** (e.g. datasource deleted and re-scanned) | The next sync runs | New assets are created and the old generation becomes **Not in any search** as orphans, keeping its history. Exception in the Cloud + Edge edition: a file whose object key (datasource id + object id) is unchanged keeps its asset (FILE-25). **Accepted by TRC** (see D-3) | 🔹 |

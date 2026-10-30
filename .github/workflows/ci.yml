@@ -1,0 +1,115 @@
+name: Pack CI
+
+# Every push and pull request: build both editions with the pinned harness,
+# compile and lint every script, run the static consistency checks and the
+# offline Groovy tests (in-memory Collibra and DataXray, workflows walked from
+# the built BPMN). No Collibra instance is contacted; the live suite under
+# tests/e2e is run by hand before a release (see CLAUDE.md, "Tests").
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GROOVY_VERSION: 5.1.0
+  GROOVY_SHA256: c0d709a36d95a5576e06c5d2163d86f747d0006b12b499d7c198943288102f40
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read pinned harness version
+        id: pack
+        run: echo "harness_ref=$(jq -r .harnessRef pack.json)" >> "$GITHUB_OUTPUT"
+
+      # Internal repo: HARNESS_READ_TOKEN is the same secret release-bundle.yml uses.
+      - name: Check out the harness at the pinned tag
+        uses: actions/checkout@v7
+        with:
+          repository: Ohalo-Ltd/collibra-workflower
+          ref: ${{ steps.pack.outputs.harness_ref }}
+          token: ${{ secrets.HARNESS_READ_TOKEN }}
+          path: harness
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Install harness dependencies
+        run: pip install -r harness/requirements.txt -r harness/requirements-dev.txt
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # Ubuntu's packaged Groovy is 2.x; the tests and Collibra need a current one.
+      - name: Cache Groovy
+        id: groovy-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/groovy
+          key: groovy-${{ env.GROOVY_VERSION }}
+
+      # Maven Central serves the same zip as the Apache archive (same sha256), and
+      # fast; archive.apache.org is throttled and once stalled a run for 10+ min.
+      - name: Install Groovy
+        if: steps.groovy-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 --max-time 120 -o /tmp/groovy.zip "https://repo1.maven.org/maven2/org/apache/groovy/groovy-binary/${GROOVY_VERSION}/groovy-binary-${GROOVY_VERSION}.zip"
+          echo "${GROOVY_SHA256}  /tmp/groovy.zip" | sha256sum -c -
+          unzip -q /tmp/groovy.zip -d /tmp/groovy-unpacked
+          mv "/tmp/groovy-unpacked/groovy-${GROOVY_VERSION}" ~/groovy
+
+      - name: Put Groovy on the PATH
+        run: echo "$HOME/groovy/bin" >> "$GITHUB_PATH"
+
+      - name: Build both editions
+        run: |
+          set -euo pipefail
+          python harness/deploy.py bundle --pack . --version ci --out dist
+          ls -l dist
+          # Every placeholder must have been filled in (a harness too old for one leaves it as text).
+          # An include directive counts only on a line of its own: comments mention the syntax mid-line.
+          python - <<'EOF'
+          import io, re, sys, zipfile, pathlib
+          unfilled = re.compile(rb'\{\{(pack|script):|^[ \t]*(//[ \t]*)?\{\{include:[^}]+\}\}[ \t]*$', re.MULTILINE)
+          leftovers = []
+          for bundle in pathlib.Path('dist').glob('*.zip'):
+              with zipfile.ZipFile(bundle) as outer:
+                  for name in outer.namelist():
+                      if not name.endswith('.zip'):
+                          continue
+                      with zipfile.ZipFile(io.BytesIO(outer.read(name))) as inner:
+                          for member in inner.namelist():
+                              if unfilled.search(inner.read(member)):
+                                  leftovers.append(f'{bundle.name}/{name}/{member}')
+          if leftovers:
+              sys.exit('unfilled placeholders in: ' + ', '.join(leftovers))
+          print('no unfilled placeholders')
+          EOF
+
+      - name: Compile every script (both editions)
+        run: python harness/tools/groovy_syntax_check.py .
+
+      - name: Static checks and offline Groovy tests
+        env:
+          HARNESS_ROOT: ${{ github.workspace }}/harness
+        run: python -m pytest -q tests --ignore=tests/e2e
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Groovy lint
+        run: npx --yes npm-groovy-lint --config harness/.groovylintrc.json --failon error shared workflows tests/groovy
