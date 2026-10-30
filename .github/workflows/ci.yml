@@ -22,6 +22,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -58,11 +59,14 @@ jobs:
           path: ~/groovy
           key: groovy-${{ env.GROOVY_VERSION }}
 
+      # Maven Central serves the same zip as the Apache archive (same sha256), and
+      # fast; archive.apache.org is throttled and once stalled a run for 10+ min.
       - name: Install Groovy
         if: steps.groovy-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 5
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/groovy.zip "https://archive.apache.org/dist/groovy/${GROOVY_VERSION}/distribution/apache-groovy-binary-${GROOVY_VERSION}.zip"
+          curl -fsSL --retry 3 --max-time 120 -o /tmp/groovy.zip "https://repo1.maven.org/maven2/org/apache/groovy/groovy-binary/${GROOVY_VERSION}/groovy-binary-${GROOVY_VERSION}.zip"
           echo "${GROOVY_SHA256}  /tmp/groovy.zip" | sha256sum -c -
           unzip -q /tmp/groovy.zip -d /tmp/groovy-unpacked
           mv "/tmp/groovy-unpacked/groovy-${GROOVY_VERSION}" ~/groovy
