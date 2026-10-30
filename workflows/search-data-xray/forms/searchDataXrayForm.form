@@ -69,9 +69,7 @@
             "multiValue": true,
             "assetTypeIds": ["019c9fbe-25c3-71b7-90ac-057dd582fa1e"],
             "assetTypeInheritance": true,
-            "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
-            "excludeMeta": true,
-            "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
+            "excludeMeta": true
           },
           "id": "label",
           "type": "asset"
@@ -94,9 +92,7 @@
             "multiValue": true,
             "assetTypeIds": ["019c9fbd-a91b-7242-9451-79ab632163a3"],
             "assetTypeInheritance": true,
-            "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
-            "excludeMeta": true,
-            "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
+            "excludeMeta": true
           },
           "id": "extractor",
           "type": "asset"
@@ -119,9 +115,7 @@
             "multiValue": true,
             "assetTypeIds": ["01922a69-e7a0-7ac7-a581-c9ba9286ccf1"],
             "assetTypeInheritance": true,
-            "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
-            "excludeMeta": true,
-            "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
+            "excludeMeta": true
           },
           "id": "annotator",
           "type": "asset"
@@ -165,9 +159,7 @@
             "multiValue": true,
             "assetTypeIds": ["01922a69-e7a0-7ac7-a581-c9ba9286ccf1"],
             "assetTypeInheritance": true,
-            "communityIds": ["019c9fbf-0ab2-7258-b118-e68d3e814fe1"],
-            "excludeMeta": true,
-            "domainIds": ["019c9fbf-622c-76f4-9dd6-2a9730a11515"]
+            "excludeMeta": true
           },
           "id": "filterAnnotator",
           "type": "asset"

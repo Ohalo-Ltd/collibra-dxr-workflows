@@ -30,6 +30,12 @@
 //   queryAssetId    (String)  – the query asset's UUID
 //   rerunRetiredCount / rerunUnlinkedCount (Integer) – zeroed here, advanced
 //                               by retire_orphans.groovy
+//   rerunRetireSkipped / rerunRetireSkipReason – false / '' here, set by
+//                               retire_orphans.groovy when it skips (summary form)
+//   rerunExistsRan / rerunExistsNoted / rerunExistsNote, exists* counters –
+//                               false / '' / 0: only the Cloud + Edge rerun
+//                               runs the DataXray existence check
+// and replaces the query asset's "Files" preview with this run's results.
 
 import com.collibra.dgc.workflow.api.exception.WorkflowException
 import groovy.json.JsonOutput
@@ -40,6 +46,7 @@ import groovy.json.JsonOutput
 // {{include:dxr_http_direct.groovy}}
 // {{include:collibra_lookup.groovy}}
 // {{include:rerun_common.groovy}}
+// {{include:query_preview.groovy}}
 // {{include:worklist.groovy}}
 
 announceDxrVersion('Rerun DataXray Search')
@@ -64,6 +71,9 @@ def abort = { String title, String message ->
     execution.setVariable('previousFileIds', '[]')
     execution.setVariable('rerunRetiredCount', 0)
     execution.setVariable('rerunUnlinkedCount', 0)
+    execution.setVariable('rerunRetireSkipped', false)
+    execution.setVariable('rerunRetireSkipReason', '')
+    zeroRerunExistsSummary()
     execution.setVariable('rerunNoAutoImport', false)
     if (!headless) {
         def wf = new WorkflowException(message)
@@ -205,9 +215,13 @@ if (newFiles > 0 && projectedTotal > dxrMaxTotalFileAssets()) {
     return
 }
 
+// --- Refresh the Files preview (the whole answer is in hand) -----------------------------
+
+refreshQueryPreview(queryId, ids.filesAttrTypeId, workItems, workItems.size() + skippedNoId)
+
 // --- Resolve classifications and store the work list -------------------------------------
 
-def classIndex = buildClassificationIndex(ids.classificationsDomainId, ids.dataxrayIdAttrTypeId)
+def classIndex = buildClassificationIndex(ids)
 int unresolvedClassifications = resolveTupleClassifications(workItems, classIndex)
 
 execution.setVariable('rerunAborted', false)
@@ -216,5 +230,8 @@ int batchCount = publishWorkList(workItems, unresolvedClassifications)
 execution.setVariable('previousFileIds', JsonOutput.toJson(previousFileIds as List))
 execution.setVariable('rerunRetiredCount', 0)
 execution.setVariable('rerunUnlinkedCount', 0)
+execution.setVariable('rerunRetireSkipped', false)
+execution.setVariable('rerunRetireSkipReason', '')
+zeroRerunExistsSummary()   // on-prem: no existence check (no object ids), the summary rows stay hidden
 
 loggerApi.info("Rerun of '${conditionName}' ready: ${workItems.size()} file(s) in ${batchCount} batch(es); ${previousFileIds.size()} previously returned, ${alreadyOurs} overlap; files domain holds ${filesDomainCount}")

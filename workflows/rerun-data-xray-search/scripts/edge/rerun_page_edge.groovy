@@ -9,13 +9,16 @@
 // Per page it records the deterministic file-asset ids seen (rerunSeenChunk_<n>,
 // n counting pages actually processed — not dxrPageNo, which is renumbered when
 // the page size shrinks)
-// so the retire pass can diff the complete current set against previousFileIds.
+// so the retire pass can diff the complete current set against previousFileIds,
+// and keeps the first page's tuples (rerunPreviewRows) for the Files preview the
+// retire task writes — no extra DataXray request.
 
 import groovy.json.JsonOutput
 
 // {{include:dxr_model.groovy}}
 // {{include:dxr_edge.groovy}}
 // {{include:file_batch.groovy}}
+// {{include:query_preview.groovy}}
 
 if (execution.getVariable('rerunAborted') == true) {
     execution.setVariable('hasMoreWork', false)
@@ -59,6 +62,9 @@ def opts = [
         int chunk = (execution.getVariable('rerunPageCount') ?: 0) as int
         execution.setVariable("rerunSeenChunk_${chunk}".toString(), JsonOutput.toJson(seen))
         execution.setVariable('rerunPageCount', chunk + 1)
+        if (execution.getVariable('rerunPreviewRows') == null) {
+            execution.setVariable('rerunPreviewRows', JsonOutput.toJson(tuples.take(dxrPreviewMaxRows()).collect { t -> [t[0], t[1], t[2]] }))
+        }
     },
     onFatal     : { String msg ->
         loggerApi.error("Rerun of '${conditionName}' aborted: ${msg}")

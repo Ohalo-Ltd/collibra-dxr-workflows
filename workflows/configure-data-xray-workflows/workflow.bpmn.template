@@ -62,7 +62,7 @@
     </scriptTask>
 
     <userTask id="resultsTask"
-              name="Configuration Results"
+              name="Configuration Results (${dxrRunStartedAt})"
               flowable:candidateUsers="user(${initiator})"
               flowable:formKey="configureResultsForm">
       <extensionElements>

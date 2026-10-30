@@ -1,5 +1,6 @@
 // classification_sync.groovy — mirroring the DataXray classification
-// catalogue into the Collibra classifications domain.
+// catalogue into Collibra (new assets in the DataXray Classifications domain;
+// existing ones updated wherever they live).
 //
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
 // The transport that fetches the catalogue is the caller's concern; this file
@@ -29,15 +30,21 @@
 //     Names used by a single resource are left untouched.
 //   – When matched by ID, if the DataXray name has diverged from the Collibra
 //     asset name we rename the Collibra asset to match.
-//   – Every synced asset is tagged with 'dataxray-classification-sync'. Assets
-//     in the domain that carry this tag but are no longer in the current DataXray
-//     response are RETIRED (status Obsolete) — never deleted. Saved
+//   – Every synced asset is tagged with 'dataxray-classification-sync'.
+//     Classification assets (by type, wherever they live) that carry this tag
+//     but are no longer in the current DataXray response are RETIRED (status
+//     Obsolete) — never deleted. Saved
 //     search queries and imported file assets hold relations to these
 //     classifications, and a rerun must be able to say "this criterion was
 //     deleted in DataXray" rather than find a dangling reference. If the
 //     classification reappears in DataXray, the asset is reactivated
-//     (status Candidate). Untagged assets in the domain are never touched,
-//     so anything added by hand is safe.
+//     (status Candidate). Untagged assets are never touched, so anything
+//     added by hand is safe.
+//   – Lookups are by asset TYPE over the whole instance, not by domain, so a
+//     classification moved to another domain/community is matched by its
+//     DataXray ID and updated where it is: no duplicate in the Classifications
+//     domain, and its file links survive (TRC R4/R6). New assets are still
+//     created in the Classifications domain.
 //   – If DataXray returns zero classifications, the retirement step is
 //     skipped to avoid a transient/broken response retiring all assets.
 
@@ -67,18 +74,27 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
         LABEL         : ids.labelTypeId,
     ]
 
-    // --- Index existing assets in the target domain ----------------------------
+    // --- Index existing classification assets, wherever they live ---------------
 
-    def existingById = fetchAllAssetsInDomain(ids.classificationsDomainId)
-    loggerApi.info("Found ${existingById.size()} existing asset(s) in classifications domain")
+    // By asset type over the whole instance, not by domain: a classification
+    // someone moved to another domain or community is still matched by its
+    // DataXray ID and updated in place — never duplicated in the Classifications
+    // domain, never retired for being out of sight, and the file rows' refs
+    // keep resolving to it so its file links survive the move.
+    def existingById = fetchAllClassificationAssets(ids)
+    int movedOut = existingById.values().count { it.getDomain()?.getId() != ids.classificationsDomainId }
+    loggerApi.info("Found ${existingById.size()} existing classification asset(s)${movedOut > 0 ? " (${movedOut} outside the DataXray Classifications domain)" : ''}")
 
     // Name → asset index, for detecting name clashes (freeName below). Collibra
     // enforces full-name uniqueness per domain (the source of termAlreadyExists),
-    // so within this domain getName() is effectively a unique key.
+    // and new assets are created in the Classifications domain, so only the
+    // assets in that domain take part.
     def existingByName = [:]
-    existingById.values().each { a -> existingByName[a.getName()] = a }
+    existingById.values().each { a ->
+        if (a.getDomain()?.getId() == ids.classificationsDomainId) { existingByName[a.getName()] = a }
+    }
 
-    // Map DataXray ID → Collibra asset UUID, restricted to assets in this domain.
+    // Map DataXray ID → Collibra asset UUID, restricted to classification assets.
     def assetIdByDataxrayId = fetchAssetIdsByDataxrayId(ids.dataxrayIdAttrTypeId, existingById.keySet())
     loggerApi.info("Indexed ${assetIdByDataxrayId.size()} asset(s) with a DataXray ID attribute")
     def dataxrayIdByAssetId = [:]
@@ -287,7 +303,7 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
     if (classifications.isEmpty()) {
         loggerApi.warn("DataXray returned 0 classifications — skipping retirement step to avoid retiring the whole domain")
     } else {
-        def taggedInDomain = fetchTaggedAssetsInDomain(ids.classificationsDomainId, SYNC_TAG)
+        def taggedInDomain = fetchTaggedClassificationAssets(ids, SYNC_TAG)
         def noRetire = (opts.noRetireTypeIds ?: []) as Set
         def toRetire = taggedInDomain.findAll {
             !touchedAssetIds.contains(it.getId()) && it.getStatus()?.getId() != ids.obsoleteStatusId

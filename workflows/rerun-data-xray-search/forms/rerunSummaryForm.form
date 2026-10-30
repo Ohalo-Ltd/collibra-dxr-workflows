@@ -47,9 +47,80 @@
     {
       "cols": [
         {
-          "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "Files left linked",
+          "value": "<p><b>No file was unlinked from this search.</b> {{rerunRetireSkipReason}}</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{rerunRetireSkipped}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "rerunRetireSkippedNote",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "Checked with DataXray",
+          "value": "<p>DataXray was asked about <b>{{existsCandidates}}</b> file asset(s) by DataXray Datasource ID and Object ID: <b>{{existsRefreshed}}</b> still in DataXray (refreshed: attributes and classification links, a removed label now <i>formerly groups</i>), <b>{{existsNotInDataXray}}</b> no longer there (status <i>Not in DataXray</i>), {{existsNoKey}} not checked (no object key stored yet).</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{rerunExistsRan}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "rerunExistsSummary",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
           "label": "",
-          "value": "<p style=\"color:#888;font-size:smaller\">{{dxrVersionLabel}}</p>",
+          "value": "<p>{{rerunExistsNote}}</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{rerunExistsNoted}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "rerunExistsNoteRow",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "",
+          "value": "<p style=\"color:#888;font-size:smaller\">{{dxrVersionLabel}} · started {{dxrRunStartedAt}}</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,

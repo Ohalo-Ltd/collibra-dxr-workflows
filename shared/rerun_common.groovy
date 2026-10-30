@@ -111,3 +111,36 @@ def collectPreviousFileIds(UUID queryId, Map ids) {
     relationIdsByFarEnd(ids.returnsRelationTypeId, queryId, null).keySet().each { previous << it.toString() }
     return previous
 }
+
+// --- Retire pass skipped: what the summary form says -------------------------------
+
+// The rerun summary shows rerunRetireSkipReason (when rerunRetireSkipped) so a
+// "No longer returned: 0" from a skipped pass is not read as "nothing changed".
+def noteRetireSkipped(String reason) {
+    execution.setVariable('rerunRetireSkipped', true)
+    execution.setVariable('rerunRetireSkipReason', reason)
+}
+
+// Files the query returned before this run (previousFileIds, set by the collector).
+def previousFileCount() {
+    return (new groovy.json.JsonSlurper().parseText((execution.getVariable('previousFileIds') ?: '[]').toString()) as List).size()
+}
+
+// The rerun summary's rows about the DataXray existence check (Cloud + Edge
+// rerun only; shared/rerun_exists_edge.groovy fills them in): hidden and zero
+// until then, so the one form serves both editions.
+def zeroRerunExistsSummary() {
+    execution.setVariable('rerunExistsRan', false)
+    execution.setVariable('rerunExistsNoted', false)
+    execution.setVariable('rerunExistsNote', '')
+    ['existsCandidates', 'existsNoKey', 'existsNotInDataXray', 'existsRefreshed'].each { execution.setVariable(it, 0) }
+}
+
+def zeroResultsRetireSkipReason(int linked) {
+    if (linked == 0) {
+        return 'DataXray returned 0 results for this search.'
+    }
+    return ("DataXray returned 0 results for this search, so its ${linked} file(s) were left linked to it and unchanged. " +
+        'An empty answer is far more often a DataXray or connection problem than a search that really matches nothing, so a rerun never acts on one. ' +
+        'If DataXray really has none of these files any more, delete this sync filter: the nightly file sync then marks the files no other search returns as Not in any search.').toString()
+}

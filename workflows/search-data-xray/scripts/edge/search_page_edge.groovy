@@ -32,11 +32,16 @@ import groovy.json.JsonOutput
 def dataxrayUrl = (execution.getVariable('dataxrayUrl') ?: '').toString()
 def emptyIndex = [labelDxrIdByIndexId: [:], annotatorDxrIdByIndexId: [:], extractorDxrIdByIndexId: [:], nameByDxrId: [:]]
 
-// One chunk of the results file: CSV lines (no header) for these tuples.
+// One chunk of the results file: CSV lines (no header) for these tuples:
+// Datasource, Path, Full Object ID ("<datasource id>:<object id>", the key
+// DataXray identifies the file by — TRC R1).
 def writeResultsFileChunk = { List tuples ->
     int n = (execution.getVariable('resultsFileChunks') ?: 0) as int
     def sb = new StringBuilder()
-    tuples.each { t -> sb.append(csvEscape(t[1])).append(',').append(csvEscape(t[2])).append('\r\n') }
+    tuples.each { t ->
+        def fullObjectId = (t.size() > 9 && t[8] && t[9]) ? "${t[8]}:${t[9]}".toString() : ''
+        sb.append(csvEscape(t[1])).append(',').append(csvEscape(t[2])).append(',').append(csvEscape(fullObjectId)).append('\r\n')
+    }
     execution.setVariable("resultsFileChunk_${n}".toString(), sb.toString())
     execution.setVariable('resultsFileChunks', n + 1)
 }

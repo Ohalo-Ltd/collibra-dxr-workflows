@@ -134,11 +134,11 @@ def edgeExcludedFields() {
             'metadata#OWNER_GROUP*', 'metadata#binary_hash', 'dxr#sha_256*', 'folder_id', 'dxr#manually_removed_tags']
 }
 
-// The Cloud + Edge results file needs only datasource and path: exclude every
-// other field family, which brings a row from ~1.2 KB to ~280 bytes (demo,
-// Sept 2026), so 100 rows fit easily under the 100 KB cap.
+// The Cloud + Edge results file needs only datasource, path and object id:
+// exclude every other field family, which brings a row from ~1.2 KB to ~300
+// bytes (demo, Sept 2026), so 100 rows fit easily under the 100 KB cap.
 def edgeResultsFileExcludedFields() {
-    return ['dxr#*', 'metadata#*', 'annotation*', 'extracted_metadata#*', 'computed*', 'object_id',
+    return ['dxr#*', 'metadata#*', 'annotation*', 'extracted_metadata#*', 'computed*',
             'ai#*', 'external*', 'folder_id', 'ds#file_size']
 }
 
@@ -343,11 +343,6 @@ def unknownDatasourceIds(List hits, Map dsNames) {
         if (dsId && !(dsNames ?: [:]).containsKey(dsId)) { out << dsId }
     }
     return out as List
-}
-
-// Preview rows for renderPreviewHtml(), which expects /api/v1/files-shaped maps.
-def tuplesAsPreviewRows(List tuples) {
-    return tuples.collect { t -> [datasource: [name: t[1]], path: t[2]] }
 }
 
 // --- Criteria → query_items ---------------------------------------------------

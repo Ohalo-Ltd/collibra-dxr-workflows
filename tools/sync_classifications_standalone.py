@@ -322,9 +322,16 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
         log("DataXray returned 0 classifications — nothing synced and NO retirement (guard against a broken response)")
         return {"counts": counts, "failures": ["empty catalogue"], "aborted": True}
 
-    # Existing state of the domain
-    existing = {a["id"]: a for a in collibra.page_all("/assets", domainId=CLASSIFICATIONS_DOMAIN_ID)}
-    existing_by_name = {a["name"]: a for a in existing.values()}
+    # Existing classification assets, by asset type over the whole instance (mirrors
+    # fetchAllClassificationAssets in collibra_lookup.groovy): one moved out of the
+    # Classifications domain is still matched by its DataXray ID and updated in place.
+    type_ids = sorted(set(ASSET_TYPE_BY_DXR_TYPE.values()))
+    existing = {a["id"]: a for a in collibra.page_all("/assets", typeIds=type_ids)}
+    moved_out = sum(1 for a in existing.values() if (a.get("domain") or {}).get("id") != CLASSIFICATIONS_DOMAIN_ID)
+    # Collibra enforces name uniqueness per domain and new assets go in the
+    # Classifications domain, so only its assets take part in name clashes.
+    existing_by_name = {a["name"]: a for a in existing.values()
+                        if (a.get("domain") or {}).get("id") == CLASSIFICATIONS_DOMAIN_ID}
     asset_by_dxr_id: dict[str, str] = {}
     for attr in collibra.page_all("/attributes", typeIds=ATTR_DXR_ID):
         aid = attr["asset"]["id"]
@@ -334,7 +341,7 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
                 log(f"WARN: DataXray ID {v} is on two assets ({asset_by_dxr_id[v]}, {aid}); keeping the first")
                 continue
             asset_by_dxr_id[v] = aid
-    log(f"Domain has {len(existing)} asset(s), {len(asset_by_dxr_id)} with a DataXray ID")
+    log(f"Found {len(existing)} classification asset(s) ({moved_out} outside the DataXray Classifications domain), {len(asset_by_dxr_id)} with a DataXray ID")
     dxr_id_by_asset = {aid: v for v, aid in asset_by_dxr_id.items()}
     current_dxr_ids = {str(it["id"]).strip() for it in items if it.get("id") is not None}
 
@@ -423,8 +430,8 @@ def sync(collibra: Collibra, items: list[dict], link_base: str, index_ids: dict[
             failures.append(f"{name}: {exc}")
             log(f"FAILED '{name}': {exc}")
 
-    # Retire tagged assets that vanished from DataXray (never delete)
-    tagged = collibra.page_all("/assets", domainId=CLASSIFICATIONS_DOMAIN_ID, tagNames=SYNC_TAG)
+    # Retire tagged classification assets that vanished from DataXray, wherever they live (never delete)
+    tagged = collibra.page_all("/assets", typeIds=type_ids, tagNames=SYNC_TAG)
     for a in tagged:
         if a["id"] in touched or a["status"]["id"] == STATUS_OBSOLETE:
             continue

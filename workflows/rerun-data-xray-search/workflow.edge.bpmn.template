@@ -8,11 +8,21 @@
                 by the nightly file sync driver)
       → rerunCollectorTask (script, sync: rebuild the criteria from the asset,
            snapshot the previously returned files, arm the first request)
+      → rerunAbortedGateway ─ ${rerunAborted} ─→ retireTask (an aborted headless
+           run arms no request; without this gateway the External API task fails
+           on the unset ${dxrMethod} and the instance sits in error every night —
+           seen on dev 29 Oct 2026 for a search whose label was deleted in DataXray)
       → rerunFetchTask (External API task) → rerunPageTask (script, async:
            catalogue stages, then one results page = one batch of upserts)
       → rerunLoopGateway ─ ${hasMoreWork} ─→ back to rerunFetchTask
       → retireTask (script: unlink/retire files no longer returned — only when
            every page was fetched)
+      → rerunExistsPrepareTask (script, sync: ask DataXray about the files just
+           parked, or, after 0 results, about every previously returned file)
+      → rerunExistsGateway ─ ${hasMoreWork} ─→ rerunExistsFetchTask (External API
+           task) → rerunExistsPageTask (script, async: refresh what DataXray
+           still has, flag what it has not) → rerunExistsLoopGateway ─ ${hasMoreWork}
+           ─→ back to rerunExistsFetchTask
       → headlessGateway → endEvent | rerunSummaryTask (user form) → endEvent
   Headless runs never throw; every abort path records rerunAborted/rerunAbortReason.
 -->
@@ -55,6 +65,11 @@
       </extensionElements>
       <script>{{script:rerun_collector_edge.groovy}}</script>
     </scriptTask>
+    <exclusiveGateway id="rerunAbortedGateway" name="Aborted?" default="flowFetchFirst">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
     <serviceTask id="rerunFetchTask" name="Call DataXray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
       <extensionElements>
         <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
@@ -90,12 +105,52 @@
       </extensionElements>
       <script>{{script:retire_orphans_edge.groovy}}</script>
     </scriptTask>
+    <scriptTask id="rerunExistsPrepareTask" name="Prepare DataXray Existence Check" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:rerun_exists_prepare_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="rerunExistsGateway" name="Anything to check?" default="flowNothingToCheck">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <serviceTask id="rerunExistsFetchTask" name="Call DataXray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
+      <extensionElements>
+        <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestUrl"><flowable:expression><![CDATA[${dxrRequestPath}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestHeaders"><flowable:expression><![CDATA[${dxrRequestHeaders}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestBody"><flowable:expression><![CDATA[${dxrRequestBody}]]></flowable:expression></flowable:field>
+        <flowable:field name="disallowRedirects"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="responseVariableName"><flowable:string><![CDATA[dxrResponseBody]]></flowable:string></flowable:field>
+        <flowable:field name="resultVariablePrefix"><flowable:string><![CDATA[dxr]]></flowable:string></flowable:field>
+        <flowable:field name="ignoreException"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveRequestVariables"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParameters"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParametersTransient"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseVariableAsJson"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <design:stencilid><![CDATA[HttpTask]]></design:stencilid>
+        <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
+      </extensionElements>
+    </serviceTask>
+    <scriptTask id="rerunExistsPageTask" name="Update File Statuses (batch)" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:rerun_exists_page_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="rerunExistsLoopGateway" name="More requests?" default="flowChecksDone">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
     <exclusiveGateway id="headlessGateway" name="Headless?" default="flowInteractive">
       <extensionElements>
         <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
       </extensionElements>
     </exclusiveGateway>
-    <userTask id="rerunSummaryTask" name="Rerun Summary" flowable:candidateUsers="user(${initiator})" flowable:formKey="rerunSummaryForm">
+    <userTask id="rerunSummaryTask" name="Rerun Summary: ${conditionName} (${dxrRunStartedAt})" flowable:candidateUsers="user(${initiator})" flowable:formKey="rerunSummaryForm">
       <extensionElements>
         <design:stencilid><![CDATA[FormTask]]></design:stencilid>
       </extensionElements>
@@ -106,14 +161,29 @@
       </extensionElements>
     </endEvent>
     <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="rerunCollectorTask"/>
-    <sequenceFlow id="flow2" sourceRef="rerunCollectorTask" targetRef="rerunFetchTask"/>
+    <sequenceFlow id="flow2" sourceRef="rerunCollectorTask" targetRef="rerunAbortedGateway"/>
+    <sequenceFlow id="flowFetchFirst" sourceRef="rerunAbortedGateway" targetRef="rerunFetchTask"/>
+    <sequenceFlow id="flowAborted" sourceRef="rerunAbortedGateway" targetRef="retireTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${rerunAborted == true}]]></conditionExpression>
+    </sequenceFlow>
     <sequenceFlow id="flow3" sourceRef="rerunFetchTask" targetRef="rerunPageTask"/>
     <sequenceFlow id="flow4" sourceRef="rerunPageTask" targetRef="rerunLoopGateway"/>
     <sequenceFlow id="flowMoreWork" sourceRef="rerunLoopGateway" targetRef="rerunFetchTask">
       <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
     </sequenceFlow>
     <sequenceFlow id="flowSyncDone" sourceRef="rerunLoopGateway" targetRef="retireTask"/>
-    <sequenceFlow id="flow5" sourceRef="retireTask" targetRef="headlessGateway"/>
+    <sequenceFlow id="flow5" sourceRef="retireTask" targetRef="rerunExistsPrepareTask"/>
+    <sequenceFlow id="flowExistsPrepared" sourceRef="rerunExistsPrepareTask" targetRef="rerunExistsGateway"/>
+    <sequenceFlow id="flowCheck" sourceRef="rerunExistsGateway" targetRef="rerunExistsFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowNothingToCheck" sourceRef="rerunExistsGateway" targetRef="headlessGateway"/>
+    <sequenceFlow id="flowExistsFetched" sourceRef="rerunExistsFetchTask" targetRef="rerunExistsPageTask"/>
+    <sequenceFlow id="flowExistsPaged" sourceRef="rerunExistsPageTask" targetRef="rerunExistsLoopGateway"/>
+    <sequenceFlow id="flowMoreChecks" sourceRef="rerunExistsLoopGateway" targetRef="rerunExistsFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowChecksDone" sourceRef="rerunExistsLoopGateway" targetRef="headlessGateway"/>
     <sequenceFlow id="flowHeadless" sourceRef="headlessGateway" targetRef="endEvent">
       <conditionExpression xsi:type="tFormalExpression"><![CDATA[${headless == 'true'}]]></conditionExpression>
     </sequenceFlow>
@@ -124,23 +194,38 @@
     <bpmndi:BPMNPlane bpmnElement="rerunDataXraySearch" id="BPMNPlane_rerunDataXraySearch">
       <bpmndi:BPMNShape bpmnElement="startEvent" id="S_startEvent"><omgdc:Bounds height="30.0" width="30.0" x="60.0" y="165.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunCollectorTask" id="S_rerunCollectorTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunAbortedGateway" id="S_rerunAbortedGateway"><omgdc:Bounds height="40.0" width="40.0" x="160.0" y="250.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunFetchTask" id="S_rerunFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="140.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunPageTask" id="S_rerunPageTask"><omgdc:Bounds height="80.0" width="100.0" x="410.0" y="140.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunLoopGateway" id="S_rerunLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="550.0" y="160.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="retireTask" id="S_retireTask"><omgdc:Bounds height="80.0" width="100.0" x="630.0" y="140.0"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="headlessGateway" id="S_headlessGateway"><omgdc:Bounds height="40.0" width="40.0" x="770.0" y="160.0"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="rerunSummaryTask" id="S_rerunSummaryTask"><omgdc:Bounds height="80.0" width="100.0" x="850.0" y="140.0"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="990.0" y="166.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunExistsPrepareTask" id="S_rerunExistsPrepareTask"><omgdc:Bounds height="80.0" width="100.0" x="770.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunExistsGateway" id="S_rerunExistsGateway"><omgdc:Bounds height="40.0" width="40.0" x="910.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunExistsFetchTask" id="S_rerunExistsFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="990.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunExistsPageTask" id="S_rerunExistsPageTask"><omgdc:Bounds height="80.0" width="100.0" x="1130.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunExistsLoopGateway" id="S_rerunExistsLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="1270.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="headlessGateway" id="S_headlessGateway"><omgdc:Bounds height="40.0" width="40.0" x="1250.0" y="160.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunSummaryTask" id="S_rerunSummaryTask"><omgdc:Bounds height="80.0" width="100.0" x="1330.0" y="140.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="1470.0" y="166.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="90.0" y="180.0"/><omgdi:waypoint x="130.0" y="180.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="230.0" y="180.0"/><omgdi:waypoint x="270.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="180.0" y="220.0"/><omgdi:waypoint x="180.0" y="250.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowFetchFirst" id="E_flowFetchFirst"><omgdi:waypoint x="200.0" y="270.0"/><omgdi:waypoint x="320.0" y="270.0"/><omgdi:waypoint x="320.0" y="220.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowAborted" id="E_flowAborted"><omgdi:waypoint x="180.0" y="290.0"/><omgdi:waypoint x="180.0" y="340.0"/><omgdi:waypoint x="680.0" y="340.0"/><omgdi:waypoint x="680.0" y="220.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="370.0" y="180.0"/><omgdi:waypoint x="410.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow4" id="E_flow4"><omgdi:waypoint x="510.0" y="180.0"/><omgdi:waypoint x="550.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowMoreWork" id="E_flowMoreWork"><omgdi:waypoint x="570.0" y="160.0"/><omgdi:waypoint x="570.0" y="100.0"/><omgdi:waypoint x="320.0" y="100.0"/><omgdi:waypoint x="320.0" y="140.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowSyncDone" id="E_flowSyncDone"><omgdi:waypoint x="590.0" y="180.0"/><omgdi:waypoint x="630.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow5" id="E_flow5"><omgdi:waypoint x="730.0" y="180.0"/><omgdi:waypoint x="770.0" y="180.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flowHeadless" id="E_flowHeadless"><omgdi:waypoint x="790.0" y="200.0"/><omgdi:waypoint x="790.0" y="260.0"/><omgdi:waypoint x="1004.0" y="260.0"/><omgdi:waypoint x="1004.0" y="194.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flowInteractive" id="E_flowInteractive"><omgdi:waypoint x="810.0" y="180.0"/><omgdi:waypoint x="850.0" y="180.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flow6" id="E_flow6"><omgdi:waypoint x="950.0" y="180.0"/><omgdi:waypoint x="990.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowExistsPrepared" id="E_flowExistsPrepared"><omgdi:waypoint x="870.0" y="180.0"/><omgdi:waypoint x="910.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowCheck" id="E_flowCheck"><omgdi:waypoint x="950.0" y="180.0"/><omgdi:waypoint x="990.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowNothingToCheck" id="E_flowNothingToCheck"><omgdi:waypoint x="930.0" y="200.0"/><omgdi:waypoint x="930.0" y="300.0"/><omgdi:waypoint x="1270.0" y="300.0"/><omgdi:waypoint x="1270.0" y="200.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowExistsFetched" id="E_flowExistsFetched"><omgdi:waypoint x="1090.0" y="180.0"/><omgdi:waypoint x="1130.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowExistsPaged" id="E_flowExistsPaged"><omgdi:waypoint x="1230.0" y="180.0"/><omgdi:waypoint x="1270.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowMoreChecks" id="E_flowMoreChecks"><omgdi:waypoint x="1290.0" y="160.0"/><omgdi:waypoint x="1290.0" y="100.0"/><omgdi:waypoint x="1040.0" y="100.0"/><omgdi:waypoint x="1040.0" y="140.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowChecksDone" id="E_flowChecksDone"><omgdi:waypoint x="1310.0" y="180.0"/><omgdi:waypoint x="1250.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowHeadless" id="E_flowHeadless"><omgdi:waypoint x="1270.0" y="200.0"/><omgdi:waypoint x="1270.0" y="260.0"/><omgdi:waypoint x="1484.0" y="260.0"/><omgdi:waypoint x="1484.0" y="194.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowInteractive" id="E_flowInteractive"><omgdi:waypoint x="1290.0" y="180.0"/><omgdi:waypoint x="1330.0" y="180.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow6" id="E_flow6"><omgdi:waypoint x="1430.0" y="180.0"/><omgdi:waypoint x="1470.0" y="180.0"/></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </definitions>

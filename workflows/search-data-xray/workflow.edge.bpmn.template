@@ -101,12 +101,12 @@
         <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
       </extensionElements>
     </exclusiveGateway>
-    <userTask id="searchFailedTask" name="Search Failed" flowable:candidateUsers="user(${initiator})" flowable:formKey="searchFailedForm">
+    <userTask id="searchFailedTask" name="Search Failed: ${conditionName} (${dxrRunStartedAt})" flowable:candidateUsers="user(${initiator})" flowable:formKey="searchFailedForm">
       <extensionElements>
         <design:stencilid><![CDATA[FormTask]]></design:stencilid>
       </extensionElements>
     </userTask>
-    <userTask id="resultsTask" name="Search Results" flowable:candidateUsers="user(${initiator})" flowable:formKey="searchResultsForm">
+    <userTask id="resultsTask" name="Search Results: ${conditionName} (${dxrRunStartedAt})" flowable:candidateUsers="user(${initiator})" flowable:formKey="searchResultsForm">
       <extensionElements>
         <design:stencilid><![CDATA[FormTask]]></design:stencilid>
       </extensionElements>
@@ -158,7 +158,7 @@
         <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
       </extensionElements>
     </exclusiveGateway>
-    <userTask id="importSummaryTask" name="Import Summary" flowable:candidateUsers="user(${initiator})" flowable:formKey="importSummaryForm">
+    <userTask id="importSummaryTask" name="Import Summary: ${conditionName} (${dxrRunStartedAt})" flowable:candidateUsers="user(${initiator})" flowable:formKey="importSummaryForm">
       <extensionElements>
         <design:stencilid><![CDATA[FormTask]]></design:stencilid>
       </extensionElements>

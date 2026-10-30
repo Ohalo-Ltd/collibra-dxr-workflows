@@ -58,6 +58,52 @@ def fetchTaggedAssetsInDomain(UUID domainId, String tagName) {
     return results
 }
 
+// The DataXray classification asset types: Classification, Annotator,
+// Extractor, Label. Every lookup of classification assets is by TYPE, over the
+// whole instance, never by domain: a classification someone moved out of the
+// DataXray Classifications domain is still the same asset — the sync updates
+// it where it is instead of creating a duplicate, and file rows still resolve
+// to it so its file links are kept (TRC requirements R4 and R6, Oct 2026).
+def classificationTypeIds(Map ids) {
+    return [ids.classificationTypeId, ids.annotatorTypeId, ids.extractorTypeId, ids.labelTypeId]
+}
+
+// Every DataXray classification asset on the instance, wherever it lives,
+// keyed by UUID (cursor-paged by asset type).
+def fetchAllClassificationAssets(Map ids) {
+    def byId = [:]
+    def cursor = ''
+    while (true) {
+        def page = assetApi.findAssets(com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest.builder()
+            .typeIds(classificationTypeIds(ids))
+            .limit(1000)
+            .cursor(cursor)
+            .build())
+        page.getResults().each { asset -> byId[asset.getId()] = asset }
+        cursor = page.getNextCursor()
+        if (!cursor) break
+    }
+    return byId
+}
+
+// Every DataXray classification asset carrying a tag, wherever it lives.
+def fetchTaggedClassificationAssets(Map ids, String tagName) {
+    def results = []
+    def cursor = ''
+    while (true) {
+        def page = assetApi.findAssets(com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest.builder()
+            .typeIds(classificationTypeIds(ids))
+            .tagNames([tagName])
+            .limit(1000)
+            .cursor(cursor)
+            .build())
+        results.addAll(page.getResults())
+        cursor = page.getNextCursor()
+        if (!cursor) break
+    }
+    return results
+}
+
 // Map DataXray ID attribute value → Collibra asset UUID, restricted to the
 // given assets. findAttributes has no domain filter, so we query globally by
 // type and then drop any hits that belong to assets outside the set.
@@ -83,16 +129,16 @@ def fetchAssetIdsByDataxrayId(UUID attrTypeId, Set<UUID> assetsInDomain) {
     return assetIdByDataxrayId
 }
 
-// Two indexes over the classifications domain for resolving a file row's
-// classification refs to Collibra assets: by DataXray ID attribute
-// (authoritative — survives renames and name disambiguation) and by asset
-// name (fallback for rows that only carry names). Built once per run.
+// Two indexes over every classification asset (by type, instance-wide) for
+// resolving a file row's classification refs to Collibra assets: by DataXray
+// ID attribute (authoritative — survives renames and name disambiguation) and
+// by asset name (fallback for rows that only carry names). Built once per run.
 // Returns [byDxrId: [dxrId → UUID], byName: [name → UUID]].
-def buildClassificationIndex(UUID classificationsDomainId, UUID dataxrayIdAttrTypeId) {
-    def classificationAssets = fetchAllAssetsInDomain(classificationsDomainId)
+def buildClassificationIndex(Map ids) {
+    def classificationAssets = fetchAllClassificationAssets(ids)
     def byName = [:]
     classificationAssets.values().each { a -> byName[a.getName()] = a.getId() }
-    def byDxrId = fetchAssetIdsByDataxrayId(dataxrayIdAttrTypeId, classificationAssets.keySet())
+    def byDxrId = fetchAssetIdsByDataxrayId(ids.dataxrayIdAttrTypeId, classificationAssets.keySet())
     return [byDxrId: byDxrId, byName: byName]
 }
 
@@ -237,7 +283,8 @@ def fetchAttributeValuesByType(UUID attrTypeId, Set<UUID> assetIds) {
 }
 
 // The Edge edition's classification index, built from Collibra alone (no
-// DataXray catalogue calls): every classification asset with its public
+// DataXray catalogue calls): every classification asset (by type, wherever it
+// lives) with its public
 // DataXray ID (uuid) and, when the Edge sync has stamped it, the numeric id
 // DataXray's search index uses. All keys/values are Strings so the map can
 // round-trip through a JSON process variable. Returns
@@ -246,7 +293,7 @@ def fetchAttributeValuesByType(UUID attrTypeId, Set<UUID> assetIds) {
 //    labelDxrIdByIndexId / annotatorDxrIdByIndexId / extractorDxrIdByIndexId: [indexId → uuid],
 //    annotatorIndexIds: [indexId, …] (every annotator known to Collibra)]
 def buildEdgeClassificationIndex(Map ids) {
-    def assets = fetchAllAssetsInDomain(ids.classificationsDomainId)
+    def assets = fetchAllClassificationAssets(ids)
     def uuidByAsset  = fetchAttributeValuesByType(ids.dataxrayIdAttrTypeId, assets.keySet())
     def indexByAsset = fetchAttributeValuesByType(ids.dataxrayIndexIdAttrTypeId, assets.keySet())
     def out = [byDxrId: [:], byName: [:], indexIdByDxrId: [:], nameByDxrId: [:],

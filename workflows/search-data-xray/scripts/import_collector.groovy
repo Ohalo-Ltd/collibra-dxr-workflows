@@ -107,7 +107,7 @@ if (projectedTotal > dxrMaxTotalFileAssets()) {
 
 // --- Resolve classifications to Collibra asset UUIDs --------------------------
 
-def classIndex = buildClassificationIndex(ids.classificationsDomainId, ids.dataxrayIdAttrTypeId)
+def classIndex = buildClassificationIndex(ids)
 int unresolvedClassifications = resolveTupleClassifications(workItems, classIndex)
 if (unresolvedClassifications > 0) {
     loggerApi.warn("Import: ${unresolvedClassifications} classification reference(s) could not be resolved to Collibra assets (run Sync DataXray Classifications and re-import to link them)")
