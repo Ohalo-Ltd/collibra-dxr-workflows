@@ -54,7 +54,7 @@ jobs:
       # Ubuntu's packaged Groovy is 2.x; the tests and Collibra need a current one.
       - name: Cache Groovy
         id: groovy-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/groovy
           key: groovy-${{ env.GROOVY_VERSION }}
