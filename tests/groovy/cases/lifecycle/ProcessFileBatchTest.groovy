@@ -27,7 +27,7 @@ test('a new file gets an asset with its attributes, a returns link and its class
     assert attr(f, 'lastModified') == '10 Apr 2025, 17:22 UTC'
     assert attr(f, 'datasource') == 'SharePoint'
     assert linked(q, 'returns', f)
-    assert linked(f, 'groups', pii)
+    assert linked(f, 'classifiedBy', pii)
 }
 
 test('Cloud + Edge rows store the object key and the Full Object ID (R1, FILE-25, FILE-29)') {
@@ -83,7 +83,7 @@ test('a status a person set survives a sync; attributes and links still refresh 
 
     assert status(f) == 'Accepted'
     assert attr(f, 'fileSize') == '2.0 KB (2,048 bytes)'
-    assert linked(f, 'groups', pii)
+    assert linked(f, 'classifiedBy', pii)
     assert linked(q, 'returns', f)
 }
 
@@ -195,7 +195,7 @@ test('a refused bulk relation add falls back to adding one by one') {
 
     def f = assetIdOf('f1')
     assert r.relationsAdded == 2
-    assert linked(q, 'returns', f) && linked(f, 'groups', pii)
+    assert linked(q, 'returns', f) && linked(f, 'classifiedBy', pii)
     assert logged('WARN', 'retrying individually')
 }
 

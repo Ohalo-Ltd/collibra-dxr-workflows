@@ -24,7 +24,7 @@
 //   – found → the asset gets the refresh a rerun gives a file it returns,
 //     minus the search link and the status: attributes (incl. DataXray
 //     Extracted Values) and the file→classification links (reconcileFileGroups:
-//     a label removed in DataXray becomes 'formerly groups'). Without this a
+//     a label removed in DataXray becomes 'formerly classified by'). Without this a
 //     file that dropped out of every search — typically because the label the
 //     search selects on was removed — kept its stale 'groups' links for good
 //     (TRC review, 26 Oct 2026). A 'Not in DataXray' asset found again also
@@ -65,7 +65,7 @@
 //   existsNotInDataXray   – set to 'Not in DataXray'
 //   existsBackInDataXray  – back to 'Not in any search'
 //   existsRefreshed       – found in DataXray and refreshed
-//   existsLinksAdded / existsLinksRemoved – classification links added / swapped to 'formerly groups'
+//   existsLinksAdded / existsLinksRemoved – classification links added / swapped to 'formerly classified by'
 //   existsRowsSkipped     – rows too large to fetch, left as they are
 //   existsFound           – distinct candidates DataXray returned
 //   existsComplete        – every chunk was read to the end (false while running, or after a failure)

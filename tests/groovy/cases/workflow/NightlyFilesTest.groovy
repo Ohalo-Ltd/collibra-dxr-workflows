@@ -196,6 +196,48 @@ test('SYNC-7: DataXray Sync is kept current even when the rerun workflow is miss
     assert attr(f, 'syncMode') == 'Kept in sync nightly'
 }
 
+// --- v2.11: moving file links to "classified by" ------------------------------------------------
+
+test('LINK-4: the nightly moves the integration\'s file links from groups to classified by, and nothing else') {
+    def label = classification('Contacts')
+    def other = classification('Other')
+    def q = query('Search', labels: [label])                 // a sync filter's criterion: stays groups
+    def f = fileAsset('f')                                   // a one-time import no rerun touches
+    link(f, 'groups', label)
+    link(f, 'groups', other, by: 'person')
+
+    def run = nightly(delegate)
+
+    assert linked(f, 'classifiedBy', label) && !linked(f, 'groups', label)
+    assert linked(f, 'groups', other) && !linked(f, 'classifiedBy', other)
+    assert linked(q, 'groups', label)
+    assert run.var('nightlyLinksMigrated') == 1
+    assert fx.relations.values().find { it.typeId == ids.classifiedByRelationTypeId }.createdBy == WORKFLOW_USER
+}
+
+test('LINK-4: a file already linked with classified by just loses its groups twin') {
+    def label = classification('Contacts')
+    def f = fileAsset('f')
+    link(f, 'classifiedBy', label)
+    link(f, 'groups', label)
+
+    nightly(delegate)
+
+    assert linked(f, 'classifiedBy', label) && !linked(f, 'groups', label)
+}
+
+test('LINK-3: before Configure has created classified by, the nightly moves nothing') {
+    fx.relationTypes.remove(ids.classifiedByRelationTypeId)
+    def label = classification('Contacts')
+    def f = fileAsset('f')
+    link(f, 'groups', label)
+
+    def run = nightly(delegate)
+
+    assert linked(f, 'groups', label)
+    assert run.var('nightlyLinksMigrated') == 0
+}
+
 test(variant: 'edge', 'story 31 / NIGHT-8: a parked file deleted in DataXray becomes Not in DataXray') {
     def gone = fileAsset('gone', status: ids.notInAnySearchStatusId, ds: '312', obj: 'obj-gone')
     def kept = fileAsset('kept', status: ids.notInAnySearchStatusId, ds: '312', obj: 'obj-kept')
@@ -225,13 +267,13 @@ test(variant: 'edge', 'NIGHT-11: a file no search returns gets its classificatio
     def label = classification('Contacts', 'label', indexId: '7')
     def email = classification('Email', 'annotator', indexId: '12')
     def f = fileAsset('f1', status: ids.notInAnySearchStatusId, ds: '312', obj: 'obj-f1')
-    link(f, 'groups', label)                                // DataXray no longer has the label on it
+    link(f, 'classifiedBy', label)                                // DataXray no longer has the label on it
     dxrFile('f1', annotators: ['12': 2], size: 4096)
 
     def run = nightly(delegate)
 
-    assert !linked(f, 'groups', label) && linked(f, 'formerlyGroups', label)
-    assert linked(f, 'groups', email)
+    assert !linked(f, 'classifiedBy', label) && linked(f, 'formerlyGroups', label)
+    assert linked(f, 'classifiedBy', email)
     assert attr(f, 'fileSize') == '4.0 KB (4,096 bytes)'
     assert status(f) == 'Not in any search'
     assert run.var('existsRefreshed') == 1

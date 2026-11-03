@@ -61,7 +61,7 @@ test(variant: 'edge', 'Import now imports every match and ends with an Import Su
     assert run.task.missingFormVariables == []
     def q = UUID.fromString(run.var('queryAssetId'))
     assert fileAssets() as Set == [assetIdOf('f1'), assetIdOf('f2')] as Set
-    assert fileAssets().every { linked(q, 'returns', it) && linked(it, 'groups', label) }
+    assert fileAssets().every { linked(q, 'returns', it) && linked(it, 'classifiedBy', label) }
     assert run.var('importCreatedCount') == 2
     assert fx.assets[q].tags.isEmpty()
 }

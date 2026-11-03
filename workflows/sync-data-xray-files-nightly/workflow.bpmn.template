@@ -62,6 +62,20 @@
       <script>{{script:nightly_files_driver.groovy}}</script>
     </scriptTask>
 
+    <!-- ASYNC (v2.11): moves the integration's file links from "groups" to
+         "classified by"; async so the links it adds are the Workflow user's. -->
+    <scriptTask id="migrateLinksTask"
+                name="Move File Links to Classified By"
+                scriptFormat="groovy"
+                flowable:async="true"
+                flowable:exclusive="true"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:migrate_classified_by.groovy}}</script>
+    </scriptTask>
+
     <endEvent id="endEvent" name="End">
       <extensionElements>
         <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
@@ -73,7 +87,12 @@
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow2" sourceRef="fanOutRerunsTask" targetRef="endEvent">
+    <sequenceFlow id="flowMigrate" sourceRef="fanOutRerunsTask" targetRef="migrateLinksTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flow2" sourceRef="migrateLinksTask" targetRef="endEvent">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
@@ -95,10 +114,14 @@
         <omgdc:Bounds x="210" y="230" width="140" height="80"/>
       </bpmndi:BPMNShape>
 
+      <bpmndi:BPMNShape bpmnElement="migrateLinksTask" id="BPMNShape_migrateLinksTask">
+        <omgdc:Bounds x="410" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
       <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
-        <omgdc:Bounds x="415" y="256" width="28" height="28"/>
+        <omgdc:Bounds x="615" y="256" width="28" height="28"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="412" y="290" width="34" height="14"/>
+          <omgdc:Bounds x="612" y="290" width="34" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
@@ -106,9 +129,13 @@
         <omgdi:waypoint x="150" y="270"/>
         <omgdi:waypoint x="210" y="270"/>
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+      <bpmndi:BPMNEdge bpmnElement="flowMigrate" id="BPMNEdge_flowMigrate">
         <omgdi:waypoint x="350" y="270"/>
-        <omgdi:waypoint x="415" y="270"/>
+        <omgdi:waypoint x="410" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="BPMNEdge_flow2">
+        <omgdi:waypoint x="550" y="270"/>
+        <omgdi:waypoint x="615" y="270"/>
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>

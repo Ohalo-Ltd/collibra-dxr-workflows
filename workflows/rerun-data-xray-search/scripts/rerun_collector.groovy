@@ -131,7 +131,8 @@ def queryAsset = assetApi.getAsset(queryId)
 // can't scope a workflow with global start roles to one asset type —
 // asset-type assignment rules are rejected with workflowWrongRoles). Started
 // on anything but a DataXray Sync Filter it must stop HERE: a file asset
-// also carries "groups" relations to classifications, and without this guard
+// may still carry "groups" relations to classifications (links from before
+// v2.11, or a person's), and without this guard
 // the rebuild below would happily treat them as search criteria and import
 // on the file's behalf.
 if (queryAsset.getType()?.getId() != ids.queryAssetTypeId) {

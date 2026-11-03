@@ -8,7 +8,7 @@
 //   – the files this run parked (rerunExistsMode 'orphans'): a file DataXray
 //     no longer has becomes 'Not in DataXray'; one it still has gets its
 //     attributes and classification links refreshed — a label removed in
-//     DataXray becomes 'formerly groups' — as the rerun ends, not the next
+//     DataXray becomes 'formerly classified by' — as the rerun ends, not the next
 //     night (TRC stories #28/#29/#31);
 //   – after a 0-results answer (rerunExistsMode 'zeroResults'): every file
 //     the search returned before, so a search whose whole datasource was

@@ -5,7 +5,7 @@
 //
 // What it does:
 //   1. Ensures the community, domains, asset types, attribute types, the
-//      "returns", "formerly returns" and "formerly groups" relation types and
+//      "returns", "formerly returns", "classified by" and "formerly classified by" relation types and
 //      the 'Not in any search' status the DataXray sync, search,
 //      import and rerun workflows depend on all exist — creating any
 //      that are missing with FIXED canonical UUIDs. Those UUIDs are the same
@@ -82,6 +82,7 @@ import com.collibra.dgc.core.api.dto.meta.assettype.AddAssetTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AddAttributeTypeRequest
 import com.collibra.dgc.core.api.dto.meta.attributetype.AttributeKind
 import com.collibra.dgc.core.api.dto.meta.relationtype.AddRelationTypeRequest
+import com.collibra.dgc.core.api.dto.meta.relationtype.ChangeRelationTypeRequest
 import com.collibra.dgc.core.api.dto.meta.status.AddStatusRequest
 import com.collibra.dgc.core.api.dto.assignment.AddAssignmentRequest
 import com.collibra.dgc.core.api.dto.assignment.ChangeAssignmentRequest
@@ -169,9 +170,16 @@ def TEXT_FILTER_RELTYPE_ID = '019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'
 // returns it again), so the change stays visible instead of the link vanishing.
 def FORMERLY_RETURNS_RELTYPE_ID = '019e9212-1b22-7d4f-8c3a-6e5f7a8b9c01'
 
-// "formerly groups / formerly grouped by" — the same for a file→classification
-// link DataXray no longer finds evidence for. Mirrors the system "groups"
-// type (Data Asset → Data Asset) on the target side.
+// "classified by / classifies" (v2.11) — DataXray File → classification (Data
+// Asset): "File classified by Label", "Label classifies File" (TRC, agreed
+// with Collibra on 2 Nov 2026; Collibra's "groups / is grouped by" read as
+// confusing). Before v2.11 these links used the system "groups" type; syncs
+// and the files nightly move the integration's links over.
+def CLASSIFIED_BY_RELTYPE_ID    = '019e9212-aebb-77e9-9f14-026d8e9fa0ab'
+
+// "formerly classified by / formerly classifies" — the same for a
+// file→classification link DataXray no longer finds evidence for. Created as
+// "formerly groups / formerly grouped by" before v2.11; Phase 6b renames it.
 def FORMERLY_GROUPS_RELTYPE_ID  = '019e9212-2c33-7e50-9d4b-7f6a8b9c0d12'
 
 // Custom status 'Not in any search' — set on a file asset no saved search
@@ -185,7 +193,7 @@ def NOT_IN_DXR_STATUS_ID        = '019e9212-6a77-7294-b18f-bd2e3f4a5b56'
 def NOT_IN_DXR_STATUS_NAME      = 'Not in DataXray'
 
 // System "groups / is grouped by" relation type — present on every instance.
-// query→classification and file→classification links use it.
+// query→classification links use it (file→classification ones did before v2.11).
 def GROUPS_RELTYPE_ID     = '00000000-0000-0000-0000-000000007017'
 
 def QUERY_TYPE_ID         = '019dcf97-3bac-72c3-8b59-b6ddbe8a8396'
@@ -293,13 +301,16 @@ def assignmentDefs = [
     [assetTypeId: '01922a69-e7a0-7ac7-a581-c9ba9286ccf1', name: 'Annotator',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
      relations: [[id: TEXT_FILTER_RELTYPE_ID,     direction: 'TO_SOURCE'],   // text searched by queries
-                 [id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]], // formerly grouped by files
+                 [id: CLASSIFIED_BY_RELTYPE_ID,   direction: 'TO_SOURCE'],   // classifies files
+                 [id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]], // formerly classifies files
     [assetTypeId: '019c9fbd-a91b-7242-9451-79ab632163a3', name: 'Extractor',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
-     relations: [[id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]],
+     relations: [[id: CLASSIFIED_BY_RELTYPE_ID,   direction: 'TO_SOURCE'],   // classifies files
+                 [id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]],
     [assetTypeId: '019c9fbe-25c3-71b7-90ac-057dd582fa1e', name: 'Label',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
-     relations: [[id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]],
+     relations: [[id: CLASSIFIED_BY_RELTYPE_ID,   direction: 'TO_SOURCE'],   // classifies files
+                 [id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]],
     // relations: relation types surfaced on the asset page (the page only
     // renders characteristics that are IN the assignment — relations written
     // via the API exist regardless, but stay invisible without this).
@@ -318,9 +329,10 @@ def assignmentDefs = [
      customAttrs: [FILE_NAME_ATTR_ID, FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
                    DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID,
                    DATASOURCE_ID_ATTR_ID, OBJECT_ID_ATTR_ID, OBJECT_KEY_ATTR_ID, SYNC_MODE_ATTR_ID] + (syncExtractorValues ? [EXTRACTED_VALUES_ATTR_ID] : []),
-     relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
+     relations: [[id: CLASSIFIED_BY_RELTYPE_ID, direction: 'TO_TARGET'], // classified by matched classifications
+                 [id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // links from before v2.11 (a person's are never moved)
                  [id: RETURNS_RELTYPE_ID, direction: 'TO_SOURCE'],   // returned by queries
-                 [id: FORMERLY_GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],  // formerly groups classifications
+                 [id: FORMERLY_GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],  // formerly classified by classifications
                  [id: FORMERLY_RETURNS_RELTYPE_ID, direction: 'TO_SOURCE']], // formerly returned by queries
      extraStatusIds: [NOT_IN_SEARCH_STATUS_ID, NOT_IN_DXR_STATUS_ID]],
 ]
@@ -503,13 +515,16 @@ try {
     loggerApi.error("ensure text-filter relation type failed: ${e.message}")
 }
 
-// "formerly returns / formerly returned by" and "formerly groups / formerly
-// grouped by": the rerun swaps a link to these when it stops applying.
+// "classified by / classifies" (file → classification, v2.11), and the
+// "formerly returns / formerly returned by" and "formerly classified by /
+// formerly classifies" types the rerun swaps a link to when it stops applying.
 [
+    [id: CLASSIFIED_BY_RELTYPE_ID, source: FILE_TYPE_ID, role: 'classified by',
+     target: DATA_ASSET_TYPE_ID, coRole: 'classifies'],
     [id: FORMERLY_RETURNS_RELTYPE_ID, source: QUERY_TYPE_ID, role: 'formerly returns',
      target: FILE_TYPE_ID, coRole: 'formerly returned by'],
-    [id: FORMERLY_GROUPS_RELTYPE_ID, source: FILE_TYPE_ID, role: 'formerly groups',
-     target: DATA_ASSET_TYPE_ID, coRole: 'formerly grouped by'],
+    [id: FORMERLY_GROUPS_RELTYPE_ID, source: FILE_TYPE_ID, role: 'formerly classified by',
+     target: DATA_ASSET_TYPE_ID, coRole: 'formerly classifies'],
 ].each { rt ->
     def label = "Relation type '${rt.role} / ${rt.coRole}'"
     try {
@@ -805,6 +820,24 @@ attrTypeDefs.each { a ->
     renameIfLegacy('attribute type', a.name,
         { attributeTypeApi.exists(string2Uuid(a.id)) ? attributeTypeApi.getAttributeType(string2Uuid(a.id)).getName() : null },
         { String n -> attributeTypeApi.changeAttributeType(ChangeAttributeTypeRequest.builder().id(string2Uuid(a.id)).name(n).build()) })
+}
+// v2.11: "formerly groups / formerly grouped by" → "formerly classified by /
+// formerly classifies", matching the new "classified by / classifies" type —
+// only while both roles still have the old default names.
+try {
+    def rtid = string2Uuid(FORMERLY_GROUPS_RELTYPE_ID)
+    if (relationTypeApi.exists(rtid)) {
+        def rt = relationTypeApi.getRelationType(rtid)
+        if (rt.getRole() == 'formerly groups' && rt.getCoRole() == 'formerly grouped by') {
+            relationTypeApi.changeRelationType(ChangeRelationTypeRequest.builder()
+                .id(rtid).role('formerly classified by').coRole('formerly classifies').build())
+            created << "Renamed relation type 'formerly groups / formerly grouped by' to 'formerly classified by / formerly classifies'"
+            loggerApi.info('Renamed relation type formerly groups → formerly classified by')
+        }
+    }
+} catch (Exception e) {
+    failed << "Rename relation type 'formerly groups': ${e.message}"
+    loggerApi.error("rename relation type formerly groups failed: ${e.message}")
 }
 [[ROLE_ADMIN_ID, ROLE_ADMIN_NAME], [ROLE_USER_ID, ROLE_USER_NAME]].each { r ->
     renameIfLegacy('role', r[1],

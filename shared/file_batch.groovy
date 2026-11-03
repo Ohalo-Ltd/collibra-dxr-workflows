@@ -27,13 +27,14 @@
 //     DataXray Extracted Values (optional, extractedValuesOn) is rewritten as a
 //     table of the file's extractor values, or cleared when it has none.
 //   – Relations: query asset —returns→ file asset (the per-query membership
-//     the rerun workflow diffs against), and file —groups→ each matched
-//     classification. Relations for freshly created assets are added in bulk
+//     the rerun workflow diffs against), and file —classified by→ each matched
+//     classification (v2.11; Collibra's "groups" before, and until Configure
+//     has created the new type — fileClassRelationTypeId). Relations for freshly created assets are added in bulk
 //     (no duplicates possible); relations for pre-existing assets are added
 //     one by one with individual catches, since Collibra rejects duplicates.
 //   – Links that stop applying are not deleted but swapped to a "formerly"
-//     relation type (query —formerly returns→ file, file —formerly groups→
-//     classification), and swapped back if they apply again. Only links the
+//     relation type (query —formerly returns→ file, file —formerly classified
+//     by→ classification), and swapped back if they apply again. Only links the
 //     integration created (createdBy = the workflow user) are ever touched: a
 //     file→classification link a person made is left exactly as it is.
 //   – opts.createNew == false (query tagged dataxray-no-auto-import, or the
@@ -95,6 +96,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             loggerApi.info("${label}: ${skippedNew} new matching file(s) not imported (automatic import is off for this search)")
         }
         def owned = integrationIdentityIds()
+        def classLinkTypeId = fileClassRelationTypeId(ids)
         boolean syncModeOn = syncModeAttrOn()
         def syncCache = [:]   // sync filter id → kept in sync nightly, for this batch
 
@@ -157,7 +159,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
                 .sourceId(queryAssetId).targetId(assetId).typeId(ids.returnsRelationTypeId).build()
             tuple[7].each { classId ->
                 bulkRelations << com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
-                    .sourceId(assetId).targetId(string2Uuid(classId.toString())).typeId(ids.groupsRelationTypeId).build()
+                    .sourceId(assetId).targetId(string2Uuid(classId.toString())).typeId(classLinkTypeId).build()
             }
         }
         if (!bulkRelations.isEmpty()) {
@@ -490,38 +492,51 @@ def writeFileAssetAttrs(UUID assetId, List tuple, Map ids, boolean valuesOn) {
     }
 }
 
-// Reconcile a file asset's file→classification links against the CURRENT hit
-// evidence (`classIds`: the Collibra classification asset ids the file's row
-// lists). A result row carries the file's complete classification state, so
-// the desired set is the same whichever query — or the nightly existence
-// check — syncs the file. Missing links are added (or swapped back from
-// "formerly"); a link the integration made that no longer applies is swapped
-// to "formerly groups" — a label deleted or unassigned in DataXray stays
-// visible as history instead of vanishing. Links a person created are never
-// removed, and a person's link to a classification the file matches means
-// nothing is added. `owned`: integrationIdentityIds(). Returns [added:, removed:].
+// Bring a file's classification links in line with its current DataXray
+// evidence (`classIds`, the row's classification asset ids). The link type is
+// "classified by" (fileClassRelationTypeId; "groups" before Configure v2.11).
+//   – a desired classification with no link gets one; an integration-made
+//     "formerly classified by" link to it is removed (never both);
+//   – an integration-made link that no longer applies becomes "formerly
+//     classified by"; a person's link is never removed or changed, and counts
+//     as linked (no duplicate is added);
+//   – migration: an integration-made "groups" link from before v2.11 is
+//     replaced by a "classified by" link when it still applies, or swapped to
+//     "formerly classified by" when it does not. A person's "groups" link
+//     stays as it is.
+// Returns [added:, removed:].
 def reconcileFileGroups(UUID assetId, Collection classIds, Map ids, Set owned) {
     int added = 0
     int removed = 0
     def desired = [] as Set
     classIds.each { classId -> desired << string2Uuid(classId.toString()) }
-    def existingGroups = relationsByFarEnd(ids.groupsRelationTypeId, assetId, null)
-    Map formerlyGroups = null
-    def formerlyGroupsOf = {
-        if (formerlyGroups == null) { formerlyGroups = relationsByFarEnd(ids.formerlyGroupsRelationTypeId, assetId, null) }
-        return formerlyGroups
+    UUID linkTypeId = fileClassRelationTypeId(ids)
+    def current = relationsByFarEnd(linkTypeId, assetId, null)
+    def legacy = linkTypeId == ids.groupsRelationTypeId ? [:] : relationsByFarEnd(ids.groupsRelationTypeId, assetId, null)
+    Map formerlyLinks = null
+    def formerlyOf = {
+        if (formerlyLinks == null) { formerlyLinks = relationsByFarEnd(ids.formerlyGroupsRelationTypeId, assetId, null) }
+        return formerlyLinks
     }
-    desired.each { cid ->
-        if (!existingGroups.containsKey(cid)) {
-            if (addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
-                    .sourceId(assetId).targetId(cid).typeId(ids.groupsRelationTypeId).build())) {
-                added++
-            }
-            def formerly = formerlyGroupsOf()[cid]
-            if (formerly != null && owned.contains(formerly.createdBy)) { removeRelationQuietly(formerly.id) }
+    def addFormerly = { UUID cid ->
+        if (!formerlyOf().containsKey(cid)) {
+            addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
+                .sourceId(assetId).targetId(cid).typeId(ids.formerlyGroupsRelationTypeId).build())
         }
     }
-    existingGroups.each { cid, rel ->
+    desired.each { cid ->
+        if (current.containsKey(cid)) { return }
+        def old = legacy[cid]
+        if (old != null && !owned.contains(old.createdBy)) { return }   // a person's "groups" link: already linked
+        if (addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
+                .sourceId(assetId).targetId(cid).typeId(linkTypeId).build())) {
+            added++
+        }
+        if (old != null && removeRelationQuietly(old.id)) { removed++ }  // moved from "groups"
+        def formerly = formerlyOf()[cid]
+        if (formerly != null && owned.contains(formerly.createdBy)) { removeRelationQuietly(formerly.id) }
+    }
+    current.each { cid, rel ->
         if (desired.contains(cid)) { return }
         if (!owned.contains(rel.createdBy)) {
             loggerApi.debug("Kept classification link ${cid} on ${assetId}: created by a person (${rel.createdBy}), not the integration")
@@ -529,10 +544,19 @@ def reconcileFileGroups(UUID assetId, Collection classIds, Map ids, Set owned) {
         }
         if (removeRelationQuietly(rel.id)) {
             removed++
-            if (!formerlyGroupsOf().containsKey(cid)) {
-                addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
-                    .sourceId(assetId).targetId(cid).typeId(ids.formerlyGroupsRelationTypeId).build())
-            }
+            addFormerly(cid)
+        }
+    }
+    legacy.each { cid, rel ->
+        if (!owned.contains(rel.createdBy)) { return }                  // a person's "groups" link: never touched
+        if (desired.contains(cid)) {
+            // Already linked with the new type too: drop the old twin.
+            if (current.containsKey(cid) && removeRelationQuietly(rel.id)) { removed++ }
+            return
+        }
+        if (removeRelationQuietly(rel.id)) {
+            removed++
+            addFormerly(cid)
         }
     }
     return [added: added, removed: removed]
