@@ -157,12 +157,15 @@ def zeroResultsRetireSkipReason(int linked) {
 // (the nightly) never stop there and follow the tags.
 
 // Whether this run may create the new file assets it would need. `newFiles` is
-// exact on-prem (the whole answer is in hand) and an upper bound in the Cloud +
-// Edge edition (results minus the files the search returned before). Returns
-// the Rerun Options form's [importAllowed:, importWarn:, importBlocked:,
-// importBlockedMessage:, projectedTotal:].
+// exact on-prem (the whole answer is in hand) and a LOWER bound in the Cloud +
+// Edge edition (today's matches minus the files the search returned before:
+// files that left the results make room for as many new ones, which a count
+// cannot see). A lower bound over a limit is a sure refusal; under it, the
+// Edge results pass enforces the limits as it creates (maxCreate,
+// rerunCreateBudget). Returns the Rerun Options form's [importAllowed:,
+// importWarn:, importBlocked:, importBlockedMessage:, projectedTotal:].
 def computeRerunFeasibility(int total, int newFiles, int filesDomainCount, boolean exact) {
-    String upTo = exact ? '' : 'up to '
+    String upTo = exact ? '' : 'at least '
     def fmt = { int n -> String.format(Locale.ENGLISH, '%,d', n) }
     int projectedTotal = filesDomainCount + newFiles
     boolean tooMany = newFiles > dxrMaxImportFiles()
@@ -171,9 +174,9 @@ def computeRerunFeasibility(int total, int newFiles, int filesDomainCount, boole
     boolean importAllowed = total > 0 && !importBlocked
     boolean importWarn = importAllowed && newFiles > dxrWarnImportFiles()
     def message = tooMany
-        ? "Creating assets for new files is disabled for this run: it could add ${upTo}${fmt(newFiles)} new file asset(s), more than the ${fmt(dxrMaxImportFiles())} one run may create. Send with the first option unticked to refresh only the files already in Collibra, or refine the search."
+        ? "Creating assets for new files is disabled for this run: it would add ${upTo}${fmt(newFiles)} new file asset(s), more than the ${fmt(dxrMaxImportFiles())} one run may create. Send with the first option unticked to refresh only the files already in Collibra, or refine the search."
         : overCap
-        ? "Creating assets for new files is disabled for this run: Collibra holds ${fmt(filesDomainCount)} DataXray file asset(s) and this run could add ${upTo}${fmt(newFiles)} more — the projected ${fmt(projectedTotal)} exceeds the ${fmt(dxrMaxTotalFileAssets())} instance-wide limit. Send with the first option unticked to refresh only the files already in Collibra."
+        ? "Creating assets for new files is disabled for this run: Collibra holds ${fmt(filesDomainCount)} DataXray file asset(s) and this run would add ${upTo}${fmt(newFiles)} more — the projected ${fmt(projectedTotal)} exceeds the ${fmt(dxrMaxTotalFileAssets())} instance-wide limit. Send with the first option unticked to refresh only the files already in Collibra."
         : ''
     return [importAllowed: importAllowed, importWarn: importWarn, importBlocked: importBlocked,
             importBlockedMessage: message.toString(), projectedTotal: projectedTotal]
@@ -181,18 +184,23 @@ def computeRerunFeasibility(int total, int newFiles, int filesDomainCount, boole
 
 // Publish the Rerun Options form's variables. `keepInSync` / `autoImport` are
 // the sync filter's current options (its tags), which prefill the checkboxes:
-// sending the task unchanged keeps today's behaviour.
+// sending the task unchanged keeps today's behaviour. The two lasting options
+// are always offered, however many files the search matches: they must stay
+// changeable (above all, switchable off) on a search too large to import, and
+// the limits only ever concern creating assets.
 def publishRerunOptions(Map f, int total, int newFiles, boolean exact, boolean keepInSync, boolean autoImport) {
     def fmt = { int n -> String.format(Locale.ENGLISH, '%,d', n) }
     execution.setVariable('rerunResultCount', total)
     execution.setVariable('rerunResultCountDisplay', fmt(total))
-    execution.setVariable('rerunNewFilesDisplay', (exact ? fmt(newFiles) : "up to ${fmt(newFiles)}").toString())
+    execution.setVariable('rerunNewFileCount', newFiles)
+    execution.setVariable('rerunNewFilesExact', exact)
+    execution.setVariable('rerunNewFilesDisplay', (exact ? fmt(newFiles) : "at least ${fmt(newFiles)}").toString())
     execution.setVariable('rerunPreviousCountDisplay', fmt(previousFileCount()))
     execution.setVariable('importAllowed', f.importAllowed)
     execution.setVariable('importWarn', f.importWarn)
     execution.setVariable('importBlocked', f.importBlocked)
     execution.setVariable('importBlockedMessage', f.importBlockedMessage)
-    execution.setVariable('syncOffered', total <= dxrMaxImportFiles())
+    execution.setVariable('syncOffered', true)
     execution.setVariable('importDecision', autoImport && f.importAllowed)
     execution.setVariable('keepInSync', keepInSync)
     execution.setVariable('autoImportNewFiles', autoImport)
@@ -208,30 +216,80 @@ def zeroRerunOptions() {
 
 // Apply the run's options once the Rerun Options task is sent (or, headless,
 // once the collector is done): writes the sync filter's tags from the
-// checkboxes and decides whether this run creates assets for new files
-// (rerunCreateNew). A headless run follows the tags the collector read
-// (rerunTagNoAutoImport). Interactive: a request to create assets the form
-// showed as blocked is refused with a WorkflowException before anything is
-// written, so the task stays open (forms can be bypassed through the API).
-// Returns rerunCreateNew.
+// checkboxes, decides whether this run creates assets for new files
+// (rerunCreateNew), and records the rebuilt query (rerunQueryDisplay) in the
+// DataXray Query attribute — only now, so a run left at the task, refused or
+// aborted before it changes nothing on the sync filter. A headless run follows
+// the tags the collector read (rerunTagNoAutoImport).
+//
+// Interactive, with "create assets" ticked: the task may have been open for
+// days, so the DataXray file asset population is counted again
+// (filesDomainCount, which the limits that follow use) and the limits are
+// re-checked against it. A request the limits block — whether the form showed
+// it as blocked or it became so since (forms can also be bypassed through the
+// API) — is refused with a WorkflowException before anything is written, so
+// the task stays open.
+//
+// Sets rerunSyncOptionChanged when "keep in sync nightly" changed, so the
+// retire task can bring the DataXray Sync value of the files the run did not
+// get to up to date (refreshSyncModesAfterOptionChange). Returns rerunCreateNew.
 def applyRerunOptions(UUID queryId) {
+    def ids = dxrModelIds()
     boolean createNew
     if ((execution.getVariable('headless') ?: '').toString() == 'true') {
         createNew = execution.getVariable('rerunTagNoAutoImport') != true
     } else {
         boolean importNow = execution.getVariable('importDecision') == true
-        if (importNow && execution.getVariable('importBlocked') == true) {
-            def message = (execution.getVariable('importBlockedMessage') ?: 'Creating assets for new files is disabled for this run.').toString()
-            def wf = new com.collibra.dgc.workflow.api.exception.WorkflowException(message)
-            wf.setTitleMessage('Rerun DataXray Search refused')
-            wf.setUserMessage(message)
-            throw wf
+        if (importNow) {
+            int filesDomainCount = countFileAssets(ids)
+            execution.setVariable('filesDomainCount', filesDomainCount)
+            def f = computeRerunFeasibility((execution.getVariable('rerunResultCount') ?: 0) as int,
+                                            (execution.getVariable('rerunNewFileCount') ?: 0) as int,
+                                            filesDomainCount, execution.getVariable('rerunNewFilesExact') != false)
+            if (f.importBlocked || execution.getVariable('importBlocked') == true) {
+                def message = (f.importBlockedMessage ?: execution.getVariable('importBlockedMessage') ?:
+                               'Creating assets for new files is disabled for this run.').toString()
+                def wf = new com.collibra.dgc.workflow.api.exception.WorkflowException(message)
+                wf.setTitleMessage('Rerun DataXray Search refused')
+                wf.setUserMessage(message)
+                throw wf
+            }
         }
         def tags = applyQueryFlags(queryId, execution.getVariable('keepInSync') == true,
                                    execution.getVariable('autoImportNewFiles') != false)
+        execution.setVariable('rerunSyncOptionChanged', tags.keepInSync != (execution.getVariable('rerunTagKeepInSync') == true))
         createNew = importNow
         loggerApi.info("Rerun options for sync filter ${queryId}: create assets for new files now=${importNow}, keep in sync=${tags.keepInSync}, no auto-import=${tags.noAutoImport}")
     }
+    def queryDisplay = (execution.getVariable('rerunQueryDisplay') ?: '').toString()
+    if (queryDisplay) { recordQueryAttribute(queryId, ids, queryDisplay) }
     execution.setVariable('rerunCreateNew', createNew)
     return createNew
+}
+
+// How many file assets the rest of this run may still create (the Cloud + Edge
+// results pass, processFileBatch's maxCreate): the per-run limit and the room
+// under the instance-wide one (filesDomainCount, counted when the options were
+// applied, or by the collector of a headless run), less what it created so far.
+def rerunCreateBudget() {
+    int filesDomainCount = (execution.getVariable('filesDomainCount') ?: 0) as int
+    int created = (execution.getVariable('importCreatedCount') ?: 0) as int
+    return Math.max(0, Math.min(dxrMaxImportFiles(), dxrMaxTotalFileAssets() - filesDomainCount) - created)
+}
+
+// After the Rerun Options task changed "keep in sync nightly", every file the
+// search still returns must change its DataXray Sync value. The results pass
+// rewrites it for each file it upserts and the retire pass for each file it
+// unlinks; a run that does not get through its results (0 results, a partial
+// or aborted pass, a pass the retire guards skip) would leave the rest stale
+// until the nightly sweep. The retire scripts call this on those paths: it
+// recomputes the value of every file the search returned before the run. It
+// writes nothing but that attribute, so the zero-results and partial-run
+// guards on links and statuses are untouched.
+def refreshSyncModesAfterOptionChange() {
+    if (execution.getVariable('rerunSyncOptionChanged') != true) { return }
+    def previous = new groovy.json.JsonSlurper().parseText((execution.getVariable('previousFileIds') ?: '[]').toString()) as List
+    if (previous.isEmpty()) { return }
+    int written = refreshFileSyncModes(previous, dxrModelIds())
+    loggerApi.info("Keep in sync nightly changed: DataXray Sync recomputed on ${written} file asset(s) this run did not otherwise update")
 }

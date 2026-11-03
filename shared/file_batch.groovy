@@ -39,6 +39,11 @@
 //   – opts.createNew == false (query tagged dataxray-no-auto-import, or the
 //     Rerun Options task said so): files with no asset yet are counted as
 //     skippedNew and not created.
+//   – opts.maxCreate (optional, the Cloud + Edge rerun): at most this many
+//     assets are created; the new files beyond it are counted as skippedNew
+//     and cappedNew and not created. It is what holds the per-run and
+//     instance-wide limits on Edge, where the count before the run is only a
+//     lower bound of the new files.
 //   – DataXray Sync (v2.10, optional, syncModeAttrOn): every file the batch
 //     touches gets "Kept in sync nightly" when at least one sync filter that
 //     returns it is kept in sync nightly, else "One-time import"
@@ -55,8 +60,8 @@
 
 // Upsert one batch of work-item tuples. `label` names the batch in log lines
 // (e.g. "Import batch 3/12"). opts.createNew (default true): false refreshes
-// existing assets only. Returns
-// [created:, updated:, failed:, relationsAdded:, relationsRemoved:, skippedNew:,
+// existing assets only; opts.maxCreate (optional) caps how many it creates. Returns
+// [created:, updated:, failed:, relationsAdded:, relationsRemoved:, skippedNew:, cappedNew:,
 //  matchedByObjectKey:, seenAssetIds: (the asset UUID string each tuple maps to)].
 def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]) {
     def ids = dxrModelIds()
@@ -67,6 +72,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
     int relationsAdded = 0
     int relationsRemoved = 0
     int skippedNew = 0
+    int cappedNew = 0
     def resolved = batch.collect { deterministicFileAssetId(it[0]) }
     int matchedByObjectKey = 0
 
@@ -87,6 +93,13 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             } else {
                 skippedNew++
             }
+        }
+        if (opts.maxCreate != null && newItems.size() > (opts.maxCreate as int)) {
+            int room = Math.max(0, opts.maxCreate as int)
+            cappedNew = newItems.size() - room
+            skippedNew += cappedNew
+            newItems = newItems.take(room)
+            loggerApi.warn("${label}: ${cappedNew} new matching file(s) not imported — creating them would pass the import limits")
         }
         if (matchedByObjectKey > 0) {
             loggerApi.info("${label}: ${matchedByObjectKey} file(s) DataXray gave a new id matched their existing asset by object key")
@@ -210,7 +223,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
     }
 
     return [created: created, updated: updated, failed: failedInBatch,
-            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, skippedNew: skippedNew,
+            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, skippedNew: skippedNew, cappedNew: cappedNew,
             matchedByObjectKey: matchedByObjectKey, seenAssetIds: resolved.collect { it.toString() }]
 }
 
@@ -320,6 +333,10 @@ def accumulateBatchCounters(Map r) {
     execution.setVariable('importRelationCount', ((execution.getVariable('importRelationCount') ?: 0) as int) + r.relationsAdded)
     execution.setVariable('importRelationsRemovedCount', ((execution.getVariable('importRelationsRemovedCount') ?: 0) as int) + r.relationsRemoved)
     execution.setVariable('importSkippedNewCount', ((execution.getVariable('importSkippedNewCount') ?: 0) as int) + (r.skippedNew ?: 0))
+    if (r.cappedNew) {
+        execution.setVariable('importCappedCount', ((execution.getVariable('importCappedCount') ?: 0) as int) + r.cappedNew)
+        execution.setVariable('importCapped', true)
+    }
 }
 
 // Files the query previously returned but no longer does: the query's

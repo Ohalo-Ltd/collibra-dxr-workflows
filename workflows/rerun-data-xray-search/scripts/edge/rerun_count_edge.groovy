@@ -41,11 +41,13 @@ if (total > (r.maxResultWindow as int)) {
     return
 }
 
-// Upper bound for new file assets: today's matches minus the files the search
-// returned before (some of those may have left the results, so "up to").
+// A LOWER bound for the new file assets: today's matches minus the files the
+// search returned before. Files that left the results make room for as many
+// new ones, which a count cannot see, so the form says "at least"; the results
+// pass caps what it creates at the limits (rerunCreateBudget).
 int growth = Math.max(0, total - previousFileCount())
 int filesDomainCount = (execution.getVariable('filesDomainCount') ?: 0) as int
 publishRerunOptions(computeRerunFeasibility(total, growth, filesDomainCount, false), total, growth, false,
                     execution.getVariable('rerunTagKeepInSync') == true,
                     execution.getVariable('rerunTagNoAutoImport') != true)
-loggerApi.info("Rerun of '${conditionName}': DataXray matches ${total} file(s), up to ${growth} new; waiting for the Rerun Options task")
+loggerApi.info("Rerun of '${conditionName}': DataXray matches ${total} file(s), at least ${growth} new; waiting for the Rerun Options task")
