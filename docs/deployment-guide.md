@@ -100,9 +100,9 @@ Four of the workflows — **Search DataXray**, **Rerun DataXray Search**,
 **Sync DataXray Classifications**, and **Sync DataXray Classification
 (Nightly)** — need to know your DataXray instance's address and an
 authentication token. These are hidden configuration variables; they are never
-shown to people who *run* the workflow and can only be set by an admin. (The
-**Configure** workflow and **Sync DataXray Files (Nightly)** have no such
-settings — the nightly file sync only starts reruns, which carry their own.)
+shown to people who *run* the workflow and can only be set by an admin.
+(**Sync DataXray Files (Nightly)** has no connection settings: it only starts
+reruns, which carry their own.)
 
 For **each** of those four workflows:
 
@@ -120,6 +120,15 @@ if it is still unset.
 > **Rerun DataXray Search** also has a hidden **Headless** variable. Leave it
 > at `false` — the nightly file sync sets it per run when it starts reruns
 > automatically.
+
+**Configure DataXray Workflows** has one optional setting of its own, in the
+same **Variables** section: **Sync extractor values to file assets
+(true/false)**, default `false`. Leave it at `false` unless you want every sync
+to copy the values DataXray's extractors found (an invoice number, a yes/no
+answer) onto the file assets, for display. It does not change what a search
+matches. To turn it on, set it to `true` and run Configure again; see
+*Optional: extractor values on file assets* in
+[file-asset-lifecycle.md](file-asset-lifecycle.md#optional-extractor-values-on-file-assets).
 
 ## Step 5 — Assign the access roles to users
 
@@ -405,6 +414,7 @@ that case, re-enter the token/URL (Step 4) and **run Configure once more** (Step
 |---|---|
 | Workflow's overview page is blank. | The workflow is disabled — enable it (Step 2). |
 | A run stops with "DataXray … is not set" / "misconfigured". | The Base URL or Bearer token is still the placeholder — set it (Step 4). |
+| The **Sync extractor values to file assets** setting can't be found. | It is a variable of **Configure DataXray Workflows**, not of Search or Rerun (Settings → Workflows → Definitions → Configure DataXray Workflows → Variables). The Variables section is shown only to Sysadmins and to roles with the *Workflow administration* permission, such as **DataXray Admin**. If Configure was imported before v2.8, re-import it. |
 | Configure's results list a workflow as **"not deployed yet"**. | That workflow wasn't imported when Configure ran — import it (Steps 1–2) and run Configure again (Step 3). |
 | A user can't see Search/Sync in **+ Create**. | They don't hold **DataXray User** or **DataXray Admin** — assign the role (Step 5). |
 | A user can't edit the Base URL / token. | Editing requires **DataXray Admin** (or Sysadmin / Workflow Administration). |
