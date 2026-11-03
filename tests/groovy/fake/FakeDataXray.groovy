@@ -26,6 +26,8 @@ class FakeDataXray {
     int maxResponseBytes = 100 * 1024
     boolean refusalAsEmpty500 = false
     int maxResultWindow = 10_000
+    /** The Edge HTTP connection DataXray is reachable through (an External API task naming another fails). */
+    String connectionName = 'data-xray'
     List<Map> requests = []                         // [method:, path:, body: (parsed)]
     List<Map> queued = []                           // canned responses, consumed first
 

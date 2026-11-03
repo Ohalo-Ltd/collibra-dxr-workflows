@@ -59,9 +59,10 @@
     </extensionElements>
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
       <extensionElements>
-        <flowable:formProperty id="dataxrayConnectionName" name="Edge HTTP connection name (DataXray)" type="string" variable="dataxrayConnectionName" default="data-xray" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayPageSize" name="DataXray results per request (1-100)" type="string" variable="dataxrayPageSize" default="25" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayUrl" name="DataXray Base URL (deep links only)" type="string" variable="dataxrayUrl" default="&lt;paste DataXray base URL here&gt;" readable="false" required="false"/>
+        <!-- No DataXray settings here (v2.10.1): the collector uses Search
+             DataXray's (shared/dxr_config.groovy, adoptSearchDataXraySettings).
+             Collibra refuses to save this definition's settings page once
+             Configure has given it global start roles (workflowWrongRoles). -->
         <!-- Set to 'true' by the nightly driver via startWorkflowInstances
              formProperties; a headless run never throws and skips the summary
              user task. Admins should leave this at 'false'. -->

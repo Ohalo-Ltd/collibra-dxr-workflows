@@ -71,6 +71,15 @@ class BpmnRunner {
      * (FakeLogger), item (UUID of the business item, or null), vars (Map: form
      * properties), initiator (String), maxSteps (int).
      */
+    /** The definition's configuration variables as deployed: each hidden start-event property's default. */
+    Map<String, String> configurationDefaults() {
+        def out = [:]
+        elements[startId].node.'**'.findAll { it.name() == 'flowable:formProperty' && it.@readable.text() == 'false' }.each { fp ->
+            if (fp.@default.text()) { out[fp.@variable.text() ?: fp.@id.text()] = fp.@default.text() }
+        }
+        return out
+    }
+
     RunResult start(Map ctx) {
         def run = new RunResult(runner: this, ctx: ctx, execution: new FakeExecution())
         def start = elements[startId].node
@@ -167,6 +176,12 @@ class BpmnRunner {
             fields[fld.@name.text()] = expr ? interpolate(run, expr.text().trim()) : str?.text()?.trim()
         }
         if (run.ctx.dataxray == null) { throw new IllegalStateException('an External API task ran but the test gave no FakeDataXray') }
+        // Like Collibra: a connection that does not exist fails the task whatever ignoreException says.
+        def conn = node.'**'.find { it.name() == 'design:http-connection-name' }
+        String connection = conn ? interpolate(run, conn.text().trim()) : null
+        if (connection != run.ctx.dataxray.connectionName) {
+            throw new IllegalStateException("workflowHttpTaskNoConnectionFound: connectionName = ${connection}")
+        }
         String prefix = fields.resultVariablePrefix ?: ''
         Map r = run.ctx.dataxray.handle(fields.requestMethod, fields.requestUrl, fields.requestHeaders, fields.requestBody)
         run.httpCalls << [method: fields.requestMethod, url: fields.requestUrl]

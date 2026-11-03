@@ -566,3 +566,57 @@ test(variant: 'edge', 'RERUN-OPT-8: switching keep in sync off updates DataXray 
     assert linked(s.q, 'returns', known)
     assert attr(known, 'syncMode') == 'One-time import'
 }
+
+// --- Settings come from Search DataXray (v2.10.1) ----------------------------------------
+// Collibra refuses to save the rerun's own settings page once Configure has given
+// the asset-scoped workflow global start roles (workflowWrongRoles), so it has none.
+
+test(variant: 'edge', 'SETTINGS-1: the rerun declares no DataXray settings of its own, only the hidden headless flag') {
+    assert fx.workflowDefinitions.rerunDataXraySearch.configurationVariables.keySet() == ['headless'] as Set
+}
+
+test(variant: 'edge', 'SETTINGS-2: the rerun uses the Edge connection and URL set on Search DataXray') {
+    def s = contactsSearch(delegate)
+    dxrFile('f1', labels: ['7'])
+    dxr.connectionName = 'dataxray-production'
+    settings('searchDataXray', [dataxrayConnectionName: 'dataxray-production', dataxrayUrl: 'https://dxr.example.com/'])
+
+    def run = rerun(delegate, s.q, expect: 'waiting')
+
+    assert run.task.formKey == 'rerunSummaryForm'
+    assert run.var('dataxrayConnectionName') == 'dataxray-production'
+    assert run.var('dataxrayUrl') == 'https://dxr.example.com'
+    assert fileAssets() == [assetIdOf('f1')]
+}
+
+test(variant: 'edge', 'SETTINGS-2: a headless rerun (the nightly) uses them too') {
+    def s = contactsSearch(delegate, query: [tags: ['dataxray-keep-in-sync']])
+    dxrFile('f1', labels: ['7'])
+    dxr.connectionName = 'dataxray-production'
+    settings('searchDataXray', [dataxrayConnectionName: 'dataxray-production'])
+
+    def run = rerun(delegate, s.q, headless: true, expect: 'completed')
+
+    assert run.var('rerunAborted') == false
+    assert fileAssets() == [assetIdOf('f1')]
+}
+
+test(variant: 'edge', 'SETTINGS-3: with no connection name on Search DataXray the rerun stops and says where to set it') {
+    def s = contactsSearch(delegate)
+    settings('searchDataXray', [dataxrayConnectionName: ''])
+
+    def run = rerun(delegate, s.q, expect: 'error')
+
+    assert run.error.userMessage.contains('Search DataXray → Variables')
+    assert dxr.requests.isEmpty()
+}
+
+test(variant: 'edge', 'SETTINGS-3: when Search DataXray cannot be read the rerun stops and says why') {
+    def s = contactsSearch(delegate)
+    fx.workflowDefinitions.remove('searchDataXray')
+
+    def run = rerun(delegate, s.q, expect: 'error')
+
+    assert run.error.userMessage.contains("Search DataXray's settings could not be read")
+    assert dxr.requests.isEmpty()
+}

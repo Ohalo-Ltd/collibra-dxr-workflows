@@ -45,7 +45,7 @@ class FakeCollibra {
     Map<UUID, String> attributeTypes = [:]
     Map<UUID, String> relationTypes = [:]
     Map<UUID, String> statuses = [:]
-    Map<String, Map> workflowDefinitions = [:]   // process id → [id:, name:]
+    Map<String, Map> workflowDefinitions = [:]   // process id → [id:, name:, processId:, configurationVariables:]
     List<Map> startedInstances = []
     List<Map> attachments = []
     long seq = 0
@@ -306,6 +306,7 @@ class FDefinition {
     UUID id
     String processId
     String name
+    Map<String, String> configurationVariables = [:]
 }
 
 class FakeExistsApi {
@@ -485,7 +486,8 @@ class FakeWorkflowDefinitionApi {
         f.call('workflowDefinitionApi.getWorkflowDefinitionByProcessId', processId)
         def d = f.workflowDefinitions[processId]
         if (d == null) { throw new FakeNotFound("Workflow definition with process id '${processId}' not found") }
-        return new FDefinition(id: d.id, processId: processId, name: d.name)
+        return new FDefinition(id: d.id, processId: processId, name: d.name,
+                               configurationVariables: new LinkedHashMap(d.configurationVariables ?: [:]))
     }
 }
 

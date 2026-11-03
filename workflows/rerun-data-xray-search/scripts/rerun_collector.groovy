@@ -95,15 +95,17 @@ def abort = { String title, String message ->
     }
 }
 
-// --- Config -----------------------------------------------------------------------
+// --- Config (Search DataXray's settings) -------------------------------------------
 
+// The connection settings are Search DataXray's (v2.10.1; dxr_config.groovy).
+def adopted = adoptSearchDataXraySettings(['dataxrayUrl', 'dataxrayAuthToken'])
 def cfg = readRequiredConfig([
     dataxrayUrl      : 'DataXray Base URL',
     dataxrayAuthToken: 'DataXray Auth Token (Bearer)',
 ])
 if (!cfg.missing.isEmpty()) {
     abort('Rerun DataXray Search misconfigured',
-        'The DataXray Base URL / Bearer token are not set on this workflow. Open its settings page and provide them.')
+        searchSettingsMissingMessage('the DataXray Base URL / Bearer token are', adopted))
     return
 }
 def dataxrayUrl       = normalizeBaseUrl(cfg.config.dataxrayUrl)

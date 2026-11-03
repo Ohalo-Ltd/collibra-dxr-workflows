@@ -61,12 +61,17 @@ def abort = { String title, String message ->
 
 // --- Config -----------------------------------------------------------------------
 
+// The connection settings are Search DataXray's (v2.10.1; dxr_config.groovy).
+// The External API tasks name their connection with ${dataxrayConnectionName},
+// which resolves to the process variable set here.
+def adopted = adoptSearchDataXraySettings(['dataxrayConnectionName', 'dataxrayUrl', 'dataxrayPageSize'])
 def connectionName = (execution.getVariable('dataxrayConnectionName') ?: '').toString().trim()
 if (connectionName.isEmpty() || isPlaceholderValue(connectionName)) {
     abort('Rerun DataXray Search misconfigured',
-        "The 'Edge HTTP connection name (DataXray)' configuration variable is not set on this workflow. Open its settings page and provide it.")
+        searchSettingsMissingMessage("the 'Edge HTTP connection name (DataXray)' is", adopted))
     return
 }
+execution.setVariable('dataxrayConnectionName', connectionName)
 def dataxrayUrl = normalizeBaseUrl(execution.getVariable('dataxrayUrl'))
 if (isPlaceholderValue(dataxrayUrl)) { dataxrayUrl = '' }
 execution.setVariable('dataxrayUrl', dataxrayUrl)
