@@ -378,6 +378,7 @@ test(variant: 'edge', 'R21 / FILE-23: creating more than 10,000 assets is refuse
     assert run.task.formKey == 'rerunOptionsForm'
     assert run.var('importBlocked') == true && run.var('importAllowed') == false && run.var('importDecision') == false
     assert run.var('importBlockedMessage').contains('more than the 10,000 one run may create')
+    assert run.var('syncOffered') == true                    // the lasting options stay changeable
 
     def refused = complete(run, [importDecision: true, keepInSync: false, autoImportNewFiles: true])
     assert refused.state == 'error'
@@ -407,10 +408,11 @@ test(variant: 'edge', 'RERUN-OPT-1: the Rerun Options task shows today\'s count 
     assert run.task.name ==~ /Rerun Options: Contacts search \(\d{1,2} \w{3} \d{4}, \d\d:\d\d UTC\)/
     assert run.task.missingFormVariables == []
     assert run.var('rerunResultCountDisplay') == '2'
-    assert run.var('rerunNewFilesDisplay') == 'up to 1'
+    assert run.var('rerunNewFilesDisplay') == 'at least 1'
     assert run.var('rerunPreviousCountDisplay') == '1'
     assert [run.var('importDecision'), run.var('keepInSync'), run.var('autoImportNewFiles')] == [true, true, true]
     assert fileAssets() == [known]                            // nothing changed before Send
+    assert attr(s.q, 'query') == null                        // not even the DataXray Query attribute
     def counted = dxr.searchRequests()
     assert counted.size() == 1
     assert counted[0].body.pageSize == 1 && counted[0].body.excludedFields == ['*']
@@ -430,6 +432,7 @@ test(variant: 'edge', 'RERUN-OPT-2: a search whose files were not imported at fi
     assert run.var('importCreatedCount') == 2
     assert fileAssets() as Set == [assetIdOf('f1'), assetIdOf('f2')] as Set
     assert fx.assets[s.q].tags as Set == ['dataxray-no-auto-import'] as Set
+    assert attr(s.q, 'query')                                 // recorded once the options were applied
 }
 
 test(variant: 'edge', 'RERUN-OPT-2: unticking the first option refreshes only the files already in Collibra') {
@@ -501,6 +504,67 @@ test(variant: 'edge', 'RERUN-OPT-5: a count request that fails once is retried')
 
     assert run.task.formKey == 'rerunOptionsForm'
     assert run.var('rerunResultCountDisplay') == '1'
+}
+
+// File assets that fill Collibra up to `total` (the population the limits count).
+def fillFileAssets(fake.World world, int total) {
+    int have = world.fileAssets().size()
+    (have..<total).each { n ->
+        world.fx.insertAsset(name: "filler-${n}".toString(), domainId: world.ids.filesDomainId,
+                             typeId: world.ids.fileTypeId, statusId: fake.World.CANDIDATE)
+    }
+}
+
+test(variant: 'edge', 'RERUN-OPT-6: the limits are checked against the population when the options are sent, not when the task opened') {
+    def s = contactsSearch(delegate)
+    dxrFile('f1', labels: ['7'])
+    dxrFile('f2', labels: ['7'])
+
+    def run = rerun(delegate, s.q, atOptions: true, expect: 'waiting')
+    assert run.var('importAllowed') == true
+    fillFileAssets(delegate, 24_999)                          // another import fills Collibra meanwhile
+
+    def refused = complete(run, [importDecision: true, keepInSync: true, autoImportNewFiles: true])
+
+    assert refused.state == 'error'
+    assert refused.error.message.contains('25,000 instance-wide limit')
+    assert fileAssets().size() == 24_999
+    assert fx.assets[s.q].tags.isEmpty()                     // refused before any option was written
+    assert attr(s.q, 'query') == null
+}
+
+test(variant: 'edge', 'RERUN-OPT-7: on Cloud + Edge the new-file count is a lower bound, and creating stops at the limit') {
+    def s = contactsSearch(delegate)
+    ['old1', 'old2'].each { link(s.q, 'returns', fileAsset(it)) }
+    dxrFile('new1', labels: ['7'])                             // the old files left the results,
+    dxrFile('new2', labels: ['7'])                             // two new ones took their place
+    fillFileAssets(delegate, 24_999)
+
+    def run = rerun(delegate, s.q, atOptions: true, expect: 'waiting')
+    assert run.var('rerunNewFilesDisplay') == 'at least 0'
+    assert run.var('importAllowed') == true
+
+    run = complete(run, [importDecision: true, keepInSync: false, autoImportNewFiles: true])
+
+    assert run.state == 'waiting' && run.task.formKey == 'rerunSummaryForm'
+    assert run.task.missingFormVariables == []
+    assert fileAssets().size() == 25_000                      // one created, the cap holds
+    assert run.var('importCreatedCount') == 1
+    assert run.var('importCapped') == true && run.var('importCappedCount') == 1
+    assert run.var('importSkippedNewCount') == 1
+}
+
+test(variant: 'edge', 'RERUN-OPT-8: switching keep in sync off updates DataXray Sync even when the rerun returns 0 results') {
+    def s = contactsSearch(delegate, query: [tags: ['dataxray-keep-in-sync']])
+    def known = fileAsset('known')
+    link(s.q, 'returns', known)
+    fx.setAttributeValues(known, ids.syncModeAttrTypeId, ['Kept in sync nightly'])
+
+    def run = rerun(delegate, s.q, options: [importDecision: false, keepInSync: false, autoImportNewFiles: true], expect: 'waiting')
+
+    assert run.var('rerunRetireSkipped') == true             // 0 results: the links stay
+    assert linked(s.q, 'returns', known)
+    assert attr(known, 'syncMode') == 'One-time import'
 }
 
 // --- Extracted value (v2.12) -----------------------------------------------------------------------

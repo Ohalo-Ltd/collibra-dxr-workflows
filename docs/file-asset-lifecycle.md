@@ -474,8 +474,9 @@ Configure has run, file links keep using *groups*.
 Every manual rerun stops at a **Rerun Options** task before it changes
 anything in Collibra. The task shows how many files DataXray matches now, how
 many the search returned before, and how many of today's matches are new to
-it (in the Cloud + Edge edition this is an upper bound, shown as "up to N"). It
-then offers the search's options again, prefilled from the query asset's tags:
+it (in the Cloud + Edge edition this is a lower bound, shown as "at least N":
+files that left the results make room for new ones, which a count cannot see).
+It then offers the search's options again, prefilled from the query asset's tags:
 
 | Option | Effect |
 |---|---|
@@ -488,8 +489,23 @@ prefilled behaves exactly like a rerun before v2.10. The file assets the search
 still returns are always refreshed, whatever you choose. If creating the new
 assets would break the per-run or instance-wide limit, the first option is
 hidden and the task explains why; you can still send it to refresh the files
-already in Collibra. The nightly sync never shows this task: it follows the
-tags.
+already in Collibra. The limits are checked again against the current number
+of DataXray file assets when you click **Send** (the task may have been open
+for days): if another import used up the room meanwhile, Send is refused, the
+task stays open, and nothing is changed. In the Cloud + Edge edition the rerun
+also stops creating assets at the limits as it goes; any new files it could not
+import are counted under *Not imported*, and the **Rerun Summary** explains why.
+The two lasting options are always shown, however many files the search
+matches, so a large search can always be taken out of the nightly sync.
+
+The **DataXray Query** attribute is updated only once you click **Send**. A
+rerun left at the task, refused, or that could not reach DataXray, changes
+nothing on the query asset. If you change **Keep in sync nightly** and the
+rerun does not get through its results (it returns 0 results, or stops part
+way), the DataXray Sync value of the files the search still returns is
+updated anyway; their links and statuses are left alone as usual.
+
+The nightly sync never shows this task: it follows the tags.
 
 In the Cloud + Edge edition, the task's count costs one small extra request to
 DataXray (one row, file ids only). If DataXray cannot be reached, no options
