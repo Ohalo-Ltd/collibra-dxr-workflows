@@ -72,6 +72,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
     int failedInBatch = 0
     int relationsAdded = 0
     int relationsRemoved = 0
+    int relationsMigrated = 0   // moved from "groups" to "classified by" (v2.11): not a change of classification
     int skippedNew = 0
     int cappedNew = 0
     def resolved = batch.collect { deterministicFileAssetId(it[0]) }
@@ -205,6 +206,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             def links = reconcileFileGroups(assetId, tuple[7], ids, owned)
             relationsAdded += links.added
             relationsRemoved += links.removed
+            relationsMigrated += links.migrated
 
             if (syncModeOn) {
                 writeFileSyncMode(assetId, fileSyncModeFor(existingReturns.keySet() + [queryAssetId], ids, syncCache), ids)
@@ -224,8 +226,12 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
         loggerApi.error("${label} failed: ${batchEx.message}")
     }
 
+    if (relationsMigrated > 0) {
+        loggerApi.info("${label}: moved ${relationsMigrated} classification link(s) from 'groups' to 'classified by'")
+    }
     return [created: created, updated: updated, failed: failedInBatch,
-            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, skippedNew: skippedNew, cappedNew: cappedNew,
+            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, relationsMigrated: relationsMigrated,
+            skippedNew: skippedNew, cappedNew: cappedNew,
             matchedByObjectKey: matchedByObjectKey, seenAssetIds: resolved.collect { it.toString() }]
 }
 
@@ -520,11 +526,15 @@ def writeFileAssetAttrs(UUID assetId, List tuple, Map ids, boolean valuesOn) {
 //   – migration: an integration-made "groups" link from before v2.11 is
 //     replaced by a "classified by" link when it still applies, or swapped to
 //     "formerly classified by" when it does not. A person's "groups" link
-//     stays as it is.
-// Returns [added:, removed:].
+//     stays as it is. The old link is removed only once its replacement
+//     exists: if adding it fails, the "groups" link stays for the next sync.
+// Returns [added:, removed:, migrated:]. Moving a still-valid link to the new
+// type (or dropping its now redundant "groups" twin) counts as migrated, not
+// as added/removed: the file's classifications did not change.
 def reconcileFileGroups(UUID assetId, Collection classIds, Map ids, Set owned) {
     int added = 0
     int removed = 0
+    int migrated = 0
     def desired = [] as Set
     classIds.each { classId -> desired << string2Uuid(classId.toString()) }
     UUID linkTypeId = fileClassRelationTypeId(ids)
@@ -545,11 +555,19 @@ def reconcileFileGroups(UUID assetId, Collection classIds, Map ids, Set owned) {
         if (current.containsKey(cid)) { return }
         def old = legacy[cid]
         if (old != null && !owned.contains(old.createdBy)) { return }   // a person's "groups" link: already linked
-        if (addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
-                .sourceId(assetId).targetId(cid).typeId(linkTypeId).build())) {
-            added++
+        boolean linked = addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
+                .sourceId(assetId).targetId(cid).typeId(linkTypeId).build())
+        if (!linked) {
+            if (old != null) {
+                loggerApi.warn("Kept the 'groups' link ${old.id} on ${assetId}: its 'classified by' replacement could not be added; the next sync retries")
+            }
+            return
         }
-        if (old != null && removeRelationQuietly(old.id)) { removed++ }  // moved from "groups"
+        if (old == null) {
+            added++
+        } else if (removeRelationQuietly(old.id)) {
+            migrated++                                                 // moved from "groups"
+        }
         def formerly = formerlyOf()[cid]
         if (formerly != null && owned.contains(formerly.createdBy)) { removeRelationQuietly(formerly.id) }
     }
@@ -568,7 +586,7 @@ def reconcileFileGroups(UUID assetId, Collection classIds, Map ids, Set owned) {
         if (!owned.contains(rel.createdBy)) { return }                  // a person's "groups" link: never touched
         if (desired.contains(cid)) {
             // Already linked with the new type too: drop the old twin.
-            if (current.containsKey(cid) && removeRelationQuietly(rel.id)) { removed++ }
+            if (current.containsKey(cid) && removeRelationQuietly(rel.id)) { migrated++ }
             return
         }
         if (removeRelationQuietly(rel.id)) {
@@ -576,7 +594,7 @@ def reconcileFileGroups(UUID assetId, Collection classIds, Map ids, Set owned) {
             addFormerly(cid)
         }
     }
-    return [added: added, removed: removed]
+    return [added: added, removed: removed, migrated: migrated]
 }
 
 def setFileAssetAttr(UUID assetId, UUID typeId, value) {

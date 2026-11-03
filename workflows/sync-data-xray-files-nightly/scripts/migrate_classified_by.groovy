@@ -1,6 +1,6 @@
 // migrate_classified_by.groovy  (both editions)
 //
-// ASYNC task of Sync DataXray Files (Nightly), right after the driver (v2.11).
+// ASYNC first task of Sync DataXray Files (Nightly), BEFORE the driver (v2.11).
 // Moves the integration's file → classification links from Collibra's
 // built-in "groups" type to the pack's "classified by / classifies" type
 // (the wording "groups / is grouped by" was confusing).
@@ -16,6 +16,13 @@
 //     A person's "groups" link stays exactly as it is. This task is ASYNC so
 //     that the links it adds are recorded as the Workflow user's too —
 //     otherwise every later sync would treat them as a person's;
+//   – it runs before the driver starts tonight's headless reruns, which
+//     reconcile the same links against DataXray (reconcileFileGroups): moving
+//     a link while a rerun swaps it to "formerly" could recreate a stale
+//     "classified by" link. A manual rerun can still run meanwhile, so each
+//     link is re-read just before it is moved (skipped if it changed), and
+//     the old link is removed only once its replacement exists. A link a
+//     concurrent rerun still turns stale is swapped by the file's next sync;
 //   – at most dxrMigrateLinksMaxPerNight() links per night; the rest follow
 //     the next night (logged);
 //   – nothing happens until Configure has created the new type.
@@ -32,6 +39,7 @@ import com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest
 def ids = dxrModelIds()
 int migrated = 0
 int left = 0
+int skippedChanged = 0
 try {
     if (!classifiedByOn()) {
         loggerApi.info("Sync DataXray Files (Nightly): 'classified by' relation type not created yet (run Configure DataXray Workflows) — file links stay 'groups'")
@@ -43,7 +51,8 @@ try {
         def candidates = []       // integration-made "groups" links from a file asset
         [[ids.classifiedByRelationTypeId, { rel -> already << "${rel.getSource().getId()}:${rel.getTarget().getId()}".toString() }],
          [ids.groupsRelationTypeId, { rel ->
-             if (fileIds.contains(rel.getSource().getId()) && owned.contains(rel.getCreatedBy())) { candidates << rel }
+             def src = rel.getSource().getId()
+             if (fileIds.contains(src) && owned.contains(rel.getCreatedBy())) { candidates << rel }
          }]].each { pair ->
             def cursor = ''
             while (true) {
@@ -59,12 +68,14 @@ try {
         candidates.take(cap).each { rel ->
             def src = rel.getSource().getId()
             def tgt = rel.getTarget().getId()
+            // Still there as scanned? Otherwise something reconciled the file since.
+            if (relationsByFarEnd(ids.groupsRelationTypeId, src, null)[tgt]?.id != rel.getId()) { skippedChanged++; return }
             boolean linked = already.contains("${src}:${tgt}".toString()) ||
                 addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
                     .sourceId(src).targetId(tgt).typeId(ids.classifiedByRelationTypeId).build())
             if (linked && removeRelationQuietly(rel.getId())) { migrated++ }
         }
-        loggerApi.info("Sync DataXray Files (Nightly): moved ${migrated} file link(s) from 'groups' to 'classified by'${left ? ", ${left} left for the next night" : ''}")
+        loggerApi.info("Sync DataXray Files (Nightly): moved ${migrated} file link(s) from 'groups' to 'classified by'${left ? ", ${left} left for the next night" : ''}${skippedChanged ? ", ${skippedChanged} changed since the scan (left to the file's next sync)" : ''}")
     }
 } catch (Exception migrateEx) {
     loggerApi.error("Sync DataXray Files (Nightly): moving file links to 'classified by' stopped: ${migrateEx.message}")

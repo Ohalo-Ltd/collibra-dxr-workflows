@@ -123,7 +123,13 @@ test('a failed relation scan aborts the sweep: nothing is parked on a partial pi
     def orphan = fileAsset('orphan')
     fx.maxPageSize = 1                                      // two relations: the scan needs two pages
     int calls = 0
-    fx.before('relationApi.findRelations') { args -> if (++calls == 2) { throw new RuntimeException('timeout on page 2') } }
+    // Page 2 of the sweep's scan of every returns link (the link migration, which runs first, scans other types).
+    fx.before('relationApi.findRelations') { args ->
+        def r = args[0].props
+        if (r.relationTypeId == ids.returnsRelationTypeId && r.sourceId == null && r.targetId == null && ++calls == 2) {
+            throw new RuntimeException('timeout on page 2')
+        }
+    }
 
     def run = nightly(delegate)
 
@@ -224,6 +230,46 @@ test('LINK-4: a file already linked with classified by just loses its groups twi
     nightly(delegate)
 
     assert linked(f, 'classifiedBy', label) && !linked(f, 'groups', label)
+}
+
+test('LINK-6: the nightly moves the links before it starts any rerun, so no rerun reconciles them meanwhile') {
+    def label = classification('Contacts')
+    def q = query('Synced', tags: ['dataxray-keep-in-sync'], labels: [label])
+    def f = fileAsset('f')
+    link(q, 'returns', f)
+    link(f, 'groups', label)
+    def groupsAtFanOut = null
+    fx.before('workflowInstanceApi.startWorkflowInstances') { args ->
+        if (groupsAtFanOut == null) { groupsAtFanOut = links('groups', [source: f]).size() }
+    }
+
+    nightly(delegate)
+
+    assert fx.startedInstances.size() == 1
+    assert groupsAtFanOut == 0                               // already moved when the rerun was started
+    assert linked(f, 'classifiedBy', label)
+}
+
+test('LINK-6: a link that changed between the scan and its move is left to the file\'s next sync') {
+    def label = classification('Contacts')
+    def f = fileAsset('f')
+    def legacy = link(f, 'groups', label)
+    // A manual rerun swaps it to formerly right after the nightly's scan.
+    boolean swapped = false
+    fx.before('relationApi.findRelations') { args ->
+        if (!swapped && args[0].props.sourceId == f) {
+            swapped = true
+            fx.relations.remove(legacy)
+            link(f, 'formerlyGroups', label)
+        }
+    }
+
+    def run = nightly(delegate)
+
+    assert !linked(f, 'classifiedBy', label)                  // not recreated from the stale scan
+    assert linked(f, 'formerlyGroups', label)
+    assert run.var('nightlyLinksMigrated') == 0
+    assert logged('INFO', 'changed since the scan')
 }
 
 test('LINK-3: before Configure has created classified by, the nightly moves nothing') {

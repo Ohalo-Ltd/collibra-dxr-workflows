@@ -14,6 +14,12 @@
   throwing: a timer workflow that fails before its first async task is retried
   3× by Collibra and then permanently disabled until redeployment.
 
+  v2.11: the first task (migrateLinksTask, async) moves the integration's
+  file links from 'groups' to 'classified by' BEFORE fanOutRerunsTask starts
+  the reruns, so none of tonight's reruns reconciles the same links while they
+  move. Being async, it is also the first transaction boundary: the driver
+  then runs in a job, not in the timer's start transaction.
+
   This workflow has NO configuration variables: it never calls DataXray
   itself. Each rerun instance it starts reads the Base URL / Bearer token
   configured on the Rerun DataXray Search workflow.
@@ -82,17 +88,17 @@
       </extensionElements>
     </endEvent>
 
-    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="fanOutRerunsTask">
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="migrateLinksTask">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flowMigrate" sourceRef="fanOutRerunsTask" targetRef="migrateLinksTask">
+    <sequenceFlow id="flowMigrate" sourceRef="migrateLinksTask" targetRef="fanOutRerunsTask">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow2" sourceRef="migrateLinksTask" targetRef="endEvent">
+    <sequenceFlow id="flow2" sourceRef="fanOutRerunsTask" targetRef="endEvent">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
@@ -111,11 +117,11 @@
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="fanOutRerunsTask" id="BPMNShape_fanOutRerunsTask">
-        <omgdc:Bounds x="210" y="230" width="140" height="80"/>
+        <omgdc:Bounds x="410" y="230" width="140" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="migrateLinksTask" id="BPMNShape_migrateLinksTask">
-        <omgdc:Bounds x="410" y="230" width="140" height="80"/>
+        <omgdc:Bounds x="210" y="230" width="140" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">

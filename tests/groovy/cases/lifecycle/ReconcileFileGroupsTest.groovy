@@ -6,7 +6,7 @@ test('a classification DataXray reports gets a classified by link (EVID-1)') {
     def f = fileAsset('f1')
     def c = classification('PII')
 
-    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 1, removed: 0]
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 1, removed: 0, migrated: 0]
     assert linked(f, 'classifiedBy', c)
 }
 
@@ -15,7 +15,7 @@ test('a link that stops applying becomes formerly classified by, never deleted (
     def c = classification('PII')
     link(f, 'classifiedBy', c)
 
-    assert reconcileFileGroups(f, [], ids, integrationIdentityIds()) == [added: 0, removed: 1]
+    assert reconcileFileGroups(f, [], ids, integrationIdentityIds()) == [added: 0, removed: 1, migrated: 0]
     assert !linked(f, 'classifiedBy', c)
     assert linked(f, 'formerlyGroups', c)
 }
@@ -25,7 +25,7 @@ test('the classification applying again swaps formerly classified by back (FILE-
     def c = classification('PII')
     link(f, 'formerlyGroups', c)
 
-    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 1, removed: 0]
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 1, removed: 0, migrated: 0]
     assert linked(f, 'classifiedBy', c)
     assert !linked(f, 'formerlyGroups', c)
 }
@@ -47,7 +47,7 @@ test('a link a person made is kept when DataXray no longer reports it (EVID-9)')
     def c = classification('PII')
     link(f, 'classifiedBy', c, by: 'person')
 
-    assert reconcileFileGroups(f, [], ids, integrationIdentityIds()) == [added: 0, removed: 0]
+    assert reconcileFileGroups(f, [], ids, integrationIdentityIds()) == [added: 0, removed: 0, migrated: 0]
     assert linked(f, 'classifiedBy', c)
     assert !linked(f, 'formerlyGroups', c)
 }
@@ -57,7 +57,7 @@ test('a link a person made is not duplicated when DataXray reports it too (EVID-
     def c = classification('PII')
     link(f, 'classifiedBy', c, by: 'person')
 
-    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 0]
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 0, migrated: 0]
     assert links('classifiedBy', [source: f]).size() == 1
     assert fx.callCount('relationApi.addRelation') == 0
 }
@@ -81,7 +81,7 @@ test('links to other classifications are left as they are') {
     link(f, 'classifiedBy', kept)
     link(f, 'classifiedBy', dropped)
 
-    assert reconcileFileGroups(f, [kept, added], ids, integrationIdentityIds()) == [added: 1, removed: 1]
+    assert reconcileFileGroups(f, [kept, added], ids, integrationIdentityIds()) == [added: 1, removed: 1, migrated: 0]
     assert links('classifiedBy', [source: f])*.targetId as Set == [kept, added] as Set
     assert links('formerlyGroups', [source: f])*.targetId == [dropped]
 }
@@ -93,7 +93,7 @@ test('LINK-1: an integration-made groups link that still applies is moved to cla
     def c = classification('PII')
     link(f, 'groups', c)                                    // made by a release before v2.11
 
-    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 1, removed: 1]
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 0, migrated: 1]
     assert linked(f, 'classifiedBy', c)
     assert !linked(f, 'groups', c)
     assert !linked(f, 'formerlyGroups', c)
@@ -104,7 +104,7 @@ test('LINK-1: an integration-made groups link that no longer applies becomes for
     def c = classification('PII')
     link(f, 'groups', c)
 
-    assert reconcileFileGroups(f, [], ids, integrationIdentityIds()) == [added: 0, removed: 1]
+    assert reconcileFileGroups(f, [], ids, integrationIdentityIds()) == [added: 0, removed: 1, migrated: 0]
     assert !linked(f, 'groups', c) && !linked(f, 'classifiedBy', c)
     assert linked(f, 'formerlyGroups', c)
 }
@@ -116,7 +116,7 @@ test('LINK-2: a person\'s groups link stays as it is and counts as linked (no du
     link(f, 'groups', c, by: 'person')
     link(f, 'groups', gone, by: 'person')
 
-    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 0]
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 0, migrated: 0]
     assert linked(f, 'groups', c) && linked(f, 'groups', gone)
     assert links('classifiedBy', [source: f]).isEmpty()
 }
@@ -127,7 +127,7 @@ test('LINK-1: a groups twin of a classified by link is dropped') {
     link(f, 'classifiedBy', c)
     link(f, 'groups', c)
 
-    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 1]
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 0, migrated: 1]
     assert linked(f, 'classifiedBy', c) && !linked(f, 'groups', c)
 }
 
@@ -136,6 +136,21 @@ test('LINK-3: before Configure v2.11 creates the type, file links keep using gro
     def f = fileAsset('f1')
     def c = classification('PII')
 
-    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 1, removed: 0]
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 1, removed: 0, migrated: 0]
     assert linked(f, 'groups', c)
+}
+
+test('LINK-5: when the classified by replacement cannot be added, the groups link is kept for the next sync') {
+    def f = fileAsset('f1')
+    def c = classification('PII')
+    link(f, 'groups', c)
+    fx.failNext('relationApi.addRelation')
+
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 0, migrated: 0]
+    assert linked(f, 'groups', c)                             // still classified, under the old name
+    assert !linked(f, 'formerlyGroups', c)
+    assert logged('WARN', 'replacement could not be added')
+
+    assert reconcileFileGroups(f, [c], ids, integrationIdentityIds()) == [added: 0, removed: 0, migrated: 1]
+    assert linked(f, 'classifiedBy', c) && !linked(f, 'groups', c)
 }

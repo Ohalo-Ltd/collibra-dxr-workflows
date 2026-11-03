@@ -226,7 +226,8 @@ def syncModeAttrOn() {
 // "classified by / classifies" type, which Configure creates. Until it has,
 // file links keep using "groups", so nothing breaks before Configure runs.
 // Links of the old type are moved over as each file is synced
-// (reconcileFileGroups) and by the files nightly (migrate_classified_by.groovy).
+// (reconcileFileGroups) and by the files nightly's first task, before it starts
+// any rerun (migrate_classified_by.groovy).
 // Checked once per process and cached in dxrClassifiedByOn.
 def classifiedByOn() {
     def cached = execution.getVariable('dxrClassifiedByOn')

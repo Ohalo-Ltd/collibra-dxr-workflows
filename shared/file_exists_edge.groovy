@@ -265,8 +265,8 @@ def refreshExistsPage(Map chunk, List tuples, Map classIndex, Map ids) {
                 def links = reconcileFileGroups(assetId, tuple[7], ids, owned)
                 linksAdded += links.added
                 linksRemoved += links.removed
-                if (links.added + links.removed > 0) {
-                    loggerApi.info("File asset '${asset.getName()}' [${assetId}]: classification links refreshed from DataXray (+${links.added}/-${links.removed})")
+                if (links.added + links.removed + links.migrated > 0) {
+                    loggerApi.info("File asset '${asset.getName()}' [${assetId}]: classification links refreshed from DataXray (+${links.added}/-${links.removed}${links.migrated ? ", ${links.migrated} moved to 'classified by'" : ''})")
                 }
                 refreshed++
                 if (!zeroMode && sid == ids.notInDataXrayStatusId) {

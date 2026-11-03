@@ -5,6 +5,10 @@
   Same process id and fan-out/sweep as workflow.bpmn.template, plus the
   nightly check that DataXray still has the files no search returns:
     startEvent (timer, 02:30)
+      → migrateLinksTask (script, async, v2.11: moves the integration's file
+           links from 'groups' to 'classified by'; runs BEFORE the reruns are
+           started, so none of tonight's reruns reconciles the same links
+           while they move)
       → fanOutRerunsTask (script, sync: one headless rerun per flagged query,
            then the orphan sweep → 'Not in any search')
       → existsPrepareTask (script, sync: list 'Not in any search' / 'Not in
@@ -106,9 +110,9 @@
         <design:stencilid><![CDATA[EndNoneEvent]]></design:stencilid>
       </extensionElements>
     </endEvent>
-    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="fanOutRerunsTask"/>
-    <sequenceFlow id="flowMigrate" sourceRef="fanOutRerunsTask" targetRef="migrateLinksTask"/>
-    <sequenceFlow id="flow2" sourceRef="migrateLinksTask" targetRef="existsPrepareTask"/>
+    <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="migrateLinksTask"/>
+    <sequenceFlow id="flowMigrate" sourceRef="migrateLinksTask" targetRef="fanOutRerunsTask"/>
+    <sequenceFlow id="flow2" sourceRef="fanOutRerunsTask" targetRef="existsPrepareTask"/>
     <sequenceFlow id="flow3" sourceRef="existsPrepareTask" targetRef="existsGateway"/>
     <sequenceFlow id="flowCheck" sourceRef="existsGateway" targetRef="existsFetchTask">
       <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
@@ -132,9 +136,9 @@
       <bpmndi:BPMNShape bpmnElement="existsPageTask" id="S_existsPageTask"><omgdc:Bounds height="80.0" width="100.0" x="630.0" y="140.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="existsLoopGateway" id="S_existsLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="770.0" y="160.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="850.0" y="166.0"/></bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="90.0" y="180.0"/><omgdi:waypoint x="130.0" y="180.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flowMigrate" id="E_flowMigrate"><omgdi:waypoint x="180.0" y="140.0"/><omgdi:waypoint x="180.0" y="80.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="230.0" y="50.0"/><omgdi:waypoint x="320.0" y="50.0"/><omgdi:waypoint x="320.0" y="140.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="75.0" y="165.0"/><omgdi:waypoint x="75.0" y="50.0"/><omgdi:waypoint x="130.0" y="50.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowMigrate" id="E_flowMigrate"><omgdi:waypoint x="180.0" y="80.0"/><omgdi:waypoint x="180.0" y="140.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="230.0" y="180.0"/><omgdi:waypoint x="270.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="370.0" y="180.0"/><omgdi:waypoint x="410.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowCheck" id="E_flowCheck"><omgdi:waypoint x="450.0" y="180.0"/><omgdi:waypoint x="490.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowNothingToCheck" id="E_flowNothingToCheck"><omgdi:waypoint x="430.0" y="200.0"/><omgdi:waypoint x="430.0" y="260.0"/><omgdi:waypoint x="864.0" y="260.0"/><omgdi:waypoint x="864.0" y="194.0"/></bpmndi:BPMNEdge>
