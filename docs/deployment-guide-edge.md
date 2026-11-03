@@ -47,14 +47,16 @@ Settings → Workflows → Definitions → select a workflow → **Variables**:
 
 | Workflow | Variable | Value |
 |---|---|---|
-| Search DataXray, Rerun DataXray Search, Sync DataXray Classifications, Sync DataXray Classification (Nightly), Sync DataXray Files (Nightly) | **Edge HTTP connection name (DataXray)** | The connection name from Step 1 (`data-xray` unless you chose another). |
-| Search DataXray, Rerun DataXray Search | **DataXray results per request (1-100)** | Leave at `25`. Lower it only if a DataXray page exceeds Collibra's response limit (see *Limits*). |
-| all four | **DataXray Base URL (deep links only)** | Optional. Used only to build links from Collibra assets back to DataXray; leave the placeholder to skip links. |
+| Search DataXray, Sync DataXray Classifications, Sync DataXray Classification (Nightly), Sync DataXray Files (Nightly) | **Edge HTTP connection name (DataXray)** | The connection name from Step 1 (`data-xray` unless you chose another). |
+| Search DataXray | **DataXray results per request (1-100)** | Leave at `25`. Lower it only if a DataXray page exceeds Collibra's response limit (see *Limits*). |
+| Search DataXray and the two classification syncs | **DataXray Base URL (deep links only)** | Optional. Used only to build links from Collibra assets back to DataXray; leave the placeholder to skip links. |
 | Configure DataXray Workflows | **Sync extractor values to file assets (true/false)** | Optional, default `false`. Set `true` and run Configure again to have every sync copy the values DataXray's extractors found onto the file assets, for display; it does not change what a search matches. See [Optional: extractor values on file assets](file-asset-lifecycle.md#optional-extractor-values-on-file-assets). |
 
 Only Sysadmins and roles with the *Workflow administration* permission (such as **DataXray Admin**) see the **Variables** section.
 
 There is **no Bearer token** in this edition: credentials live on the Edge connection.
+
+**Rerun DataXray Search** has no DataXray settings (from v2.11): every rerun, manual or nightly, uses the connection name, results per request and Base URL set on **Search DataXray**. Collibra cannot save the rerun's own settings page once Configure has set who may run it. Its one hidden variable, **Headless**, stays at `false`.
 
 ## Step 5 — Assign roles and run
 
@@ -81,6 +83,8 @@ Releases before the DataXray rename call the product **Data X-Ray** and the quer
 ## Upgrading to v2.11
 
 Re-import the workflows, then run **Configure DataXray Workflows** once. File assets are now linked to their labels, extractors and annotators with a new **classified by / classifies** relation instead of Collibra's *groups / is grouped by*, and *formerly groups* becomes **formerly classified by / formerly classifies**. The integration's existing *groups* links on file assets move over as each file is synced, and the nightly file sync moves the rest (up to 20,000 a night); a *groups* link a person created is left as it is. Saved searches keep linking their criteria with *groups*. Until Configure has run, file links keep using *groups*. See *Upgrading to v2.11* in [deployment-guide.md](deployment-guide.md#upgrading-to-v211). No extra DataXray requests.
+
+**Rerun DataXray Search** no longer has DataXray settings of its own: every rerun, manual or nightly, uses the connection name, results per request and Base URL set on **Search DataXray**. Before v2.11, Collibra refused to save the rerun's settings page (`workflowWrongRoles` in `dgc.log`) once Configure had set who may run it, so its connection could not be changed, for example when moving from a test to a production DataXray. Check that Search DataXray's settings name the connection you want reruns to use; the values the rerun held before are discarded.
 
 ## Upgrading to v2.10
 
@@ -158,6 +162,8 @@ Check all six after an upgrade: a workflow that was not re-imported still shows 
 | *Cannot search: … was deleted in DataXray (its Collibra asset is retired).* | A classification picked in the form was deleted in DataXray; the sync marked its Collibra asset Obsolete, but the pickers still offer it (they cannot filter by status). | Remove it from the search. |
 | *Cannot search: … has no DataXray Index ID in Collibra.* | The classification has no numeric index id yet: the classification sync has not run through Edge, or the standalone script ran without `--stamp-index-ids`. | Run **Sync DataXray Classifications**, or re-run the standalone script with `--stamp-index-ids` (it updates the existing assets in place), then search again. |
 | A rerun stops with *This instance is missing the status 'Not in any search' …* | The workflows were upgraded to v2.4 but Configure has not been re-run. | Run **Configure DataXray Workflows** once (see *Upgrading to v2.4*). |
-| Nightly jobs do nothing. | The connection name is unset on **Sync DataXray Classification (Nightly)** or on **Rerun DataXray Search** (they skip cleanly and log why). **Sync DataXray Files (Nightly)** starts headless reruns, which use the connection set on Rerun DataXray Search; its own connection setting is only used for the check that sets *Not in DataXray*. | Set the variable on all three workflows. |
+| Nightly jobs do nothing. | The connection name is unset on **Sync DataXray Classification (Nightly)** or on **Search DataXray** (they skip cleanly and log why). **Sync DataXray Files (Nightly)** starts headless reruns, which use the connection set on Search DataXray (v2.11; before, on Rerun DataXray Search); its own connection setting is only used for the check that sets *Not in DataXray*. | Set the variable on all three workflows. |
+| Saving the settings of **Rerun DataXray Search** fails (`workflowWrongRoles` in `dgc.log`). | Releases before v2.11 kept the rerun's connection on its own settings page, which Collibra refuses to save once Configure has set who may run it. | Import v2.11: the rerun then uses Search DataXray's settings. |
+| `dgc.log` shows `workflowHttpTaskNoConnectionFound` with `connectionName = …`. | No HTTP connection with that name exists on this instance's Edge sites — typically after moving to another Collibra instance or Edge site. | Create the connection (Step 1), or set the existing connection's name on the workflows (Step 4). |
 
 Full detail for every run is written to Collibra's `dgc.log` (ask Collibra support for access on Cloud).

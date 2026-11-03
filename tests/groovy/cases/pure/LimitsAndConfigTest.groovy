@@ -42,6 +42,60 @@ test('configuration placeholders count as unset') {
     assert normalizeBaseUrl(' https://dxr.example/// ') == 'https://dxr.example'
 }
 
+// --- Rerun DataXray Search's settings come from Search DataXray (v2.11, ADM-10) ---------
+
+test('adoptSearchDataXraySettings copies the URL and token (on-prem) / connection (Edge) set on Search DataXray') {
+    settings('searchDataXray', [dataxrayUrl: 'https://dxr.example.com', dataxrayAuthToken: 'prod-token',
+                                dataxrayConnectionName: 'dataxray-production', dataxrayPageSize: '40'])
+    def names = ['dataxrayUrl', 'dataxrayAuthToken', 'dataxrayConnectionName', 'dataxrayPageSize']
+
+    def r = adoptSearchDataXraySettings(names)
+
+    assert r == [ok: true, error: '']
+    assert names.collect { vars[it] } == ['https://dxr.example.com', 'prod-token', 'dataxray-production', '40']
+}
+
+test('adoptSearchDataXraySettings keeps a value passed when the run was started') {
+    settings('searchDataXray', [dataxrayUrl: 'https://dxr.example.com', dataxrayAuthToken: 'prod-token'])
+    vars.dataxrayAuthToken = 'start-time-token'
+
+    adoptSearchDataXraySettings(['dataxrayUrl', 'dataxrayAuthToken'])
+
+    assert vars.dataxrayAuthToken == 'start-time-token'
+    assert vars.dataxrayUrl == 'https://dxr.example.com'
+}
+
+table('adoptSearchDataXraySettings replaces a blank or placeholder value', [
+    [case: 'blank', own: ''],
+    [case: 'spaces only', own: '   '],
+    [case: 'placeholder', own: '<paste DataXray Bearer token here>'],
+]) { row ->
+    settings('searchDataXray', [dataxrayAuthToken: 'prod-token'])
+    vars.dataxrayAuthToken = row.own
+
+    adoptSearchDataXraySettings(['dataxrayAuthToken'])
+
+    assert vars.dataxrayAuthToken == 'prod-token'
+}
+
+test('adoptSearchDataXraySettings leaves a setting unset when Search DataXray still has its placeholder') {
+    // As deployed: Search DataXray's settings are its BPMN defaults until an admin saves them.
+    adoptSearchDataXraySettings(['dataxrayUrl'])
+
+    assert readRequiredConfig([dataxrayUrl: 'DataXray Base URL']).missing == ['DataXray Base URL  (variable: dataxrayUrl)']
+}
+
+test('adoptSearchDataXraySettings never throws when Search DataXray cannot be read') {
+    fx.workflowDefinitions.remove('searchDataXray')
+
+    def r = adoptSearchDataXraySettings(['dataxrayUrl', 'dataxrayAuthToken'])
+
+    assert !r.ok && r.error.contains('not found')
+    assert vars.dataxrayUrl == null && vars.dataxrayAuthToken == null
+    assert searchSettingsMissingMessage('the DataXray Base URL / Bearer token are', r)
+        .contains("Search DataXray's settings could not be read")
+}
+
 test('work lists and packed JSON survive the round trip through a process variable') {
     def items = [['f1', 'Ünïcødé', '/a', 'b', '1', '', '', ['x'], '312', 'o', []]]
     assert decodeWorkList(encodeWorkList(items)) == items

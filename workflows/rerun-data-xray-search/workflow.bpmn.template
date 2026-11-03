@@ -30,10 +30,11 @@
   it via start roles. The nightly driver starts it per flagged query with the
   hidden 'headless' form property set to 'true'.
 
-  All connection configuration lives on the start event as non-readable
-  formProperty entries (hidden admin settings edited on the workflow settings
-  page), same as the other DataXray workflows. Each carries a non-empty
-  default because Collibra rejects empty defaults on non-readable properties.
+  The DataXray connection settings are NOT declared here (v2.11): the
+  collector copies Search DataXray's (adoptSearchDataXraySettings,
+  shared/dxr_config.groovy). Once Configure gives this asset-scoped workflow
+  global start roles, Collibra refuses every change to its definition,
+  including saving its settings page. Only the hidden 'headless' flag stays.
 
   Script placeholders of the form {script:filename.groovy} are resolved by
   deploy.py before the BPMN is packaged.
@@ -63,8 +64,10 @@
 
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
       <extensionElements>
-        <flowable:formProperty id="dataxrayUrl" name="DataXray Base URL" type="string" variable="dataxrayUrl" default="&lt;paste DataXray base URL here&gt;" readable="false" required="true"/>
-        <flowable:formProperty id="dataxrayAuthToken" name="DataXray Auth Token (Bearer)" type="string" variable="dataxrayAuthToken" default="&lt;paste DataXray Bearer token here&gt;" readable="false" required="true"/>
+        <!-- No DataXray settings here (v2.11): the collector uses Search
+             DataXray's (shared/dxr_config.groovy, adoptSearchDataXraySettings).
+             Collibra refuses to save this definition's settings page once
+             Configure has given it global start roles (workflowWrongRoles). -->
         <!-- Set to 'true' by the nightly driver via startWorkflowInstances
              formProperties; a headless run never throws and skips the summary
              user task. Admins should leave this at 'false'. -->

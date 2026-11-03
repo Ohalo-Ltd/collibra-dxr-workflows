@@ -29,8 +29,14 @@ class World {
         fx.seedModel(ids)
         kit.workflows.each { name, runner ->
             fx.workflowDefinitions[runner.processId] = [id: UUID.nameUUIDFromBytes("fake-definition:${runner.processId}".toString().bytes),
-                                                        name: name, processId: runner.processId]
+                                                        name: name, processId: runner.processId,
+                                                        configurationVariables: runner.configurationDefaults()]
         }
+    }
+
+    /** An admin saves these values on a workflow's settings page (Variables). */
+    void settings(String processId, Map values) {
+        values.each { k, v -> fx.workflowDefinitions[processId].configurationVariables[k.toString()] = v.toString() }
     }
 
     /** Shared functions are called as if they were the World's own methods. */

@@ -48,8 +48,9 @@
 //
 // This script never calls DataXray, so it ships unchanged in both editions.
 // Each rerun instance it starts uses the connection settings configured on the
-// Rerun DataXray Search workflow — the Base URL / Bearer token on-prem, the
-// Edge HTTP connection name in the Collibra Cloud + Edge edition. The Edge
+// Search DataXray workflow (v2.11; the rerun has none of its own) — the Base
+// URL / Bearer token on-prem, the Edge HTTP connection name in the Collibra
+// Cloud + Edge edition. The Edge
 // edition then runs a third phase after this script, with its own connection
 // name setting: the DataXray existence check (workflow.edge.bpmn.template,
 // shared/file_exists_edge.groovy), which sets 'Not in DataXray' and refreshes
