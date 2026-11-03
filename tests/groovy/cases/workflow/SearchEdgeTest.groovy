@@ -125,3 +125,42 @@ test(variant: 'edge', 'a classification retired in DataXray cannot be picked for
     assert run.error.userMessage.contains("label 'Contacts' was deleted in DataXray")
     assert fx.assets.values().every { it.typeId != ids.queryAssetTypeId }
 }
+
+// --- Extracted value (v2.12) -----------------------------------------------------------------------
+
+test(variant: 'edge', 'a search by extracted value finds only the files with that value and saves it on the sync filter (VAL-1, VAL-5)') {
+    def pii = classification('Contains PII?', 'extractor', indexId: '50', dataType: 'TEXT')
+    dxrFile('yes1', extractors: ['50': 'Yes'])
+    dxrFile('no1', extractors: ['50': 'No'])
+    dxrFile('no2', extractors: ['50': 'no'])
+
+    def run = search(delegate, 'PII yes', [], vars: [valueFilter: 'yes', valueFilterExtractor: [pii.toString()]], expect: 'waiting')
+
+    assert run.task.formKey == 'searchResultsForm'
+    assert run.var('resultCount') == 1
+    def q = UUID.fromString(run.var('queryAssetId'))
+    assert attr(q, 'valueFilter') == 'yes'
+    assert linked(q, 'valueFilter', pii)
+    assert attr(q, 'query').contains('extractedMetadata: { name:"Contains PII?" AND value:"yes" }')
+}
+
+test(variant: 'edge', 'a search by an extracted value with an inner * is refused before anything is created (VAL-3)') {
+    classification('Contains PII?', 'extractor', indexId: '50')
+    def run = search(delegate, 'Bad value', [], vars: [valueFilter: 'y*s'], expect: 'error')
+    assert run.error.userMessage.contains('in the middle')
+    assert fx.assets.values().every { it.typeId != ids.queryAssetTypeId }
+    assert dxr.requests.isEmpty()
+}
+
+test(variant: 'edge', 'a value against a picked boolean extractor is refused with what to enter instead (VAL-4)') {
+    def flag = classification('Sensitive data detector', 'extractor', indexId: '130', dataType: 'BOOLEAN')
+    def run = search(delegate, 'Bool', [], vars: [valueFilter: 'yes', valueFilterExtractor: [flag.toString()]], expect: 'error')
+    assert run.error.userMessage.contains('returns boolean values') && run.error.userMessage.contains('true or false')
+    assert dxr.requests.isEmpty()
+}
+
+test(variant: 'edge', 'without Configure for v2.12 a search by extracted value says to run Configure (VAL-6)') {
+    fx.relationTypes.remove(ids.valueFilterRelTypeId)
+    def run = search(delegate, 'Old model', [], vars: [valueFilter: 'yes'], expect: 'error')
+    assert run.error.userMessage.contains('run Configure DataXray Workflows')
+}

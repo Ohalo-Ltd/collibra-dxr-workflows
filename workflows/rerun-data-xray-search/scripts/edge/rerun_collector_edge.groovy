@@ -120,12 +120,13 @@ if (!criteria.deadCriteria.isEmpty()) {
 }
 if (!criteria.hasCriteria) {
     abort('Rerun DataXray Search — no saved criteria',
-        "Cannot rerun '${conditionName}': it has no linked classifications and no annotated-text filter, so its criteria cannot be reconstructed. Create a new search instead.")
+        "Cannot rerun '${conditionName}': it has no linked classifications, no annotated-text filter and no extracted-value filter, so its criteria cannot be reconstructed. Create a new search instead.")
     return
 }
 
 def queryString = composeDxrQuery(criteria.labelNames, criteria.extractorNames, criteria.annotatorNames,
-                                  criteria.filter, criteria.filterAnnotatorNames)
+                                  criteria.filter, criteria.filterAnnotatorNames,
+                                  criteria.valueFilter, criteria.valueFilterExtractorNames)
 loggerApi.info("Rerun of '${conditionName}' — rebuilt DataXray query: ${displayQuery(queryString)}")
 recordQueryAttribute(queryId, ids, displayQuery(queryString))
 
@@ -134,9 +135,14 @@ recordQueryAttribute(queryId, ids, displayQuery(queryString))
 def classIndex = buildEdgeClassificationIndex(ids)
 execution.setVariable('classIndex', JsonOutput.toJson(classIndex))
 
-def q = composeEdgeQueryItems(criteria, classIndex.annotatorIndexIds)
+def q = composeEdgeQueryItems(criteria, classIndex.annotatorIndexIds,
+                              [indexIds: classIndex.extractorIndexIds, typeByIndexId: classIndex.extractorTypeByIndexId])
 if (!q.unresolved.isEmpty()) {
     abort('Rerun DataXray Search', edgeUnresolvedMessage("rerun '${conditionName}'".toString(), q.unresolved))
+    return
+}
+if (!q.invalid.isEmpty()) {
+    abort('Rerun DataXray Search', "Cannot rerun '${conditionName}': ${q.invalid.join(' ')}".toString())
     return
 }
 execution.setVariable('dxrQueryItems', JsonOutput.toJson(q.items))

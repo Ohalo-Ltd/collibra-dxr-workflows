@@ -66,7 +66,7 @@ class World {
     Map dxrFile(Map o, String fileId) { dxrFile(fileId, o) }
 
 
-    /** A sync filter (query) asset. opts: status, tags, labels/annotators/extractors (classification ids), filter, filterAnnotators. */
+    /** A sync filter (query) asset. opts: status, tags, labels/annotators/extractors (classification ids), filter, filterAnnotators, valueFilter, valueFilterExtractors. */
     UUID query(String name, Map opts = [:]) {
         def a = fx.insertAsset(name: name, domainId: ids.queryDomainId, typeId: ids.queryAssetTypeId,
                                statusId: opts.status ?: CANDIDATE)
@@ -76,16 +76,21 @@ class World {
             fx.setAttributeValues(a.id, ids.filterAttrTypeId, [opts.filter])
             (opts.filterAnnotators ?: []).each { link(a.id, 'textFilter', it) }
         }
+        if (opts.valueFilter) {
+            fx.setAttributeValues(a.id, ids.valueFilterAttrTypeId, [opts.valueFilter])
+            (opts.valueFilterExtractors ?: []).each { link(a.id, 'valueFilter', it) }
+        }
         return a.id
     }
 
-    /** A classification asset. kind: label, annotator, extractor. opts: dxrId, indexId, status, domainId, tags. */
+    /** A classification asset. kind: label, annotator, extractor. opts: dxrId, indexId, status, domainId, tags, dataType (extractor Sub Type). */
     UUID classification(String name, String kind = 'label', Map opts = [:]) {
         def a = fx.insertAsset(name: name, domainId: opts.domainId ?: ids.classificationsDomainId,
                                typeId: ids["${kind}TypeId".toString()], statusId: opts.status ?: CANDIDATE)
         a.tags.addAll(opts.tags ?: [])
         fx.setAttributeValues(a.id, ids.dataxrayIdAttrTypeId, [(opts.dxrId ?: UUID.nameUUIDFromBytes("dxr:${name}".toString().bytes)).toString()])
         if (opts.indexId != null) { fx.setAttributeValues(a.id, ids.dataxrayIndexIdAttrTypeId, [opts.indexId.toString()]) }
+        if (opts.dataType) { fx.setAttributeValues(a.id, ids.subtypeAttrTypeId, [opts.dataType.toString()]) }
         return a.id
     }
 
@@ -113,7 +118,7 @@ class World {
     }
 
     UUID relationType(String kind) {
-        def key = kind == 'textFilter' ? 'textFilterRelTypeId' : "${kind}RelationTypeId".toString()
+        def key = kind in ['textFilter', 'valueFilter'] ? "${kind}RelTypeId".toString() : "${kind}RelationTypeId".toString()
         def id = ids[key]
         if (id == null) { throw new IllegalArgumentException("unknown relation kind '${kind}'") }
         return (UUID) id
@@ -140,7 +145,7 @@ class World {
     Map dxrFile(String fileId, Map o = [:]) {
         def f = [id: fileId, ds: 312, dsName: 'SharePoint', objectId: "obj-${fileId}".toString(), name: "${fileId}.pdf".toString(),
                  folder: '/Shared Documents', size: 27885, modified: '2025-04-10T17:22:00Z',
-                 labels: [], annotators: [:], extractors: [:], phrases: [:]] + o
+                 labels: [], annotators: [:], extractors: [:], extractorTypes: [:], phrases: [:]] + o
         dxr.add(f)
         return f
     }

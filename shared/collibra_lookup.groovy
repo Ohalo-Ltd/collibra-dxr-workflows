@@ -296,9 +296,13 @@ def buildEdgeClassificationIndex(Map ids) {
     def assets = fetchAllClassificationAssets(ids)
     def uuidByAsset  = fetchAttributeValuesByType(ids.dataxrayIdAttrTypeId, assets.keySet())
     def indexByAsset = fetchAttributeValuesByType(ids.dataxrayIndexIdAttrTypeId, assets.keySet())
+    // An extractor's Sub Type holds its DataXray data type (TEXT/BOOLEAN/NUMBER;
+    // Edge classification sync, v2.12) — the extracted-value filter needs it.
+    def extractorAssetIds = assets.findAll { k, a -> a.getType()?.getId() == ids.extractorTypeId }.keySet()
+    def subtypeByAsset = extractorAssetIds ? fetchAttributeValuesByType(ids.subtypeAttrTypeId, extractorAssetIds) : [:]
     def out = [byDxrId: [:], byName: [:], indexIdByDxrId: [:], nameByDxrId: [:],
                labelDxrIdByIndexId: [:], annotatorDxrIdByIndexId: [:], extractorDxrIdByIndexId: [:],
-               annotatorIndexIds: []]
+               annotatorIndexIds: [], extractorIndexIds: [], extractorTypeByIndexId: [:]]
     assets.each { assetId, asset ->
         def name = asset.getName()
         out.byName[name] = assetId.toString()
@@ -314,6 +318,9 @@ def buildEdgeClassificationIndex(Map ids) {
             out.labelDxrIdByIndexId[indexId] = uuid
         } else if (typeId == ids.extractorTypeId) {
             out.extractorDxrIdByIndexId[indexId] = uuid
+            out.extractorIndexIds << indexId
+            def dt = (subtypeByAsset[assetId] ?: '').toString().trim().toUpperCase()
+            out.extractorTypeByIndexId[indexId.toString()] = (dt in ['BOOLEAN', 'NUMBER']) ? dt : 'TEXT'
         } else if (typeId == ids.annotatorTypeId) {
             out.annotatorDxrIdByIndexId[indexId] = uuid
             out.annotatorIndexIds << indexId

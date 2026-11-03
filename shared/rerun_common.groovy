@@ -7,7 +7,9 @@
 //     their CURRENT names (so a DataXray-side rename never breaks a saved
 //     search — the classification sync keeps those names up to date), and
 //   – the "Annotated Text Filter" attribute stored at search time, scoped to the
-//     annotators linked by the query's "searches text in" relations.
+//     annotators linked by the query's "searches text in" relations, and
+//   – the "Extracted Value Filter" attribute (v2.12), scoped to the extractors
+//     linked by its "searches values of" relations.
 //
 // Classification lifecycle:
 //   – renamed in DataXray → handled automatically (rebuilt from current names)
@@ -16,11 +18,13 @@
 //     caller must FAIL the rerun — silently dropping an AND criterion would
 //     broaden the search and import files the user never asked for.
 
+// {{include:dxr_query.groovy}}
 // {{include:collibra_lookup.groovy}}
 // {{include:query_flags.groovy}}
 
 // Rebuild the criteria of a query asset. Returns
 //   [labelNames:, extractorNames:, annotatorNames:, filter:, filterAnnotatorNames:,
+//    valueFilter:, valueFilterExtractorNames:/-DxrIds:/-IndexIds:,
 //    labelDxrIds:, extractorDxrIds:, annotatorDxrIds:, filterAnnotatorDxrIds:,
 //    deadCriteria: [String], ignoredCriteria: int, hasCriteria: boolean]
 // The *DxrIds lists carry each criterion's DataXray ID attribute ('' when the
@@ -29,6 +33,7 @@ def rebuildQueryCriteria(UUID queryId, Map ids) {
     def out = [labelNames: [], extractorNames: [], annotatorNames: [], filter: '', filterAnnotatorNames: [],
                labelDxrIds: [], extractorDxrIds: [], annotatorDxrIds: [], filterAnnotatorDxrIds: [],
                labelIndexIds: [], extractorIndexIds: [], annotatorIndexIds: [], filterAnnotatorIndexIds: [],
+               valueFilter: '', valueFilterExtractorNames: [], valueFilterExtractorDxrIds: [], valueFilterExtractorIndexIds: [],
                deadCriteria: [], ignoredCriteria: 0, hasCriteria: false]
     // DataXray Index ID is only stamped by the Edge-edition sync; '' on on-prem installs.
     def indexIdOf = { UUID assetId -> ids.dataxrayIndexIdAttrTypeId ? readSingleAttribute(assetId, ids.dataxrayIndexIdAttrTypeId) : '' }
@@ -87,8 +92,43 @@ def rebuildQueryCriteria(UUID queryId, Map ids) {
     }
     if (!out.deadCriteria.isEmpty()) { return out }
 
+    // Extracted value (v2.12): the stored value, scoped to the extractors linked
+    // by "searches values of". Same liveness rule; the relations only count
+    // when a value is stored. An instance that has not run Configure for v2.12
+    // has no such attribute type, so no query carries a value.
+    try {
+        out.valueFilter = ids.valueFilterAttrTypeId ? readSingleAttribute(queryId, ids.valueFilterAttrTypeId) : ''
+    } catch (Exception noTypeEx) {
+        out.valueFilter = ''
+    }
+    if (!out.valueFilter.isEmpty()) {
+        def spec = parseValueFilter(out.valueFilter)
+        if (!spec.ok) {
+            out.deadCriteria << "the stored extracted value is not valid: ${spec.error}".toString()
+            return out
+        }
+        relationIdsByFarEnd(ids.valueFilterRelTypeId, queryId, null).keySet().each { targetId ->
+            if (!out.deadCriteria.isEmpty()) { return }
+            def target
+            try {
+                target = assetApi.getAsset(targetId)
+            } catch (Exception goneEx) {
+                out.deadCriteria << "extracted-value extractor ${targetId} no longer exists".toString()
+                return
+            }
+            if (target.getStatus()?.getId() == ids.obsoleteStatusId) {
+                out.deadCriteria << "extracted-value extractor '${target.getName()}' was deleted in DataXray (its Collibra asset is retired)".toString()
+                return
+            }
+            out.valueFilterExtractorNames << target.getName()
+            out.valueFilterExtractorDxrIds << readSingleAttribute(targetId, ids.dataxrayIdAttrTypeId)
+            out.valueFilterExtractorIndexIds << indexIdOf(targetId)
+        }
+    }
+    if (!out.deadCriteria.isEmpty()) { return out }
+
     out.hasCriteria = !(out.labelNames.isEmpty() && out.extractorNames.isEmpty()
-                        && out.annotatorNames.isEmpty() && out.filter.isEmpty())
+                        && out.annotatorNames.isEmpty() && out.filter.isEmpty() && out.valueFilter.isEmpty())
     return out
 }
 

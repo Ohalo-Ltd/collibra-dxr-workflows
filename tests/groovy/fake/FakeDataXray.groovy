@@ -100,9 +100,38 @@ class FakeDataXray {
         }
     }
 
+    // Extracted values (v2.12) as DataXray's search index holds them: a keyword
+    // field, case-insensitive term/wildcard matching, values longer than
+    // IGNORE_ABOVE not indexed (never match); a text value on a boolean
+    // extractor (f.extractorTypes[id] == 'BOOLEAN') is an HTTP 500 in DataXray.
+    static final int IGNORE_ABOVE = 256
+
+    static boolean extractedValueMatches(Map f, String p, Map item) {
+        String id = p - 'extracted_metadata#'
+        def raw = (f.extractors ?: [:])[id]
+        String dt = ((f.extractorTypes ?: [:])[id] ?: 'TEXT').toString()
+        if (dt == 'BOOLEAN' && item.type != 'boolean') {
+            throw new IllegalStateException("FakeDataXray: HTTP 500 — text query on boolean field ${p}")
+        }
+        if (raw == null) { return false }
+        String s = raw.toString()
+        if (s.length() > IGNORE_ABOVE) { return false }
+        String v = item.value.toString()
+        switch (item.match_strategy) {
+            case 'exact': return s.equalsIgnoreCase(v)
+            case 'contains': return s.toLowerCase().contains(v.toLowerCase())
+            case 'startsWith': return s.toLowerCase().startsWith(v.toLowerCase())
+            case 'endsWith': return s.toLowerCase().endsWith(v.toLowerCase())
+        }
+        throw new IllegalStateException("FakeDataXray: extracted-value strategy not modelled: ${item}")
+    }
+
     static boolean itemMatches(Map f, Map item) {
         String p = item.parameter
         String v = item.value?.toString()
+        if (p?.startsWith('extracted_metadata#') && item.match_strategy in ['exact', 'contains', 'startsWith', 'endsWith']) {
+            return extractedValueMatches(f, p, item)
+        }
         switch (item.match_strategy) {
             case 'exact':
                 if (p == 'datasource_id') { return f.ds.toString() == v }

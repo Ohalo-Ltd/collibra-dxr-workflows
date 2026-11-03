@@ -235,7 +235,7 @@ test(variant: 'edge', 'FILE-4: a sync filter with no criteria left is refused, n
 
     def run = rerun(delegate, q, expect: 'error')
 
-    assert run.error.userMessage.contains('no linked classifications and no annotated-text filter')
+    assert run.error.userMessage.contains('no linked classifications, no annotated-text filter and no extracted-value filter')
     assert dxr.requests.isEmpty()
 }
 
@@ -501,4 +501,30 @@ test(variant: 'edge', 'RERUN-OPT-5: a count request that fails once is retried')
 
     assert run.task.formKey == 'rerunOptionsForm'
     assert run.var('rerunResultCountDisplay') == '1'
+}
+
+// --- Extracted value (v2.12) -----------------------------------------------------------------------
+
+test(variant: 'edge', 'a rerun rebuilds the extracted-value filter from the sync filter (VAL-5)') {
+    def pii = classification('Contains PII?', 'extractor', indexId: '50', dataType: 'TEXT')
+    def q = query('PII yes', valueFilter: '*es', valueFilterExtractors: [pii])
+    dxrFile('yes1', extractors: ['50': 'Yes'])
+    dxrFile('no1', extractors: ['50': 'No'])
+
+    rerun(delegate, q, expect: 'waiting')
+
+    assert fileAssets() == [assetIdOf('yes1')]
+    def search = dxr.requests.find { it.path == '/api/indexed-files/search' }
+    assert search.body.filter.query_items.collect { [it.parameter, it.match_strategy, it.value] } ==
+        [['extracted_metadata#50', 'endsWith', 'es']]
+}
+
+test(variant: 'edge', 'a rerun whose extracted-value extractor was deleted in DataXray is refused, naming it (VAL-5)') {
+    def pii = classification('Contains PII?', 'extractor', indexId: '50', status: fx.OBSOLETE)
+    def q = query('PII yes', valueFilter: 'yes', valueFilterExtractors: [pii])
+
+    def run = rerun(delegate, q, expect: 'error')
+
+    assert run.error.userMessage.contains("extracted-value extractor 'Contains PII?' was deleted in DataXray")
+    assert dxr.requests.isEmpty()
 }

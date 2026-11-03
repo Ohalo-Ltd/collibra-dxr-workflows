@@ -3,6 +3,7 @@
 // SHARED FILE (function-only; see dxr_model.groovy for the include rules).
 
 // {{include:dxr_rows.groovy}}
+// {{include:dxr_query.groovy}}
 // {{include:collibra_lookup.groovy}}
 // {{include:query_preview.groovy}}
 
@@ -108,8 +109,9 @@ def addAttributeQuietly(UUID assetId, UUID typeId, String value) {
 }
 
 // Write the query asset's Description ("<user text>\n\nThe query is: …"), the
-// DataXray Query record and, when present, the Annotated Text Filter.
-def writeQueryAttributes(UUID queryId, Map ids, String description, String queryString, String filter) {
+// DataXray Query record and, when present, the Annotated Text Filter and the
+// Extracted Value Filter (v2.12).
+def writeQueryAttributes(UUID queryId, Map ids, String description, String queryString, String filter, String valueFilter = null) {
     def descParts = []
     if (description) descParts << description
     descParts << "The query is: ${displayQuery(queryString)}".toString()
@@ -125,6 +127,28 @@ def writeQueryAttributes(UUID queryId, Map ids, String description, String query
     if (filter) {
         addAttributeQuietly(queryId, ids.filterAttrTypeId, filter)
     }
+    if (valueFilter) {
+        addAttributeQuietly(queryId, ids.valueFilterAttrTypeId, valueFilter)
+    }
+}
+
+// The "Extracted value" inputs of the search form (v2.12), checked before
+// anything is created: [value: String ('' = none), extractorIds: List<UUID>,
+// error: String or null]. Extractors without a value are dropped (logged), as
+// for the annotated-text annotators.
+def readValueFilterInputs() {
+    def value = (execution.getVariable('valueFilter') ?: '').toString().trim()
+    def extractorIds = toIdList(execution.getVariable('valueFilterExtractor'))
+    if (value.isEmpty()) {
+        if (!extractorIds.isEmpty()) {
+            loggerApi.warn("Ignoring ${extractorIds.size()} extracted-value extractor(s): no extracted value was entered")
+        }
+        return [value: '', extractorIds: [], error: null]
+    }
+    def spec = parseValueFilter(value)
+    if (!spec.ok) { return [value: value, extractorIds: extractorIds, error: spec.error] }
+    if (!valueFilterModelOn()) { return [value: value, extractorIds: extractorIds, error: valueFilterModelMessage()] }
+    return [value: value, extractorIds: extractorIds, error: null]
 }
 
 // Filename derived from the search name; keeps only filesystem-safe characters.

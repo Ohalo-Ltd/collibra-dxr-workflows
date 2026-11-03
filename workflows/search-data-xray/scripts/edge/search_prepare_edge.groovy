@@ -60,9 +60,14 @@ def filter      = (execution.getVariable('filter') ?: '').toString().trim()
 def description = (execution.getVariable('description') ?: '').toString().trim()
 
 def filterAnnotatorIds = toIdList(execution.getVariable('filterAnnotator'))
+def valueInputs = readValueFilterInputs()
+if (valueInputs.error) {
+    failNow('Search DataXray', valueInputs.error)
+}
 def retiredMsg = retiredPicksMessage([label: toIdList(execution.getVariable('label')), extractor: toIdList(execution.getVariable('extractor')),
                                       annotator: toIdList(execution.getVariable('annotator')),
-                                      'annotated-text annotator': filter.isEmpty() ? [] : filterAnnotatorIds],
+                                      'annotated-text annotator': filter.isEmpty() ? [] : filterAnnotatorIds,
+                                      'extracted-value extractor': valueInputs.extractorIds],
                                      ids.obsoleteStatusId)
 if (retiredMsg) {
     failNow('Search DataXray', retiredMsg)
@@ -76,7 +81,9 @@ if (filter.isEmpty() && !filterAnnotatorIds.isEmpty()) {
     loggerApi.warn("Ignoring ${filterAnnotatorIds.size()} annotated-text annotator(s): no annotated text was entered")
 }
 
-def queryString = composeDxrQuery(labels*.name, extractors*.name, annotators*.name, filter, filterAnnotators*.name)
+def valueExtractors = resolvePickedClassifications(valueInputs.extractorIds, ids.dataxrayIdAttrTypeId, ids.dataxrayIndexIdAttrTypeId)
+def queryString = composeDxrQuery(labels*.name, extractors*.name, annotators*.name, filter, filterAnnotators*.name,
+                                  valueInputs.value, valueExtractors*.name)
 if (queryString.isEmpty()) {
     loggerApi.warn('No annotators, extractors, labels or filter selected — querying all files')
 }
@@ -85,18 +92,25 @@ loggerApi.info("Composed DataXray query: ${displayQuery(queryString)}")
 // --- Translate the criteria into a DataXray query ------------------------------
 
 // A phrase with no picked annotators is searched in every annotator Collibra knows.
-def allAnnotatorIndexIds = (!filter.isEmpty() && filterAnnotators.isEmpty())
-    ? buildEdgeClassificationIndex(ids).annotatorIndexIds
-    : []
+// An extracted value needs every extractor's data type (and, with none picked, every extractor).
+def classIndex = ((!filter.isEmpty() && filterAnnotators.isEmpty()) || valueInputs.value)
+    ? buildEdgeClassificationIndex(ids) : null
+def allAnnotatorIndexIds = (!filter.isEmpty() && filterAnnotators.isEmpty()) ? classIndex.annotatorIndexIds : []
+def extractorCatalog = classIndex ? [indexIds: classIndex.extractorIndexIds, typeByIndexId: classIndex.extractorTypeByIndexId] : null
 def q = composeEdgeQueryItems([
     labelIndexIds: labels*.indexId,         labelNames: labels*.name,
     extractorIndexIds: extractors*.indexId, extractorNames: extractors*.name,
     annotatorIndexIds: annotators*.indexId, annotatorNames: annotators*.name,
     filter: filter,
     filterAnnotatorIndexIds: filterAnnotators*.indexId, filterAnnotatorNames: filterAnnotators*.name,
-], allAnnotatorIndexIds)
+    valueFilter: valueInputs.value,
+    valueFilterExtractorIndexIds: valueExtractors*.indexId, valueFilterExtractorNames: valueExtractors*.name,
+], allAnnotatorIndexIds, extractorCatalog)
 if (!q.unresolved.isEmpty()) {
     failNow('Search DataXray', edgeUnresolvedMessage('search', q.unresolved))
+}
+if (!q.invalid.isEmpty()) {
+    failNow('Search DataXray', q.invalid.join(' '))
 }
 
 def asJson = { List picked -> picked.collect { [id: it.id.toString(), name: it.name, dxrId: it.dxrId, indexId: it.indexId] } }
@@ -104,6 +118,7 @@ execution.setVariable('searchCriteria', JsonOutput.toJson([
     conditionName: conditionName, description: description, filter: filter, queryString: queryString,
     labels: asJson(labels), extractors: asJson(extractors), annotators: asJson(annotators),
     filterAnnotators: asJson(filterAnnotators),
+    valueFilter: valueInputs.value, valueFilterExtractors: asJson(valueExtractors),
 ]))
 execution.setVariable('dxrQueryItems', JsonOutput.toJson(q.items))
 execution.setVariable('conditionName', conditionName)

@@ -203,7 +203,8 @@ def buildEdgeSyncCatalogue(Map known) {
                   indexId: t.id, partial: false]
     }
     lists.extractors.each { e ->
-        items << [id: e.uuid, name: e.name, type: 'EXTRACTOR', subtype: 'NONE', description: e.description,
+        // subtype stays NONE (it names colliding assets); dataType is written to Sub Type instead (v2.12).
+        items << [id: e.uuid, name: e.name, type: 'EXTRACTOR', subtype: 'NONE', dataType: e.dataType, description: e.description,
                   link: "/resource/${e.uuid}?type=EXTRACTOR".toString(), searchLink: null,
                   indexId: e.id, partial: false]
     }

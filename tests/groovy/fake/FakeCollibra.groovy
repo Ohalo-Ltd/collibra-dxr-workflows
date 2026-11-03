@@ -43,6 +43,7 @@ class FakeCollibra {
     Map<UUID, String> domains = [:]        // domain id → name
     Map<UUID, String> assetTypes = [:]     // asset type id → name
     Map<UUID, String> attributeTypes = [:]
+    Map<UUID, String> attributeTypeDescriptions = [:]
     Map<UUID, String> relationTypes = [:]
     Map<UUID, String> statuses = [:]
     Map<String, Map> workflowDefinitions = [:]   // process id → [id:, name:]
@@ -316,6 +317,14 @@ class FakeExistsApi {
     boolean exists(UUID id) {
         f.call("${name}.exists".toString(), id)
         return store.call().containsKey(id)
+    }
+
+    // attributeTypeApi.getAttributeType: name and description (descriptions in
+    // f.attributeTypeDescriptions; Configure's extractor-values mode lives there).
+    def getAttributeType(UUID id) {
+        f.call("${name}.getAttributeType".toString(), id)
+        if (!store.call().containsKey(id)) { throw new FakeNotFound("${name}: ${id} not found") }
+        return [getId: { -> id }, getName: { -> store.call()[id] }, getDescription: { -> f.attributeTypeDescriptions[id] }] as Expando
     }
 }
 

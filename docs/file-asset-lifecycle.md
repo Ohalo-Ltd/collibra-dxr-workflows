@@ -173,19 +173,22 @@ themselves onto the file asset.
 
 **It is for display, not for searching.** The values are copied onto file
 assets so people can read them in Collibra. The setting does not change what a
-search matches: picking an extractor in **Search DataXray** finds every file
-the extractor produced a value for, whatever the value was (a *yes/no*
-extractor matches both the *yes* and the *no* files).
+search matches. To find only the files with a given value (only the *yes*
+answers of a yes/no extractor), use the search's **Extracted value** field;
+see [Searching by extracted value](#searching-by-extracted-value). That works
+whether this setting is on or off.
 
 **Off by default, and invisible while off.** Nothing about it appears in
 Collibra until an admin turns it on:
 
 1. Go to **Settings → Workflows → Definitions → Configure DataXray Workflows**,
    open the **Variables** section and set **Sync extractor values to file
-   assets (true/false)** to `true`. The setting belongs to Configure, not to
-   Search or Rerun, and only Sysadmins and roles with the *Workflow
+   assets (false/true/tagged)** to `true` (every extractor) or `tagged` (only
+   the extractors you choose, see below). The setting belongs to Configure,
+   not to Search or Rerun, and only Sysadmins and roles with the *Workflow
    administration* permission (such as **DataXray Admin**) see the Variables
-   section.
+   section. Releases before v2.12 label it *(true/false)* and have no
+   `tagged`.
 2. Run **Configure DataXray Workflows**. It creates the **DataXray Extracted
    Values** attribute and adds it to the **DataXray File** asset type.
 3. From then on every import and rerun (including the nightly ones) writes a
@@ -204,6 +207,21 @@ any extractor values. A value typed into it in Collibra is overwritten.
 in total (on-prem) or 10,000 (Cloud + Edge). When values are left out, the
 table's last row says how many.
 
+**Only some extractors: `tagged` (v2.12).** Some extractors produce harmless
+values (a yes/no answer), others the sensitive data itself (a national ID
+number). With the setting at `tagged`, only the values of extractors whose
+Collibra asset carries the tag **`dataxray-sync-values`** are copied; every
+other extractor's values are left out. Tag or untag the extractor assets in
+the **DataXray Classifications** domain; a file follows on its next sync (its
+search's rerun, or the nightly sync), and an untagged extractor's values
+disappear from it then. With no extractor tagged, nothing is copied: `tagged`
+never falls back to every extractor. Anyone who can edit the extractor assets
+can change the tags, so keep editing rights on the Classifications domain to
+the people who decide this. Configure's results say how many extractors are
+tagged. You can switch between `true` and `tagged` at any time by changing
+the variable and running Configure again; the values already on file assets
+change on their next sync.
+
 **Turning it off.** Set the variable back to `false` and run **Configure
 DataXray Workflows** again. It deletes the **DataXray Extracted Values**
 attribute type, which removes it from the asset type and deletes every value
@@ -214,6 +232,50 @@ on every file asset. Turning it on again later starts afresh.
 > the **DataXray Files** domain (and on any community you have moved file
 > assets to) to the people allowed to see those values. See *Who can see
 > what* in the deployment guide.
+
+## Searching by extracted value
+
+**Search DataXray** has two criteria for extractors:
+
+- **Extractor** finds every file the extractor produced a value for, whatever
+  the value: a yes/no extractor finds both the *yes* and the *no* files.
+- **Extracted value** (v2.12) finds only the files where an extractor
+  returned a given value, for example only *Yes*. Pick the extractors to look
+  in under **Extracted value extractors** (a file matches when any one of them
+  has the value); leave it empty to look in every extractor.
+
+How the value matches, in both editions:
+
+| You enter | Finds values that | Example matches |
+|---|---|---|
+| `yes` | are exactly that, ignoring case | *Yes*, *YES* — not *Yes, partly* |
+| `*invoice*` | contain it | *Invoice 2025-17*, *not an invoice* |
+| `inv*` | start with it | *Invoice 2025-17* |
+| `*2025` | end with it | *Invoice 2025* |
+| `true` / `false` | (true/false extractors) are that boolean | |
+| `42` | (number extractors) are that number | |
+
+- `*` works only at the start and/or end of the value; a `*` in the middle
+  and `?` are refused, because DataXray's two APIs read them differently.
+- In the Cloud + Edge edition a picked true/false or number extractor only
+  takes `true`/`false` or a number (the search says so otherwise). The
+  edition learns each extractor's type from **Sync DataXray Classifications**:
+  run it once after upgrading to v2.12.
+- **Long values cannot be searched.** DataXray indexes extractor values for
+  search only up to a few hundred characters (256 to 1,024, depending on the
+  installation); a longer value never matches, in the Cloud + Edge edition.
+  In the on-prem edition a value that contains a line break never matches a
+  value with `*`. Extracted value is meant for short answers: yes/no,
+  categories, codes.
+- The value is one more criterion, AND-ed with the others, like the
+  annotated text. It is saved on the sync filter as **Extracted Value
+  Filter**, with **searches values of** links to the extractors picked for
+  it, and every rerun (including the nightly one) uses it again. A rerun
+  whose picked extractor was deleted in DataXray stops with a message rather
+  than search more widely.
+- It needs **Configure DataXray Workflows** to have been run after upgrading
+  to v2.12 (it creates the attribute and the relation type); until then a
+  search with a value stops and says so.
 
 ## What counts as the same file?
 

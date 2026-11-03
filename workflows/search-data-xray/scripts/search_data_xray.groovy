@@ -108,9 +108,18 @@ def labelIds     = toIdList(execution.getVariable('label'))
 def filter       = (execution.getVariable('filter') ?: '').toString().trim()
 def filterAnnotatorIds = toIdList(execution.getVariable('filterAnnotator'))
 def description  = (execution.getVariable('description') ?: '').toString().trim()
+def valueInputs  = readValueFilterInputs()
+if (valueInputs.error) {
+    loggerApi.error(valueInputs.error)
+    def wf = new WorkflowException(valueInputs.error)
+    wf.setTitleMessage('Search DataXray')
+    wf.setUserMessage(valueInputs.error)
+    throw wf
+}
 
 def retiredMsg = retiredPicksMessage([label: labelIds, extractor: extractorIds, annotator: annotatorIds,
-                                      'annotated-text annotator': filter.isEmpty() ? [] : filterAnnotatorIds],
+                                      'annotated-text annotator': filter.isEmpty() ? [] : filterAnnotatorIds,
+                                      'extracted-value extractor': valueInputs.extractorIds],
                                      ids.obsoleteStatusId)
 if (retiredMsg) {
     loggerApi.error(retiredMsg)
@@ -135,16 +144,19 @@ def filterAnnotatorNames = filter.isEmpty() ? [] : resolveAndRelate(filterAnnota
 if (filter.isEmpty() && !filterAnnotatorIds.isEmpty()) {
     loggerApi.warn("Ignoring ${filterAnnotatorIds.size()} annotated-text annotator(s): no annotated text was entered")
 }
+// Extractors the extracted-value filter is scoped to (v2.12; empty = every extractor).
+def valueExtractorNames = resolveAndRelate(valueInputs.extractorIds, queryId, ids.valueFilterRelTypeId)
 
 // --- Compose the DataXray query string ------------------------------------
 
-def queryString = composeDxrQuery(labelNames, extractorNames, annotatorNames, filter, filterAnnotatorNames)
+def queryString = composeDxrQuery(labelNames, extractorNames, annotatorNames, filter, filterAnnotatorNames,
+                                  valueInputs.value, valueExtractorNames)
 if (queryString.isEmpty()) {
     loggerApi.warn('No annotators, extractors, labels or filter selected — querying all files')
 }
 loggerApi.info("Composed DataXray query: ${displayQuery(queryString)}")
 
-writeQueryAttributes(queryId, ids, description, queryString, filter)
+writeQueryAttributes(queryId, ids, description, queryString, filter, valueInputs.value)
 
 // --- Call the DataXray files API ------------------------------------------
 

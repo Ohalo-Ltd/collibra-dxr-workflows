@@ -21,7 +21,7 @@ Both editions use the same process ids, so you can switch from one to the other 
 | Workflow | What it does | How it runs |
 |---|---|---|
 | **Configure DataXray Workflows** | One-time setup. Creates the community, domains, asset types, attribute types, relation types, the **Not in any search** status and the assignments the other workflows rely on, creates the two access-control roles, and sets who is allowed to run each workflow. Idempotent — safe to run again. | From the **+ Create** menu. Run once after importing. |
-| **Search DataXray** | Builds a DataXray search query from Collibra classifications (every selected label, extractor and annotator must match — criteria are always AND-ed; the optional annotated text may appear in any of the annotators chosen for it), previews the matching files, and offers to **import all results as file assets**, to **keep the search in sync nightly**, and to let later reruns **create assets for new files** (three independent options). | From the **+ Create** menu, on demand. |
+| **Search DataXray** | Builds a DataXray search query from Collibra classifications (every selected label, extractor and annotator must match — criteria are always AND-ed; the optional annotated text may appear in any of the annotators chosen for it, and the optional extracted value in any of the extractors chosen for it), previews the matching files, and offers to **import all results as file assets**, to **keep the search in sync nightly**, and to let later reruns **create assets for new files** (three independent options). | From the **+ Create** menu, on demand. |
 | **Rerun DataXray Search** | Reruns a saved search from its query asset and re-syncs its file assets: new files imported, changed files updated, files no search returns any more set to **Not in any search** (never deleted). | From a **DataXray Sync Filter** asset's page; also run headlessly by the nightly file sync. |
 | **Sync DataXray Classifications** | Syncs classifications from DataXray into Collibra, on demand. Classifications that disappear from DataXray are **retired**, not deleted. | From the **+ Create** menu, on demand. |
 | **Sync DataXray Classification (Nightly)** | The same classification sync, run automatically every night at **02:00** (server time). | Runs on a timer; no manual start. |
@@ -123,10 +123,12 @@ if it is still unset.
 
 **Configure DataXray Workflows** has one optional setting of its own, in the
 same **Variables** section: **Sync extractor values to file assets
-(true/false)**, default `false`. Leave it at `false` unless you want every sync
-to copy the values DataXray's extractors found (an invoice number, a yes/no
-answer) onto the file assets, for display. It does not change what a search
-matches. To turn it on, set it to `true` and run Configure again; see
+(false/true/tagged)**, default `false`. Leave it at `false` unless you want
+every sync to copy the values DataXray's extractors found (an invoice number, a
+yes/no answer) onto the file assets, for display: `true` for every extractor,
+`tagged` for only the extractors tagged `dataxray-sync-values`. It does not
+change what a search matches (Search DataXray's **Extracted value** field does
+that). To turn it on, set it and run Configure again; see
 *Optional: extractor values on file assets* in
 [file-asset-lifecycle.md](file-asset-lifecycle.md#optional-extractor-values-on-file-assets).
 
@@ -295,7 +297,27 @@ name: one you renamed yourself keeps your name. The workflows refer to all of th
 settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
 (`data-xray` by default) stay as they are.
 
-### Upgrading to v2.11
+### Upgrading to v2.12
+
+Re-import the workflows, then run **Configure DataXray Workflows** once.
+
+- **Search by extracted value.** Search DataXray has a new **Extracted value**
+  field (with **Extracted value extractors**): it finds only the files where an
+  extractor returned a given value, for example only the *Yes* answers, where
+  the **Extractor** criterion finds every file the extractor ran on. Configure
+  creates the **Extracted Value Filter** attribute and the **searches values of
+  / values searched by** relation type it is saved with; until Configure has
+  run, a search with a value stops and says so. Long values (more than a few
+  hundred characters) cannot be searched. See *Searching by extracted value* in
+  [file-asset-lifecycle.md](file-asset-lifecycle.md#searching-by-extracted-value).
+- **Extractor values for chosen extractors only.** Configure's *Sync extractor
+  values to file assets* setting (now labelled *false/true/tagged*) accepts
+  `tagged`: only extractors tagged `dataxray-sync-values` have their values
+  copied onto file assets. `true` and `false` work as before. See *Optional:
+  extractor values on file assets* in the same guide.
+- Configure's results now always say whether extractor values are copied, and
+  for which extractors.
+
 
 Re-import the workflows, then run **Configure DataXray Workflows** once.
 

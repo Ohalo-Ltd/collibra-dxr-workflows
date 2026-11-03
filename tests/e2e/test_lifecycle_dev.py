@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import zipfile
 
 import pytest
@@ -237,3 +238,43 @@ def test_rerun_options_change_the_tags_and_dataxray_sync(edge, lifecycle_search,
     assert "dataxray-keep-in-sync" not in tags()
     for f in s["files"]:
         assert c.attr(f, "syncModeAttrTypeId") == "One-time import"
+
+
+# --- v2.12: Extracted value --------------------------------------------------------------------------------------
+
+def preview_total(c, query) -> int:
+    """The match count the rerun wrote into the sync filter's Files preview."""
+    text = c.attr(query, "filesAttrTypeId") or ""
+    if "Query returned 0 results" in text:
+        return 0
+    m = re.search(r"first \d+ of ([\d,]+) matching", text)
+    assert m, f"no match count in the Files preview: {text[:200]!r}"
+    return int(m.group(1).replace(",", ""))
+
+
+def test_extracted_value_narrows_an_extractor_to_its_answers(edge, track):
+    """VAL-1, VAL-2, VAL-5: a yes/no extractor's "yes" and "no" files add up to every file it ran on."""
+    c = edge
+    name = os.environ.get("DXR_E2E_EXTRACTOR", "Contains PII?")
+    ex = next((a for a in c.page_all("/assets", typeIds=c.ids["extractorTypeId"], name=name, nameMatchMode="EXACT")
+               if a["status"]["name"] != "Obsolete" and c.attr(a["id"], "dataxrayIndexIdAttrTypeId")), None)
+    if ex is None:
+        pytest.skip(f"no synced extractor named {name!r} on this instance (set DXR_E2E_EXTRACTOR)")
+    refresh_only = {"importDecision": False, "keepInSync": False, "autoImportNewFiles": False}
+
+    def count(value=None):
+        q = track.asset(f"value {value or 'any'}", "queryDomainId", "queryAssetTypeId")
+        if value is None:
+            c.link(q, "groups", ex["id"])
+        else:
+            c.set_attr(q, "valueFilterAttrTypeId", value)
+            c.link(q, "valueFilter", ex["id"])
+        rerun(c, track, q, options=refresh_only)
+        return preview_total(c, q)
+
+    every = count()
+    if every == 0:
+        pytest.skip(f"{name!r} has no values on this instance")
+    yes, no = count("yes"), count("NO")
+    assert yes + no == every, f"yes {yes} + no {no} != {every} (does {name!r} return anything but yes/no?)"
+    assert count("*e*") == yes          # "Yes" contains e, "No" does not

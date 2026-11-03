@@ -59,8 +59,9 @@ def extractFileTuple(row, String baseUrl) {
     classifications.addAll(extractClassifications(row?.annotators))
     def values = []
     if (extractedValuesOn()) {
+        def allowed = extractedValueSources()   // null = every extractor (v2.12 allow-list)
         (row?.extractedMetadata instanceof Collection ? row.extractedMetadata : []).each { e ->
-            if (e instanceof Map && e.name) {
+            if (e instanceof Map && e.name && (allowed == null || allowed.dxrIds.contains((e.id ?: '').toString()))) {
                 extractedValueTexts(e.value).each { v -> values << [e.name.toString(), v] }
             }
         }
