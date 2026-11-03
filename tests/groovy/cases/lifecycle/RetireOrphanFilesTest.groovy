@@ -1,5 +1,5 @@
 // retireOrphanFiles: what a rerun does with the files its search stopped
-// returning. TRC stories 15, 28, 29; acceptance criteria FILE-8, -9, -20, -21, -22.
+// returning. Review stories 15, 28, 29; acceptance criteria FILE-8, -9, -20, -21, -22.
 
 test('a file only this search returned is unlinked and set to Not in any search (FILE-8)') {
     def q = query('Contacts')

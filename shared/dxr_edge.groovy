@@ -225,7 +225,7 @@ def isEdgeResponseTooLarge(String error) {
 
 // Collibra refused to hand over DataXray's answer. Its explicit form is the
 // "exceeds the allowed limit" error; it also arrives as an HTTP 5xx with an
-// EMPTY body while DataXray itself answered 200 (TRC, 2026-10-09: three 190 KB
+// EMPTY body while DataXray itself answered 200 (a customer instance, 2026-10-09: three 190 KB
 // pages logged 200 by DataXray's nginx, seen by the workflow as status 500).
 // A real DataXray error always carries a JSON body, so it is not mistaken for this.
 def isEdgeRefusal(Map r) {

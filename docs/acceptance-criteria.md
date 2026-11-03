@@ -13,7 +13,7 @@ written as Given / When / Then and carries a status:
   was verified once; it runs identically in both editions. The nightly
   refresh of files no search returns (NIGHT-11, v2.9) was verified on 27
   October 2026 in the Cloud + Edge edition. From v2.9 the Cloud + Edge file
-  lifecycle (stories 22, 28, 29 and 31 of the TRC review; FILE-9, -11, -16,
+  lifecycle (stories 22, 28, 29 and 31 of the customer review; FILE-9, -11, -16,
   -20, -27, -28, -29; NIGHT-8 and -10; ADM-3 with hand-renamed domains) is
   re-verified live by an automated suite before each release (first run 30
   October 2026), and every change is checked by offline regression tests that
@@ -70,7 +70,7 @@ DataXray `/api/v1/files` response asserts.
 | EVID-5 | An **extractor** produced metadata for a file (an `extractedMetadata` entry, any value) | The file is imported or re-synced | The file asset has a `groups` relation to the Extractor asset | 🔹 |
 | EVID-6 | A search uses an extractor as a criterion | The query is composed | The DataXray query uses `extractedMetadata.name:"…"` (the `extractors.name` field matches nothing) | ✅ |
 | EVID-7 | A file's row references a classification **not yet synced** into Collibra | The file is imported or re-synced | The link is skipped and counted as "unresolved" in the summary; running the classification sync and re-syncing the search resolves it | 🔹 |
-| EVID-8 | A label was just unassigned in DataXray but its file rows **still report it** (indexing lag) | A rerun happens in that window | The relation is kept — Collibra always mirrors what the DataXray API asserts. It disappears on the first sync after DataXray stops reporting it. **Accepted by TRC** (see D-4) | ✅ (observed live) |
+| EVID-8 | A label was just unassigned in DataXray but its file rows **still report it** (indexing lag) | A rerun happens in that window | The relation is kept — Collibra always mirrors what the DataXray API asserts. It disappears on the first sync after DataXray stops reporting it. **Accepted by the customer** (see D-4) | ✅ (observed live) |
 | EVID-9 | A person linked a file asset to a classification by hand (a `groups` relation Collibra records as created by that person) | The file is re-synced, whether or not DataXray reports that classification on the file | The person's link is never removed or changed, and no duplicate link is added when the file also matches that classification. Only links created by Collibra's **Workflow** user (what the integration's background tasks run as) are swapped. Caveat: links created by the customer's own Collibra workflows are also recorded as created by the Workflow user, so the integration cannot tell them apart from its own | ✅ |
 
 ## 3. Search & gated import
@@ -113,12 +113,12 @@ via the nightly).
 | FILE-11 | A rerun gets **0 results** from DataXray | The pass that swaps links and sets Not in any search would run | The pass is skipped — a transient empty answer must never mark a query's whole population as no longer returned. On-prem the summary says so (*No file was unlinked from this search*, with how many files stay linked and what to do if DataXray really has none of them). Cloud + Edge: the rerun asks DataXray about every file it returned before (FILE-28); the same skip applies to a run whose pages were not all read or whose skipped result could not be identified | ✅ |
 | FILE-12 | A rerun's projected number of DataXray File assets (wherever they live) exceeds 25,000 | The rerun starts | Interactive: refused with the projection; headless: logged and skipped | 🔹 |
 | FILE-13 | A rerun's summary task is left **open** in someone's inbox | The user revisits the query asset / the nightly fires | The Rerun action is still available and the nightly still runs (workflow exclusivity is UNCONSTRAINED) | ✅ |
-| FILE-14 | DataXray reassigns **file ids** (e.g. datasource deleted and re-scanned) | The next sync runs | New assets are created and the old generation becomes **Not in any search** as orphans, keeping its history. Exception in the Cloud + Edge edition: a file whose object key (datasource id + object id) is unchanged keeps its asset (FILE-25). **Accepted by TRC** (see D-3) | 🔹 |
+| FILE-14 | DataXray reassigns **file ids** (e.g. datasource deleted and re-scanned) | The next sync runs | New assets are created and the old generation becomes **Not in any search** as orphans, keeping its history. Exception in the Cloud + Edge edition: a file whose object key (datasource id + object id) is unchanged keeps its asset (FILE-25). **Accepted by the customer** (see D-3) | 🔹 |
 | FILE-15 | A matched file was **renamed or moved** on a connector that identifies files by **path** (SMB, local/NFS, SFTP, Amazon S3, Azure Blob, Google Cloud Storage, SharePoint on-prem), moved to another SharePoint Online library, or copied/moved to **another datasource** (any connector) | DataXray rescans and the query is rerun | DataXray has assigned a new file id, so this is FILE-14 for one file: a new asset is created in the DataXray Files domain, and the old asset gets a `formerly returns` link and Not in any search where it is (history kept; comments, attachments and a manual domain/community placement do not carry over) | 🔹 |
 | FILE-16 | A user **moves** an active file asset to a domain in another community | The query is rerun | The asset is updated in place (attributes, classification and `returns` relations) and never moved back — the integration tracks file assets by UUID, not by domain (verified Sept 2026) | ✅ |
 | FILE-27 | Cloud + Edge edition: a rerun parks one or more files (FILE-8) | The rerun ends | Before its summary, the rerun looks each parked file up in DataXray by Datasource ID + Object ID (the nightly's existence check, NIGHT-8/NIGHT-11): a file DataXray no longer has is set to **Not in DataXray** at once; one it still has keeps Not in any search and gets its attributes and `groups` links refreshed (a removed label becomes **formerly groups**) at once — not the next night. The summary shows the counts (*Checked with DataXray*). A file whose asset has no object key, or a check DataXray did not finish answering, is left to the nightly and the summary says so |✅ |
 | FILE-28 | Cloud + Edge edition: a rerun gets **0 results** and DataXray, asked about every file the search returned before, **has none of them** (every one had an object key, every answer was read) — the search's whole datasource was deleted in DataXray | The rerun ends | Every file is unlinked (**formerly returns**) and, when no other search returns it and a person did not set its status, set to **Not in DataXray**; the summary says so. If DataXray still has even one of them, or one could not be checked, nothing changes and the summary says how many DataXray still has (FILE-11) |✅ |
-| FILE-29 | Cloud + Edge edition, Configure run on v2.9 or later | Any sync writes a file asset | The asset carries **DataXray Full Object ID** = `<datasource id>:<object id>`, the same value as its DataXray Datasource ID and DataXray Object ID joined, and the search results file's *Full Object ID* column shows it for every result (TRC R1: the datasource id is the prefix that makes an object id unique in DataXray). Without Configure, the attribute is not written and nothing else changes |✅ |
+| FILE-29 | Cloud + Edge edition, Configure run on v2.9 or later | Any sync writes a file asset | The asset carries **DataXray Full Object ID** = `<datasource id>:<object id>`, the same value as its DataXray Datasource ID and DataXray Object ID joined, and the search results file's *Full Object ID* column shows it for every result (requirement R1: the datasource id is the prefix that makes an object id unique in DataXray). Without Configure, the attribute is not written and nothing else changes |✅ |
 | RERUN-OPT-1 | A user starts **Rerun DataXray Search** on a sync filter | The rerun has fetched (on-prem) or counted (Cloud + Edge: one request of one row, file ids only) today's matches | A **Rerun Options** task, titled *Rerun Options: <search> (<started>)*, shows today's match count, how many files the search returned before and how many of today's matches are new to it (*at least N* on Cloud + Edge), and offers *Create assets for the new matching files on this run*, *Keep in sync nightly* and *Create assets for new files found on later reruns*, prefilled from the query's tags. Nothing in Collibra has changed yet, not even the DataXray Query attribute. Both lasting options are shown however many files match. Sending it unchanged behaves like a rerun before v2.10 | ✅ |
 | RERUN-OPT-2 | A search's files were not imported when it ran (or it is tagged `dataxray-no-auto-import`) | The user reruns it and ticks *Create assets for the new matching files* | The rerun creates the file assets — no need to delete and recreate the search. Unticked, the rerun only refreshes the file assets already in Collibra (FILE-19). The choice applies to that run only and writes no tag | ✅ |
 | RERUN-OPT-3 | A Rerun Options task is open | The user changes *Keep in sync nightly* or *Create assets for new files found on later reruns* and clicks Send | The `dataxray-keep-in-sync` / `dataxray-no-auto-import` tags are added **or removed** to match, before the rerun processes any file, so the file assets it touches already show the new DataXray Sync value. Other tags are untouched | ✅ |
@@ -206,14 +206,14 @@ Owner: **Sync DataXray Classification (Nightly)** at 02:00 and
   removes that criterion from saved queries that used it (so they return more
   files) — prefer sync-retire.
 - ~~**D-3 (FILE-14): file identity is the DataXray file id.**~~ **Accepted by
-  TRC** (August 2026): "old generation retired with history, new generation
+  the customer** (August 2026): "old generation retired with history, new generation
   starts clean." If DataXray reassigns file ids (e.g. a datasource is deleted
   and re-scanned), Collibra creates new assets and the old generation gets
   Not in any search (Obsolete before v2.4) — records preserved, no migration
   attempted. **Since v2.6 (Cloud + Edge):** a file whose datasource id and
   object id are unchanged keeps its asset (FILE-25), which covers a
   datasource's data being dropped from the index and rescanned (agreed with
-  TRC, Oct 2026). (A content-hash
+  the customer, Oct 2026). (A content-hash
   based migration remains possible later if ever needed.)
   Which events assign a new file id depends on the DataXray connector
   (verified in the DataXray source, Sept 2026): connectors that identify
@@ -224,7 +224,7 @@ Owner: **Sync DataXray Classification (Nightly)** at 02:00 and
   copied or moved to another datasource, or a datasource is deleted and
   re-scanned. See FILE-7 and FILE-15.
 - ~~**D-4 (EVID-8): evidence freshness is bounded by DataXray indexing.**~~
-  **Accepted by TRC** (August 2026), with the agreed wording: "Collibra
+  **Accepted by the customer** (August 2026), with the agreed wording: "Collibra
   reflects DataXray as of the last sync; changes in DataXray appear after
   DataXray has re-indexed and the next sync/rerun has run." Worst case with
   nightly-only syncing is about a day of lag; an on-demand rerun closes it
@@ -238,4 +238,4 @@ Owner: **Sync DataXray Classification (Nightly)** at 02:00 and
   asset is swept and counted wherever it lives.
 
 All decisions are closed — D-1, D-2 and D-5 decided and implemented/rolled
-back as recorded above, D-3 and D-4 accepted by TRC as intended behavior.
+back as recorded above, D-3 and D-4 accepted by the customer as intended behavior.

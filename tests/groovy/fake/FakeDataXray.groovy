@@ -18,7 +18,7 @@ import groovy.json.JsonSlurper
 // Collibra's response limit is modelled: a body above `maxResponseBytes` comes
 // back as the External API task's error ("Response size exceeds the allowed
 // limit.") — or, with `refusalAsEmpty500`, as HTTP 500 with an empty body, the
-// form TRC saw on 9 Oct 2026. A row's size is its JSON length unless the file
+// form seen on a customer instance on 9 Oct 2026. A row's size is its JSON length unless the file
 // sets rowBytes. A request that excludes every field ('*') returns the _id only.
 class FakeDataXray {
     List<Map> files = []

@@ -11,7 +11,7 @@
 //     rerun just stopped returning — so a file deleted in DataXray is 'Not in
 //     DataXray', and a file that merely stopped matching has its classification
 //     links brought up to date, when the rerun ends rather than the next night
-//     (TRC stories #28/#29/#31, Oct 2026);
+//     (review stories #28/#29/#31, Oct 2026);
 //   – mode 'zeroResults': the end of a rerun that got 0 results, for every
 //     file the search returned before (see below).
 //
@@ -27,7 +27,7 @@
 //     a label removed in DataXray becomes 'formerly groups'). Without this a
 //     file that dropped out of every search — typically because the label the
 //     search selects on was removed — kept its stale 'groups' links for good
-//     (TRC review, 26 Oct 2026). A 'Not in DataXray' asset found again also
+//     (customer review, 26 Oct 2026). A 'Not in DataXray' asset found again also
 //     goes back to 'Not in any search'.
 // A search that matches the file again sets it to Candidate as usual
 // (isParkedFileStatus). A status a person set is never touched: in the

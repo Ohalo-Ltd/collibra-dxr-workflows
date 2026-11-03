@@ -1,6 +1,6 @@
 // reconcileFileGroups: a file's links to classifications follow DataXray's
 // evidence; only links the integration made are ever changed. R16, R20;
-// EVID-1, -2, -9; FILE-22; TRC story 21.
+// EVID-1, -2, -9; FILE-22; review story 21.
 
 test('a classification DataXray reports gets a groups link (EVID-1)') {
     def f = fileAsset('f1')

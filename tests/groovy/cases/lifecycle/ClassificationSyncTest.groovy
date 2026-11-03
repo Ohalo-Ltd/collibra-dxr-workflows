@@ -1,5 +1,5 @@
 // syncClassificationCatalog: the DataXray catalogue mirrored into Collibra.
-// TRC stories 5, 6, 8; R4, R6, R15; CAT-1..7, CAT-11. (The Edge catalogue
+// Review stories 5, 6, 8; R4, R6, R15; CAT-1..7, CAT-11. (The Edge catalogue
 // requests are a separate transport; this is everything Collibra-side.)
 
 def item(Map o) {
