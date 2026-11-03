@@ -32,9 +32,10 @@ int end = Math.min(cursor + dxrBatchSize(), workItems.size())
 def batch = workItems.subList(cursor, end)
 int batchNumber = (int) (cursor / dxrBatchSize()) + 1
 
-// Query tagged dataxray-no-auto-import: refresh existing file assets only.
+// rerunCreateNew false (the Rerun Options task, or for the nightly the tag
+// dataxray-no-auto-import): refresh existing file assets only.
 def r = processFileBatch(batch, queryAssetId, "Import batch ${batchNumber}/${batchCount}".toString(),
-                         [createNew: execution.getVariable('rerunNoAutoImport') != true])
+                         [createNew: execution.getVariable('rerunCreateNew') != false])
 
 // --- Advance the cursor ----------------------------------------------------------
 

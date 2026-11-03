@@ -40,5 +40,7 @@ def publishWorkList(List workItems, int unresolvedClassifications) {
     execution.setVariable('importRelationsRemovedCount', 0)
     execution.setVariable('importSkippedClassifications', unresolvedClassifications)
     execution.setVariable('importSkippedNewCount', 0)
+    execution.setVariable('importCappedCount', 0)
+    execution.setVariable('importCapped', false)
     return batchCount
 }

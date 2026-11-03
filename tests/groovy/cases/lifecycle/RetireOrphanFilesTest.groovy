@@ -127,3 +127,40 @@ test('the relation lookups page through more than one page') {
     assert r.unlinked == 4
     assert links('returns', [source: q])*.targetId == [files[0]]
 }
+
+// --- DataXray Sync (v2.10) -------------------------------------------------------------------
+
+test('a file no search returns any more becomes a One-time import (SYNC-6)') {
+    def q = query('Contacts', tags: ['dataxray-keep-in-sync'])
+    def f = fileAsset('f1')
+    link(q, 'returns', f)
+
+    retireOrphanFiles([] as Set, [f.toString()], q)
+
+    assert attr(f, 'syncMode') == 'One-time import'
+}
+
+test('a file a synced search still returns stays Kept in sync nightly when a one-time search drops it (SYNC-6)') {
+    def synced = query('Synced', tags: ['dataxray-keep-in-sync'])
+    def oneTime = query('One-time')
+    def f = fileAsset('f1')
+    link(synced, 'returns', f)
+    link(oneTime, 'returns', f)
+
+    retireOrphanFiles([] as Set, [f.toString()], oneTime)
+
+    assert attr(f, 'syncMode') == 'Kept in sync nightly'
+    assert status(f) == 'Candidate'
+}
+
+test('a file only a one-time search still returns is a One-time import when the synced search drops it (SYNC-6)') {
+    def synced = query('Synced', tags: ['dataxray-keep-in-sync'])
+    def oneTime = query('One-time')
+    def f = fileAsset('f1')
+    link(synced, 'returns', f)
+    link(oneTime, 'returns', f)
+
+    retireOrphanFiles([] as Set, [f.toString()], synced)
+
+    assert attr(f, 'syncMode') == 'One-time import'
+}

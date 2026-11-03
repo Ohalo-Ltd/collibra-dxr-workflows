@@ -36,8 +36,19 @@
 //     classification), and swapped back if they apply again. Only links the
 //     integration created (createdBy = the workflow user) are ever touched: a
 //     file→classification link a person made is left exactly as it is.
-//   – opts.createNew == false (query tagged dataxray-no-auto-import): files
-//     with no asset yet are counted as skippedNew and not created.
+//   – opts.createNew == false (query tagged dataxray-no-auto-import, or the
+//     Rerun Options task said so): files with no asset yet are counted as
+//     skippedNew and not created.
+//   – opts.maxCreate (optional, the Cloud + Edge rerun): at most this many
+//     assets are created; the new files beyond it are counted as skippedNew
+//     and cappedNew and not created. It is what holds the per-run and
+//     instance-wide limits on Edge, where the count before the run is only a
+//     lower bound of the new files.
+//   – DataXray Sync (v2.10, optional, syncModeAttrOn): every file the batch
+//     touches gets "Kept in sync nightly" when at least one sync filter that
+//     returns it is kept in sync nightly, else "One-time import"
+//     (query_flags.groovy). The retire pass recomputes it for the files a
+//     search stops returning, the nightly sweep for everything else.
 //
 // A failing batch is logged, counted as failed, and the caller STILL advances
 // — one bad batch must never wedge the loop.
@@ -45,11 +56,12 @@
 // {{include:dxr_model.groovy}}
 // {{include:dxr_rows.groovy}}
 // {{include:collibra_lookup.groovy}}
+// {{include:query_flags.groovy}}
 
 // Upsert one batch of work-item tuples. `label` names the batch in log lines
 // (e.g. "Import batch 3/12"). opts.createNew (default true): false refreshes
-// existing assets only. Returns
-// [created:, updated:, failed:, relationsAdded:, relationsRemoved:, skippedNew:,
+// existing assets only; opts.maxCreate (optional) caps how many it creates. Returns
+// [created:, updated:, failed:, relationsAdded:, relationsRemoved:, skippedNew:, cappedNew:,
 //  matchedByObjectKey:, seenAssetIds: (the asset UUID string each tuple maps to)].
 def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]) {
     def ids = dxrModelIds()
@@ -60,6 +72,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
     int relationsAdded = 0
     int relationsRemoved = 0
     int skippedNew = 0
+    int cappedNew = 0
     def resolved = batch.collect { deterministicFileAssetId(it[0]) }
     int matchedByObjectKey = 0
 
@@ -81,6 +94,13 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
                 skippedNew++
             }
         }
+        if (opts.maxCreate != null && newItems.size() > (opts.maxCreate as int)) {
+            int room = Math.max(0, opts.maxCreate as int)
+            cappedNew = newItems.size() - room
+            skippedNew += cappedNew
+            newItems = newItems.take(room)
+            loggerApi.warn("${label}: ${cappedNew} new matching file(s) not imported — creating them would pass the import limits")
+        }
         if (matchedByObjectKey > 0) {
             loggerApi.info("${label}: ${matchedByObjectKey} file(s) DataXray gave a new id matched their existing asset by object key")
         }
@@ -88,6 +108,8 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             loggerApi.info("${label}: ${skippedNew} new matching file(s) not imported (automatic import is off for this search)")
         }
         def owned = integrationIdentityIds()
+        boolean syncModeOn = syncModeAttrOn()
+        def syncCache = [:]   // sync filter id → kept in sync nightly, for this batch
 
         // --- Bulk-create the missing assets -------------------------------------
 
@@ -181,6 +203,15 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             def links = reconcileFileGroups(assetId, tuple[7], ids, owned)
             relationsAdded += links.added
             relationsRemoved += links.removed
+
+            if (syncModeOn) {
+                writeFileSyncMode(assetId, fileSyncModeFor(existingReturns.keySet() + [queryAssetId], ids, syncCache), ids)
+            }
+        }
+        if (syncModeOn && !newItems.isEmpty()) {
+            // A new asset is returned by this sync filter only.
+            def mode = fileSyncModeFor([queryAssetId], ids, syncCache)
+            newItems.each { pair -> writeFileSyncMode(pair[1] as UUID, mode, ids) }
         }
     } catch (Exception batchEx) {
         // Count the whole batch as failed but keep the loop moving — one bad batch
@@ -192,7 +223,7 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
     }
 
     return [created: created, updated: updated, failed: failedInBatch,
-            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, skippedNew: skippedNew,
+            relationsAdded: relationsAdded, relationsRemoved: relationsRemoved, skippedNew: skippedNew, cappedNew: cappedNew,
             matchedByObjectKey: matchedByObjectKey, seenAssetIds: resolved.collect { it.toString() }]
 }
 
@@ -302,6 +333,10 @@ def accumulateBatchCounters(Map r) {
     execution.setVariable('importRelationCount', ((execution.getVariable('importRelationCount') ?: 0) as int) + r.relationsAdded)
     execution.setVariable('importRelationsRemovedCount', ((execution.getVariable('importRelationsRemovedCount') ?: 0) as int) + r.relationsRemoved)
     execution.setVariable('importSkippedNewCount', ((execution.getVariable('importSkippedNewCount') ?: 0) as int) + (r.skippedNew ?: 0))
+    if (r.cappedNew) {
+        execution.setVariable('importCappedCount', ((execution.getVariable('importCappedCount') ?: 0) as int) + r.cappedNew)
+        execution.setVariable('importCapped', true)
+    }
 }
 
 // Files the query previously returned but no longer does: the query's
@@ -321,6 +356,8 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
     int unlinked = 0
     int retired = 0
     def parkedIds = []
+    boolean syncModeOn = syncModeAttrOn()
+    def syncCache = [:]
 
     if (!orphanIds.isEmpty()) {
         // Map file-asset id → relation id for this query's "returns" relations, so
@@ -341,12 +378,11 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
                         .sourceId(queryAssetId).targetId(fileAssetId).typeId(ids.formerlyReturnsRelationTypeId).build())
                 }
                 // Park only when no query at all still returns this file.
-                def stillReturned = relationApi.findRelations(com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest.builder()
-                    .relationTypeId(ids.returnsRelationTypeId)
-                    .targetId(fileAssetId)
-                    .limit(1)
-                    .build())
-                if (stillReturned.getResults().isEmpty()) {
+                def stillReturnedBy = relationIdsByFarEnd(ids.returnsRelationTypeId, null, fileAssetId).keySet()
+                if (syncModeOn) {
+                    writeFileSyncMode(fileAssetId, fileSyncModeFor(stillReturnedBy, ids, syncCache), ids)
+                }
+                if (stillReturnedBy.isEmpty()) {
                     def current = assetApi.getAsset(fileAssetId)
                     boolean parked = parkFileAsset(current, ids, 'no query returns it any more')
                     retired++

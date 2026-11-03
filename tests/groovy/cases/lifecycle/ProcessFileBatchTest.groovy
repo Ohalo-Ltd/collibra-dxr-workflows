@@ -229,3 +229,50 @@ test('extractor values are cleared when the file no longer has any') {
     processFileBatch([tuple('f1', values: [])], q, 'b')
     assert attr(assetIdOf('f1'), 'extractedValues') == null
 }
+
+// --- DataXray Sync (v2.10) ---------------------------------------------------
+
+test('a file returned by a sync filter kept in sync nightly is Kept in sync nightly (SYNC-1)') {
+    def q = query('Contacts', tags: ['dataxray-keep-in-sync'])
+    processFileBatch([tuple('f1')], q, 'b')
+    assert attr(assetIdOf('f1'), 'syncMode') == 'Kept in sync nightly'
+}
+
+table('a file only one-time sync filters return is a One-time import (SYNC-2)', [
+    [case: 'untagged sync filter', tags: [], status: null],
+    [case: 'kept in sync but archived (Obsolete)', tags: ['dataxray-keep-in-sync'], status: 'obsolete'],
+]) { row ->
+    def q = query('Contacts', tags: row.tags, status: row.status ? ids["${row.status}StatusId".toString()] : null)
+    processFileBatch([tuple('f1')], q, 'b')
+    assert attr(assetIdOf('f1'), 'syncMode') == 'One-time import'
+}
+
+test('sync wins: a file in a synced and a one-time sync filter stays Kept in sync nightly (SYNC-3, agreed 2 Nov 2026)') {
+    def synced = query('Synced', tags: ['dataxray-keep-in-sync'])
+    def oneTime = query('One-time')
+    def f = fileAsset('f1')
+    link(synced, 'returns', f)
+
+    processFileBatch([tuple('f1')], oneTime, 'b')     // the one-time filter's rerun touches the file last
+
+    assert attr(f, 'syncMode') == 'Kept in sync nightly'
+    assert linked(synced, 'returns', f) && linked(oneTime, 'returns', f)
+}
+
+test('the value follows the sync filter: untagged since the last run, the file becomes a One-time import (SYNC-4)') {
+    def q = query('Contacts', tags: ['dataxray-keep-in-sync'])
+    processFileBatch([tuple('f1')], q, 'b')
+    fx.assets[q].tags.remove('dataxray-keep-in-sync')
+
+    processFileBatch([tuple('f1')], q, 'b')
+
+    assert attr(assetIdOf('f1'), 'syncMode') == 'One-time import'
+}
+
+test('without Configure v2.10 there is no DataXray Sync, and nothing else changes (SYNC-5)') {
+    fx.attributeTypes.remove(ids.syncModeAttrTypeId)
+    def q = query('Contacts', tags: ['dataxray-keep-in-sync'])
+    def r = processFileBatch([tuple('f1')], q, 'b')
+    assert r.failed == 0 && r.created == 1
+    assert attr(assetIdOf('f1'), 'syncMode') == null
+}

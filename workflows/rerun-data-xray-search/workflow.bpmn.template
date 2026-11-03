@@ -9,6 +9,13 @@
       → rerunCollectorTask (script, sync: rebuilds the query from the asset's
            classification relations + stored filter, re-runs it, builds the
            batched work list, snapshots the previously returned file ids)
+      → rerunOptionsGateway
+          ├─ headless run → rerunApplyOptionsTask (follows the sync filter's tags)
+          └─ interactive  → rerunOptionsTask (user form, v2.10: how many files
+               match now, and the three import options prefilled from the tags)
+               → rerunApplyOptionsTask (script, sync: writes the tags, decides
+                  whether to create assets for new files, checks the limits,
+                  refreshes the Files preview)
       → syncBatchTask (script, ASYNC: one batch of 50 upserts per
            execution/transaction — twin of the search workflow's import batch)
       → moreWorkGateway ─ ${hasMoreWork} ─→ back to syncBatchTask
@@ -77,6 +84,31 @@
       <script>{{script:rerun_collector.groovy}}</script>
     </scriptTask>
 
+    <exclusiveGateway id="rerunOptionsGateway" name="Headless?" default="flowOptions">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+
+    <userTask id="rerunOptionsTask"
+              name="Rerun Options: ${conditionName} (${dxrRunStartedAt})"
+              flowable:candidateUsers="user(${initiator})"
+              flowable:formKey="rerunOptionsForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+
+    <scriptTask id="rerunApplyOptionsTask"
+                name="Apply Rerun Options"
+                scriptFormat="groovy"
+                flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:rerun_apply_options.groovy}}</script>
+    </scriptTask>
+
     <!-- ASYNC: each execution is one transaction handling one batch of 50 —
          the exclusive gateway below loops it until the work list is drained. -->
     <scriptTask id="syncBatchTask"
@@ -133,7 +165,28 @@
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
     </sequenceFlow>
-    <sequenceFlow id="flow2" sourceRef="rerunCollectorTask" targetRef="syncBatchTask">
+    <sequenceFlow id="flow2" sourceRef="rerunCollectorTask" targetRef="rerunOptionsGateway">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowHeadlessNoOptions" sourceRef="rerunOptionsGateway" targetRef="rerunApplyOptionsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${headless == 'true'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowOptions" sourceRef="rerunOptionsGateway" targetRef="rerunOptionsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowOptionsChosen" sourceRef="rerunOptionsTask" targetRef="rerunApplyOptionsTask">
+      <extensionElements>
+        <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
+      </extensionElements>
+    </sequenceFlow>
+    <sequenceFlow id="flowOptionsApplied" sourceRef="rerunApplyOptionsTask" targetRef="syncBatchTask">
       <extensionElements>
         <design:stencilid><![CDATA[SequenceFlow]]></design:stencilid>
       </extensionElements>
@@ -192,36 +245,48 @@
         <omgdc:Bounds x="210" y="230" width="140" height="80"/>
       </bpmndi:BPMNShape>
 
+      <bpmndi:BPMNShape bpmnElement="rerunOptionsGateway" id="BPMNShape_rerunOptionsGateway">
+        <omgdc:Bounds x="410" y="250" width="40" height="40"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="rerunOptionsTask" id="BPMNShape_rerunOptionsTask">
+        <omgdc:Bounds x="480" y="90" width="120" height="80"/>
+      </bpmndi:BPMNShape>
+
+      <bpmndi:BPMNShape bpmnElement="rerunApplyOptionsTask" id="BPMNShape_rerunApplyOptionsTask">
+        <omgdc:Bounds x="570" y="230" width="140" height="80"/>
+      </bpmndi:BPMNShape>
+
       <bpmndi:BPMNShape bpmnElement="syncBatchTask" id="BPMNShape_syncBatchTask">
-        <omgdc:Bounds x="410" y="230" width="140" height="80"/>
+        <omgdc:Bounds x="770" y="230" width="140" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="moreWorkGateway" id="BPMNShape_moreWorkGateway">
-        <omgdc:Bounds x="610" y="250" width="40" height="40"/>
+        <omgdc:Bounds x="970" y="250" width="40" height="40"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="585" y="300" width="90" height="14"/>
+          <omgdc:Bounds x="945" y="300" width="90" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="retireTask" id="BPMNShape_retireTask">
-        <omgdc:Bounds x="710" y="230" width="140" height="80"/>
+        <omgdc:Bounds x="1070" y="230" width="140" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="headlessGateway" id="BPMNShape_headlessGateway">
-        <omgdc:Bounds x="910" y="250" width="40" height="40"/>
+        <omgdc:Bounds x="1270" y="250" width="40" height="40"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="885" y="300" width="90" height="14"/>
+          <omgdc:Bounds x="1245" y="300" width="90" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="rerunSummaryTask" id="BPMNShape_rerunSummaryTask">
-        <omgdc:Bounds x="1010" y="230" width="120" height="80"/>
+        <omgdc:Bounds x="1370" y="230" width="120" height="80"/>
       </bpmndi:BPMNShape>
 
       <bpmndi:BPMNShape bpmnElement="endEvent" id="BPMNShape_endEvent">
-        <omgdc:Bounds x="1190" y="256" width="28" height="28"/>
+        <omgdc:Bounds x="1550" y="256" width="28" height="28"/>
         <bpmndi:BPMNLabel>
-          <omgdc:Bounds x="1187" y="290" width="34" height="14"/>
+          <omgdc:Bounds x="1547" y="290" width="34" height="14"/>
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
 
@@ -233,37 +298,55 @@
         <omgdi:waypoint x="350" y="270"/>
         <omgdi:waypoint x="410" y="270"/>
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowHeadlessNoOptions" id="BPMNEdge_flowHeadlessNoOptions">
+        <omgdi:waypoint x="450" y="270"/>
+        <omgdi:waypoint x="570" y="270"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowOptions" id="BPMNEdge_flowOptions">
+        <omgdi:waypoint x="430" y="250"/>
+        <omgdi:waypoint x="430" y="130"/>
+        <omgdi:waypoint x="480" y="130"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowOptionsChosen" id="BPMNEdge_flowOptionsChosen">
+        <omgdi:waypoint x="600" y="130"/>
+        <omgdi:waypoint x="640" y="130"/>
+        <omgdi:waypoint x="640" y="230"/>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowOptionsApplied" id="BPMNEdge_flowOptionsApplied">
+        <omgdi:waypoint x="710" y="270"/>
+        <omgdi:waypoint x="770" y="270"/>
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow3" id="BPMNEdge_flow3">
-        <omgdi:waypoint x="550" y="270"/>
-        <omgdi:waypoint x="610" y="270"/>
+        <omgdi:waypoint x="910" y="270"/>
+        <omgdi:waypoint x="970" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowMoreWork" id="BPMNEdge_flowMoreWork">
-        <omgdi:waypoint x="630" y="250"/>
-        <omgdi:waypoint x="630" y="170"/>
-        <omgdi:waypoint x="480" y="170"/>
-        <omgdi:waypoint x="480" y="230"/>
+        <omgdi:waypoint x="990" y="250"/>
+        <omgdi:waypoint x="990" y="170"/>
+        <omgdi:waypoint x="840" y="170"/>
+        <omgdi:waypoint x="840" y="230"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowSyncDone" id="BPMNEdge_flowSyncDone">
-        <omgdi:waypoint x="650" y="270"/>
-        <omgdi:waypoint x="710" y="270"/>
+        <omgdi:waypoint x="1010" y="270"/>
+        <omgdi:waypoint x="1070" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow4" id="BPMNEdge_flow4">
-        <omgdi:waypoint x="850" y="270"/>
-        <omgdi:waypoint x="910" y="270"/>
+        <omgdi:waypoint x="1210" y="270"/>
+        <omgdi:waypoint x="1270" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowHeadless" id="BPMNEdge_flowHeadless">
-        <omgdi:waypoint x="930" y="250"/>
-        <omgdi:waypoint x="930" y="180"/>
-        <omgdi:waypoint x="1204" y="180"/>
-        <omgdi:waypoint x="1204" y="256"/>
+        <omgdi:waypoint x="1290" y="250"/>
+        <omgdi:waypoint x="1290" y="180"/>
+        <omgdi:waypoint x="1564" y="180"/>
+        <omgdi:waypoint x="1564" y="256"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowInteractive" id="BPMNEdge_flowInteractive">
-        <omgdi:waypoint x="950" y="270"/>
-        <omgdi:waypoint x="1010" y="270"/>
+        <omgdi:waypoint x="1310" y="270"/>
+        <omgdi:waypoint x="1370" y="270"/>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow5" id="BPMNEdge_flow5">
-        <omgdi:waypoint x="1130" y="270"/>
-        <omgdi:waypoint x="1190" y="270"/>
+        <omgdi:waypoint x="1490" y="270"/>
+        <omgdi:waypoint x="1550" y="270"/>
       </bpmndi:BPMNEdge>
 
     </bpmndi:BPMNPlane>
