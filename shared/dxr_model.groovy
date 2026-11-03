@@ -26,6 +26,7 @@ def dxrModelIds() {
         classifiedByRelationTypeId: string2Uuid('019e9212-aebb-77e9-9f14-026d8e9fa0ab'), // classified by / classifies (file→classification, v2.11)
         returnsRelationTypeId  : string2Uuid('019e9210-f180-79dc-b5a0-6c31e94f82d5'),  // returns / returned by (query→file)
         textFilterRelTypeId    : string2Uuid('019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'),  // searches text in (query→Annotator)
+        valueFilterRelTypeId   : string2Uuid('019e9212-c0dd-7b12-9e3f-2a4b5c6d7e81'),  // searches values of (query→Extractor, v2.12)
         formerlyReturnsRelationTypeId: string2Uuid('019e9212-1b22-7d4f-8c3a-6e5f7a8b9c01'), // formerly returns (query→file): the query stopped returning the file
         formerlyGroupsRelationTypeId : string2Uuid('019e9212-2c33-7e50-9d4b-7f6a8b9c0d12'), // formerly classified by (file→classification; "formerly groups" before v2.11): DataXray no longer finds it on the file
         // Attribute types
@@ -33,6 +34,7 @@ def dxrModelIds() {
         filesAttrTypeId        : string2Uuid('019e2736-8bd0-727a-b4ab-6899517a3e73'),  // Files (HTML preview table)
         queryAttrTypeId        : string2Uuid('019e9210-cf9b-751a-85f2-d30c7a48b9e6'),  // DataXray Query
         filterAttrTypeId       : string2Uuid('019e9210-e04d-7c6b-a481-5f29d8036c7a'),  // Annotated Text Filter
+        valueFilterAttrTypeId  : string2Uuid('019e9212-bfcc-7a01-8d2e-1f3a4b5c6d70'),  // Extracted Value Filter (v2.12)
         filePathAttrTypeId     : string2Uuid('019e9210-8a3c-70d5-b1e8-604f9c2d7a53'),
         fileSizeAttrTypeId     : string2Uuid('019e9210-9bd0-7e46-a927-15c8e03b6f84'),
         lastModifiedAttrTypeId : string2Uuid('019e9210-ad15-73f8-bc06-7e94a1d52c37'),
@@ -173,6 +175,82 @@ def extractedValuesOn() {
     return on
 }
 
+// Which extractors' values are copied (v2.12). Configure's syncExtractorValues:
+//   true   — every extractor (as v2.8–v2.11);
+//   tagged — only extractors whose Collibra asset carries dxrSyncValuesTag(),
+//            so an admin decides per extractor (a yes/no answer yes, a national
+//            ID number no). No tagged extractor = nothing copied (fails closed).
+// Configure records the choice in the attribute type's description
+// (dxrExtractedValuesDescription), so the syncs never read the variable.
+def dxrSyncValuesTag() { return 'dataxray-sync-values' }
+
+def dxrExtractedValuesDescription(boolean tagged) {
+    return tagged
+        ? "Extractor values copied from DataXray by every sync, for display. Mode: tagged - only extractors tagged ${dxrSyncValuesTag()}. Set by Configure DataXray Workflows (Sync extractor values to file assets); do not edit.".toString()
+        : 'Extractor values copied from DataXray by every sync, for display. Mode: all extractors. Set by Configure DataXray Workflows (Sync extractor values to file assets); do not edit.'
+}
+
+// 'off' | 'all' | 'tagged'; cached per process in dxrExtractedValuesMode.
+def extractedValuesMode() {
+    def cached = execution.getVariable('dxrExtractedValuesMode')
+    if (cached != null) { return cached.toString() }
+    def mode = 'off'
+    if (extractedValuesOn()) {
+        mode = 'all'
+        try {
+            def desc = attributeTypeApi.getAttributeType(dxrModelIds().extractedValuesAttrTypeId)?.getDescription()
+            if ((desc ?: '').toString().contains('Mode: tagged')) { mode = 'tagged' }
+        } catch (Exception lookupEx) {
+            // Cannot tell which extractors are allowed: copy none rather than all.
+            loggerApi.warn("Could not read the DataXray Extracted Values mode, copying no values this run: ${lookupEx.message}")
+            mode = 'tagged-unknown'
+        }
+    }
+    execution.setVariable('dxrExtractedValuesMode', mode)
+    return mode
+}
+
+// In 'tagged' mode: [dxrIds: Set<String>, indexIds: Set<String>] of the tagged
+// extractors (DataXray ID for on-prem rows, DataXray Index ID for Edge rows);
+// null in 'all' mode (everything allowed). Cached per process (JSON).
+def extractedValueSources() {
+    def mode = extractedValuesMode()
+    if (mode == 'all' || mode == 'off') { return null }
+    def cached = execution.getVariable('dxrExtractedValueSources')
+    if (cached) {
+        def m = new groovy.json.JsonSlurper().parseText(cached.toString())
+        return [dxrIds: (m.dxrIds ?: []) as Set, indexIds: (m.indexIds ?: []) as Set]
+    }
+    def ids = dxrModelIds()
+    def dxrIds = [] as Set
+    def indexIds = [] as Set
+    if (mode == 'tagged') {
+        try {
+            def cursor = ''
+            while (true) {
+                def page = assetApi.findAssets(com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest.builder()
+                    .typeIds([ids.extractorTypeId]).tagNames([dxrSyncValuesTag()]).limit(1000).cursor(cursor).build())
+                page.getResults().each { a ->
+                    attributeApi.findAttributes(com.collibra.dgc.core.api.dto.instance.attribute.FindAttributesRequest.builder()
+                        .assetId(a.getId()).typeIds([ids.dataxrayIdAttrTypeId, ids.dataxrayIndexIdAttrTypeId]).limit(10).build())
+                        .getResults().each { at ->
+                            def v = (at.getValue() ?: '').toString().trim()
+                            if (!v) { return }
+                            if (at.getType()?.getId() == ids.dataxrayIdAttrTypeId) { dxrIds << v } else { indexIds << v }
+                        }
+                }
+                cursor = page.getNextCursor()
+                if (!cursor) { break }
+            }
+        } catch (Exception lookupEx) {
+            loggerApi.warn("Could not list the extractors tagged ${dxrSyncValuesTag()}, copying no values this run: ${lookupEx.message}")
+            dxrIds.clear(); indexIds.clear()
+        }
+    }
+    execution.setVariable('dxrExtractedValueSources', groovy.json.JsonOutput.toJson([dxrIds: dxrIds as List, indexIds: indexIds as List]))
+    return [dxrIds: dxrIds, indexIds: indexIds]
+}
+
 // The DataXray Full Object ID attribute (TRC requirement R1, Oct 2026: "expose the
 // full object id — the datasource prefix is missing"). DataXray's object id is
 // only meaningful together with its datasource (every DataXray API that takes
@@ -239,6 +317,28 @@ def classifiedByOn() {
     }
     execution.setVariable('dxrClassifiedByOn', on.toString())
     return on
+}
+
+// The extracted-value search filter (v2.12) needs the Extracted Value Filter
+// attribute type and the "searches values of" relation type, both created by
+// Configure. A search with a value refuses to run without them (the value
+// would otherwise not be saved, and reruns would silently drop it).
+def valueFilterModelOn() {
+    def cached = execution.getVariable('dxrValueFilterOn')
+    if (cached != null) { return cached.toString() == 'true' }
+    boolean on = false
+    try {
+        def ids = dxrModelIds()
+        on = relationTypeApi.exists(ids.valueFilterRelTypeId) && attributeTypeApi.exists(ids.valueFilterAttrTypeId)
+    } catch (Exception lookupEx) {
+        loggerApi.warn("Could not check for the extracted-value filter model: ${lookupEx.message}")
+    }
+    execution.setVariable('dxrValueFilterOn', on.toString())
+    return on
+}
+
+def valueFilterModelMessage() {
+    return 'Searching by extracted value needs the Extracted Value Filter attribute and the "searches values of" relation type. Ask an admin to run Configure DataXray Workflows once (v2.12 upgrade step), then try again.'
 }
 
 def fileClassRelationTypeId(Map ids) {

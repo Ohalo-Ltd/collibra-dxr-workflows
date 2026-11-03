@@ -7,6 +7,8 @@ The search / rerun scripts compose `/api/v1/files?q=` queries as:
     AND annotators.name:"A" AND annotators.name:"B"           # every criterion AND-ed
     AND annotators: { (name:"A" OR name:"C") AND annotations.phrase:"*text*" }
                                                               # phrase OR-ed across its annotators
+    AND extractedMetadata: { (name:"E" OR name:"F") AND value:"yes" }
+                                                              # extracted value (v2.12)
 
 This script proves those semantics against a live instance by comparing the
 fileId set of each composed query with the set algebra of its components
@@ -239,6 +241,33 @@ def main():
     # 8. Reversed clause order is irrelevant (guards against parser precedence surprises)
     sBA, _ = dxr.ids(f'{nm("annotators.name", B)} AND {nm("annotators.name", A)}')
     check('clause order irrelevant: files(B AND A) == files(A AND B)', sBA == sAB)
+
+    # 9. Extracted value (v2.12): extractedMetadata: { name:"E" AND value:"v" } —
+    #    name and value on the SAME entry, whole value, case-insensitive, * at the ends.
+    if E:
+        vals = collections.Counter(str(m.get('value')) for row in dxr.ids(nm('extractedMetadata.name', E))[1]
+                                   for m in row.get('extractedMetadata') or [] if m.get('name') == E)
+        if vals:
+            v = vals.most_common(1)[0][0]
+            ev = lambda val, names=(E,): ('extractedMetadata: { ' + (nm('name', names[0]) + ' AND ' if names else '')
+                                          + nm('value', val) + ' }')
+            sV, rV = dxr.ids(ev(v))
+            check(f'value: files(E = {v!r}) ⊆ files(E), every row has that value for E',
+                  sV <= sE and all(any(m.get('name') == E and str(m.get('value')).lower() == v.lower()
+                                       for m in row.get('extractedMetadata') or []) for row in rV),
+                  f'{len(sV)} rows, {vals[v]} expected')
+            sVu, _ = dxr.ids(ev(v.upper()))
+            check('value is case-insensitive: files(E = upper(v)) == files(E = v)', sVu == sV, f'{len(sVu)} vs {len(sV)}')
+            if len(v) > 1:
+                sVc, _ = dxr.ids(ev(f'*{v[1:]}*'))
+                check('value with * at both ends contains: files(*v[1:]*) ⊇ files(v)', sVc >= sV, f'{len(sVc)} ⊇ {len(sV)}')
+                sVp, _ = dxr.ids(ev(v[:-1]))
+                check('value without * is the whole value: files(v[:-1]) ∌ the v rows', not (sVp & sV) or v[:-1].lower() == v.lower(),
+                      f'{len(sVp & sV)} overlap')
+            sAll, _ = dxr.ids(ev(v, ()))
+            check('value with no extractor named ⊇ value in E', sAll >= sV, f'{len(sAll)} ⊇ {len(sV)}')
+        else:
+            print('SKIP  extracted value: E has no values on this instance')
 
     failed = [l for l, ok in results if not ok]
     print(f'\n{len(results) - len(failed)}/{len(results)} checks passed, {dxr.calls} API calls')

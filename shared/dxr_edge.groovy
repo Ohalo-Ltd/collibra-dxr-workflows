@@ -336,6 +336,7 @@ def tupleFromSearchHit(Map hit, Map index, Map dsNames, String baseUrl) {
     def upc = 'annotation_stats#unique_phrase_count.'
     def ext = 'extracted_metadata#'
     boolean valuesOn = extractedValuesOn()
+    def allowedValues = valuesOn ? extractedValueSources() : null   // null = every extractor (v2.12 allow-list)
     def values = []
     src.each { k, v ->
         def key = k.toString()
@@ -346,7 +347,7 @@ def tupleFromSearchHit(Map hit, Map index, Map dsNames, String baseUrl) {
             if (v != null && !v.toString().trim().isEmpty()) {
                 def n = key.substring(ext.length())
                 ref(index.extractorDxrIdByIndexId, n, 'extractor')
-                if (valuesOn) {
+                if (valuesOn && (allowedValues == null || allowedValues.indexIds.contains(n.toString()))) {
                     def uuid = (index.extractorDxrIdByIndexId ?: [:])[n]
                     def name = (uuid ? index.nameByDxrId[uuid] : null) ?: "extractor#${n}"
                     extractedValueTexts(v).each { text -> values << [name.toString(), text] }
@@ -379,9 +380,19 @@ def unknownDatasourceIds(List hits, Map dsNames) {
 // Every criterion is its own AND group (files must carry every one); the phrase
 // is one group whose items are OR-ed across the annotators it is searched in —
 // the same semantics dxr_query.groovy encodes as KQL for the on-prem variant.
-// Returns [items: List, unresolved: List<String>] — a criterion without a known
-// numeric index id is reported, never silently dropped.
-def composeEdgeQueryItems(Map criteria, List allAnnotatorIndexIds) {
+// Returns [items: List, unresolved: List<String>, invalid: List<String>] — a
+// criterion without a known numeric index id is reported, never silently dropped.
+//
+// Extracted value (v2.12): criteria.valueFilter (checked by parseValueFilter,
+// dxr_query.groovy) with criteria.valueFilterExtractorIndexIds/-Names is one
+// more group, OR-ed across the extractors it is searched in.
+// extractorCatalog: [indexIds: every extractor Collibra knows (searched when
+// none is picked), typeByIndexId: DataXray data type (TEXT/BOOLEAN/NUMBER,
+// from the extractor's Sub Type; unknown = TEXT)]. DataXray answers HTTP 500
+// to a text value on a boolean field, so a value is only searched in the
+// extractors whose type can hold it: a picked one that cannot is `invalid`;
+// with none picked, the others are left out (and if none is left, `invalid`).
+def composeEdgeQueryItems(Map criteria, List allAnnotatorIndexIds, Map extractorCatalog = null) {
     def items = []
     def unresolved = []
     int group = 0
@@ -418,7 +429,47 @@ def composeEdgeQueryItems(Map criteria, List allAnnotatorIndexIds) {
         }
         group++
     }
-    return [items: items, unresolved: unresolved]
+    def invalid = []
+    def spec = parseValueFilter(criteria.valueFilter)
+    if (!spec.ok) {
+        invalid << spec.error
+    } else if (!spec.empty) {
+        def typeOf = { n -> (((extractorCatalog?.typeByIndexId ?: [:])[n.toString()]) ?: 'TEXT').toString().toUpperCase() }
+        // [field type, match strategy, value] for an extractor of data type `dt`, or null when it cannot hold the value.
+        def itemFor = { String dt ->
+            if (dt == 'BOOLEAN') { return spec.literal == 'boolean' ? ['boolean', 'exact', spec.core.toLowerCase()] : null }
+            if (dt == 'NUMBER')  { return spec.literal == 'number'  ? ['number',  'exact', spec.core] : null }
+            return ['text', spec.strategy, spec.core]
+        }
+        def targets = []   // [indexId, item spec]
+        def picked = criteria.valueFilterExtractorIndexIds ?: []
+        if (picked.isEmpty()) {
+            (extractorCatalog?.indexIds ?: []).each { n ->
+                def it2 = itemFor(typeOf(n))
+                if (it2 != null) { targets << [n.toString(), it2] }
+            }
+            if (targets.isEmpty()) {
+                invalid << "No extractor can hold the extracted value '${spec.value}'.".toString()
+            }
+        } else {
+            picked.eachWithIndex { n, i ->
+                def name = nameAt(criteria.valueFilterExtractorNames, i)
+                if (!present(n)) { unresolved << "extracted-value extractor '${name}'".toString(); return }
+                def dt = typeOf(n)
+                def it2 = itemFor(dt)
+                if (it2 == null) {
+                    invalid << "Extractor '${name}' returns ${dt.toLowerCase()} values, so the extracted value '${spec.value}' cannot match it (use ${dt == 'BOOLEAN' ? 'true or false' : 'a number, without *'}).".toString()
+                } else {
+                    targets << [n.toString(), it2]
+                }
+            }
+        }
+        targets.eachWithIndex { tgt, i ->
+            items << edgeQueryItem("extracted_metadata#${tgt[0]}", tgt[1][2], tgt[1][0], tgt[1][1], i == 0 ? 'AND' : 'OR', group, i)
+        }
+        if (!targets.isEmpty()) { group++ }
+    }
+    return [items: items, unresolved: unresolved, invalid: invalid]
 }
 
 def edgeQueryItem(String parameter, Object value, String type, String matchStrategy, String operator, int groupId, int groupOrder) {

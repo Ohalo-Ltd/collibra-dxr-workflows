@@ -274,7 +274,8 @@ def syncClassificationCatalog(List classifications, String dataxrayUrl, Map opts
                 syncAttribute(attrErrors, assetId, ids.descriptionAttrTypeId, classification.description, 'description')
                 syncAttribute(attrErrors, assetId, ids.linkAttrTypeId,        classification.link       ? dataxrayUrl + classification.link       : null, 'link')
                 syncAttribute(attrErrors, assetId, ids.searchLinkAttrTypeId,  classification.searchLink ? dataxrayUrl + classification.searchLink : null, 'searchLink')
-                syncAttribute(attrErrors, assetId, ids.subtypeAttrTypeId,     classification.subtype, 'subtype')
+                // An extractor's Sub Type is its data type when the source knows it (Edge, v2.12).
+                syncAttribute(attrErrors, assetId, ids.subtypeAttrTypeId,     classification.dataType ?: classification.subtype, 'subtype')
             }
 
             if (!attrErrors.isEmpty()) {

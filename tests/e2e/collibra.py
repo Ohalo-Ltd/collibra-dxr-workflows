@@ -100,7 +100,7 @@ class Collibra:
         self.call("POST", "/attributes", json={"assetId": asset_id, "typeId": self.ids[type_key], "value": value})
 
     def rel_type(self, kind: str) -> str:
-        return self.ids["textFilterRelTypeId" if kind == "textFilter" else f"{kind}RelationTypeId"]
+        return self.ids[f"{kind}RelTypeId" if kind in ("textFilter", "valueFilter") else f"{kind}RelationTypeId"]
 
     def link(self, source, kind, target):
         return self.call("POST", "/relations", json={"sourceId": source, "targetId": target, "typeId": self.rel_type(kind)})["id"]

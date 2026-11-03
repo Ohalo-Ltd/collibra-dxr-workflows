@@ -55,7 +55,11 @@ relateAssets(queryId, toUuids(criteria.extractors), ids.groupsRelationTypeId)
 if (!filter.isEmpty()) {
     relateAssets(queryId, toUuids(criteria.filterAnnotators), ids.textFilterRelTypeId)
 }
-writeQueryAttributes(queryId, ids, (criteria.description ?: '').toString(), queryString, filter)
+def valueFilter = (criteria.valueFilter ?: '').toString()
+if (!valueFilter.isEmpty()) {
+    relateAssets(queryId, toUuids(criteria.valueFilterExtractors), ids.valueFilterRelTypeId)
+}
+writeQueryAttributes(queryId, ids, (criteria.description ?: '').toString(), queryString, filter, valueFilter)
 
 // --- Results file (ZIP'd CSV) ------------------------------------------------------
 

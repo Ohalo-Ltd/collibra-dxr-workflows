@@ -147,7 +147,14 @@ def SYNC_MODE_ATTR_ID     = '019e9212-9daa-75c7-b4e2-f04b6c7d8e89'
 // is true; the syncs write it only while it exists (extractedValuesOn).
 def EXTRACTED_VALUES_ATTR_ID = '019e9212-7b88-73a5-a2c0-ce2f4a5b6c67'
 def EXTRACTED_VALUES_ATTR_NAME = 'DataXray Extracted Values'
-def syncExtractorValues = (execution.getVariable('syncExtractorValues') ?: 'false').toString().trim().equalsIgnoreCase('true')
+// v2.12: 'tagged' copies only the values of extractors tagged dxrSyncValuesTag();
+// the mode is recorded in the attribute type's description (extractedValuesMode).
+def extractorValuesSetting = (execution.getVariable('syncExtractorValues') ?: 'false').toString().trim().toLowerCase()
+def extractorValuesTagged = extractorValuesSetting == 'tagged'
+def syncExtractorValues = extractorValuesSetting == 'true' || extractorValuesTagged
+if (!(extractorValuesSetting in ['true', 'false', 'tagged'])) {
+    loggerApi.warn("syncExtractorValues '${extractorValuesSetting}' is not true, false or tagged: treated as false")
+}
 
 // "returns / returned by" — links a DataXray Sync Filter asset (source) to
 // each DataXray File asset (target) it currently returns. Deliberately NOT
@@ -164,6 +171,14 @@ def RETURNS_RELTYPE_ID    = '019e9210-f180-79dc-b5a0-6c31e94f82d5'
 // scope the phrase (OR-ed among themselves). The rerun rebuilds the phrase
 // clause from these relations, so annotator renames flow through.
 def TEXT_FILTER_RELTYPE_ID = '019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'
+
+// v2.12: "searches values of / values searched by" — links a DataXray Sync
+// Filter (source) to each Extractor (target) its "Extracted value" filter is
+// searched in; the value itself is the Extracted Value Filter attribute. Same
+// role as TEXT_FILTER_RELTYPE_ID for annotators: these only scope the value
+// (OR-ed among themselves), the rerun rebuilds the clause from them.
+def VALUE_FILTER_RELTYPE_ID = '019e9212-c0dd-7b12-9e3f-2a4b5c6d7e81'
+def VALUE_FILTER_ATTR_ID    = '019e9212-bfcc-7a01-8d2e-1f3a4b5c6d70'
 
 // "formerly returns / formerly returned by" — a query→file link the rerun
 // swaps in when the query stops returning the file (and swaps back if it
@@ -289,9 +304,11 @@ def attrTypeDefs = [
     [id: SYNC_MODE_ATTR_ID,     name: 'DataXray Sync',         stringType: 'PLAIN_TEXT'],
     [id: QUERY_ATTR_ID,         name: 'DataXray Query',        stringType: 'PLAIN_TEXT'],
     [id: FILTER_ATTR_ID,        name: 'Annotated Text Filter', stringType: 'PLAIN_TEXT'],
+    [id: VALUE_FILTER_ATTR_ID,  name: 'Extracted Value Filter', stringType: 'PLAIN_TEXT'],
 ]
 if (syncExtractorValues) {
-    attrTypeDefs << [id: EXTRACTED_VALUES_ATTR_ID, name: EXTRACTED_VALUES_ATTR_NAME, stringType: 'RICH_TEXT']
+    attrTypeDefs << [id: EXTRACTED_VALUES_ATTR_ID, name: EXTRACTED_VALUES_ATTR_NAME, stringType: 'RICH_TEXT',
+                     description: dxrExtractedValuesDescription(extractorValuesTagged)]
 }
 
 // Which custom attribute types each asset type should surface on its page.
@@ -305,7 +322,8 @@ def assignmentDefs = [
                  [id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]], // formerly classifies files
     [assetTypeId: '019c9fbd-a91b-7242-9451-79ab632163a3', name: 'Extractor',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
-     relations: [[id: CLASSIFIED_BY_RELTYPE_ID,   direction: 'TO_SOURCE'],   // classifies files
+     relations: [[id: VALUE_FILTER_RELTYPE_ID,    direction: 'TO_SOURCE'],   // values searched by queries
+                 [id: CLASSIFIED_BY_RELTYPE_ID,   direction: 'TO_SOURCE'],   // classifies files
                  [id: FORMERLY_GROUPS_RELTYPE_ID, direction: 'TO_SOURCE']]],
     [assetTypeId: '019c9fbe-25c3-71b7-90ac-057dd582fa1e', name: 'Label',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, DXID_ATTR_ID, INDEX_ID_ATTR_ID],
@@ -318,11 +336,12 @@ def assignmentDefs = [
     // TO_SOURCE = this type is the target (page shows the co-role).
     [assetTypeId: '019dcf97-3bac-72c3-8b59-b6ddbe8a8396', name: 'DataXray Sync Filter',
      customAttrs: [LINK_ATTR_ID, SEARCH_LINK_ATTR_ID, SUBTYPE_ATTR_ID, FILES_ATTR_ID, DXID_ATTR_ID,
-                   QUERY_ATTR_ID, FILTER_ATTR_ID],
+                   QUERY_ATTR_ID, FILTER_ATTR_ID, VALUE_FILTER_ATTR_ID],
      relations: [[id: GROUPS_RELTYPE_ID,      direction: 'TO_TARGET'],   // groups classifications
                  [id: RETURNS_RELTYPE_ID,     direction: 'TO_TARGET'],   // returns files
                  [id: FORMERLY_RETURNS_RELTYPE_ID, direction: 'TO_TARGET'], // formerly returns files
-                 [id: TEXT_FILTER_RELTYPE_ID, direction: 'TO_TARGET']]], // searches text in annotators
+                 [id: TEXT_FILTER_RELTYPE_ID, direction: 'TO_TARGET'],    // searches text in annotators
+                 [id: VALUE_FILTER_RELTYPE_ID, direction: 'TO_TARGET']]], // searches values of extractors
     // descriptionMin 0: imported file assets carry no Description, so a
     // mandatory Description would flag every one of them as incomplete.
     [assetTypeId: FILE_TYPE_ID, name: 'DataXray File', descriptionMin: 0,
@@ -435,12 +454,13 @@ attrTypeDefs.each { a ->
         if (attributeTypeApi.exists(aid)) {
             skipped << "Attribute type '${a.name}'"
         } else {
-            attributeTypeApi.addAttributeType(AddAttributeTypeRequest.builder()
+            def req = AddAttributeTypeRequest.builder()
                 .id(aid)
                 .name(a.name)
                 .kind(AttributeKind.STRING)
                 .stringType(StringType.valueOf(a.stringType))
-                .build())
+            if (a.description) { req = req.description(a.description) }
+            attributeTypeApi.addAttributeType(req.build())
             created << "Attribute type '${a.name}'"
             loggerApi.info("Created attribute type ${a.name} [${a.id}]")
         }
@@ -450,7 +470,23 @@ attrTypeDefs.each { a ->
     }
 }
 
-// --- Phase 4a: extractor values switched off ----------------------------------
+// --- Phase 4a: extractor values: all / tagged, or switched off ------------------
+
+// On: make the recorded mode match the setting (the syncs read it from the
+// description), so switching between true and tagged needs no re-creation.
+if (syncExtractorValues) {
+    try {
+        def eid = string2Uuid(EXTRACTED_VALUES_ATTR_ID)
+        def want = dxrExtractedValuesDescription(extractorValuesTagged)
+        if (attributeTypeApi.exists(eid) && attributeTypeApi.getAttributeType(eid).getDescription() != want) {
+            attributeTypeApi.changeAttributeType(ChangeAttributeTypeRequest.builder().id(eid).description(want).build())
+            created << "Extractor values now copied for ${extractorValuesTagged ? "extractors tagged ${dxrSyncValuesTag()} only" : 'every extractor'} (from the next sync of each file)".toString()
+        }
+    } catch (Exception e) {
+        failed << "Recording the extractor values mode: ${e.message}"
+        loggerApi.error("set extractor values mode failed: ${e.message}")
+    }
+}
 
 // Deleting the attribute type removes every value with it and takes it off the
 // DataXray File assignment (verified on ohalo.collibra.com, 23 Oct 2026).
@@ -513,6 +549,28 @@ try {
 } catch (Exception e) {
     failed << "Relation type 'searches text in / text searched by': ${e.message}"
     loggerApi.error("ensure text-filter relation type failed: ${e.message}")
+}
+
+// "DataXray Sync Filter searches values of Extractor" (v2.12) — scopes the
+// query's extracted-value filter to specific extractors (see VALUE_FILTER_RELTYPE_ID).
+try {
+    def rtid = string2Uuid(VALUE_FILTER_RELTYPE_ID)
+    if (relationTypeApi.exists(rtid)) {
+        skipped << "Relation type 'searches values of / values searched by'"
+    } else {
+        relationTypeApi.addRelationType(AddRelationTypeRequest.builder()
+            .id(rtid)
+            .sourceTypeId(string2Uuid(QUERY_TYPE_ID))
+            .role('searches values of')
+            .targetTypeId(string2Uuid('019c9fbd-a91b-7242-9451-79ab632163a3'))
+            .coRole('values searched by')
+            .build())
+        created << "Relation type 'searches values of / values searched by'"
+        loggerApi.info("Created relation type searches values of/values searched by [${VALUE_FILTER_RELTYPE_ID}]")
+    }
+} catch (Exception e) {
+    failed << "Relation type 'searches values of / values searched by': ${e.message}"
+    loggerApi.error("ensure value-filter relation type failed: ${e.message}")
 }
 
 // "classified by / classifies" (file → classification, v2.11), and the
@@ -888,12 +946,31 @@ def htmlSection = { String title, List items ->
     return "<p><b>${title}:</b></p><ul>${lis}</ul>"
 }
 
+// Extractor values setting (v2.12): always stated, so an admin sees where it is
+// and what it does without opening the settings page.
+def valuesLine
+if (!syncExtractorValues) {
+    valuesLine = "<p><b>Extractor values:</b> off. To copy extractor values onto file assets for display, set this workflow's <i>Sync extractor values to file assets</i> variable (Settings → Workflows → Definitions → Configure DataXray Workflows → Variables) to <code>true</code> or <code>tagged</code> and run it again.</p>"
+} else if (!extractorValuesTagged) {
+    valuesLine = "<p><b>Extractor values:</b> copied for every extractor, for display. Set the variable to <code>tagged</code> to copy only the extractors tagged <code>${dxrSyncValuesTag()}</code>.</p>"
+} else {
+    int taggedCount = 0
+    try {
+        taggedCount = assetApi.findAssets(com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest.builder()
+            .typeIds([string2Uuid('019c9fbd-a91b-7242-9451-79ab632163a3')]).tagNames([dxrSyncValuesTag()]).limit(1000).build()).getResults().size()
+    } catch (Exception e) {
+        loggerApi.warn("count of tagged extractors failed: ${e.message}")
+    }
+    valuesLine = "<p><b>Extractor values:</b> copied, for display, only for the ${taggedCount} extractor(s) tagged <code>${dxrSyncValuesTag()}</code>. Tag or untag an extractor asset to change that; each file follows on its next sync.</p>"
+}
+
 def detail = ''
 detail += htmlSection('Created', created)
 detail += htmlSection('Access &amp; run roles configured', configured)
 detail += htmlSection('Already present', skipped)
 detail += htmlSection('Failed', failed)
 if (detail.isEmpty()) { detail = '<p>Nothing to do.</p>' }
+detail += valuesLine
 
 execution.setVariable('configureCreatedCount', created.size())
 execution.setVariable('configureSkippedCount', skipped.size())

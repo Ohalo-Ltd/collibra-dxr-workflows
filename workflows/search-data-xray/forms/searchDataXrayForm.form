@@ -41,7 +41,7 @@
         {
           "designInfo": { "stencilSuperIds": ["Output"], "stencilId": "cloud-output" },
           "label": "Search query",
-          "value": "<p>Create a query that satisfies <b>all</b> selected criteria: every label, extractor and annotator you pick must match (AND query). The only OR is the optional annotated text, which matches if it appears in <i>any</i> of the annotators chosen for it.</p>",
+          "value": "<p>Create a query that satisfies <b>all</b> selected criteria: every label, extractor and annotator you pick must match (AND query). The only ORs are inside the optional annotated text and extracted value: each matches if it appears in <i>any</i> of the annotators or extractors chosen for it.</p>",
           "defaultValue": false,
           "size": 12,
           "ignore": false,
@@ -81,6 +81,7 @@
         {
           "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
           "label": "Extractor",
+          "description": "Matches every file this extractor produced a value for, whatever the value. To match the value itself (for example only the “Yes” answers), use Extracted value below.",
           "value": "{{extractor}}",
           "size": 12,
           "ignore": false,
@@ -165,12 +166,56 @@
           "type": "asset"
         }
       ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["cloud-text"], "stencilId": "cloud-text" },
+          "label": "Extracted value",
+          "description": "Matches the value an extractor returned, as a whole and ignoring case: “yes” finds “Yes” but not “Yes, partly”. Put * at the start and/or end to match part of the value: “*invoice*” finds any value containing “invoice”, “inv*” any value starting with it. For true/false (boolean) extractors enter true or false. Searched in the extractors picked in the next field — a file matches when any one of them has this value. If none are picked, all extractors are searched. Long free-text values (more than a few hundred characters) cannot be searched.",
+          "value": "{{valueFilter}}",
+          "placeholder": "e.g. Yes, or *invoice*",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "tabIndex": 0,
+          "extraSettings": { "useDelay": true, "delay": 200 },
+          "id": "valueFilter",
+          "type": "text"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": { "stencilSuperIds": ["base-component"], "stencilId": "collibra-asset" },
+          "label": "Extracted value extractors",
+          "description": "Which extractors the extracted value is looked for in (OR: any one of them may have it). Independent of the Extractor criterion above. Ignored when no extracted value is entered; leave empty to search all extractors.",
+          "value": "{{valueFilterExtractor}}",
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "extraSettings": {
+            "storage": "Id",
+            "multiValue": true,
+            "assetTypeIds": ["019c9fbd-a91b-7242-9451-79ab632163a3"],
+            "assetTypeInheritance": true,
+            "excludeMeta": true
+          },
+          "id": "valueFilterExtractor",
+          "type": "asset"
+        }
+      ]
     }
   ],
   "metadata": {
     "key": "searchDataXrayForm",
     "name": "Search DataXray",
-    "description": "Pick the labels, extractors and annotators (plus optional annotated text and the annotators to search it in) to build a DataXray search query.",
+    "description": "Pick the labels, extractors and annotators (plus optional annotated text and the annotators to search it in, and an optional extracted value and the extractors to look for it in) to build a DataXray search query.",
     "version": "1",
     "modelType": "form",
     "flowableDesignVersion": 3110,

@@ -165,14 +165,15 @@ if (!criteria.deadCriteria.isEmpty()) {
 }
 if (!criteria.hasCriteria) {
     abort('Rerun DataXray Search — no saved criteria',
-        "Cannot rerun '${conditionName}': it has no linked classifications and no annotated-text filter, so its criteria cannot be reconstructed. Create a new search instead.")
+        "Cannot rerun '${conditionName}': it has no linked classifications, no annotated-text filter and no extracted-value filter, so its criteria cannot be reconstructed. Create a new search instead.")
     return
 }
 
 // --- Compose the query (same composition rules as search_data_xray.groovy) ----------
 
 def queryString = composeDxrQuery(criteria.labelNames, criteria.extractorNames, criteria.annotatorNames,
-                                  criteria.filter, criteria.filterAnnotatorNames)
+                                  criteria.filter, criteria.filterAnnotatorNames,
+                                  criteria.valueFilter, criteria.valueFilterExtractorNames)
 loggerApi.info("Rerun of '${conditionName}' — rebuilt DataXray query: ${displayQuery(queryString)}")
 // Written to the DataXray Query attribute once the options are applied (applyRerunOptions).
 execution.setVariable('rerunQueryDisplay', displayQuery(queryString))
