@@ -10,14 +10,13 @@
 // The Search Results task sets them when a search is created, and (v2.10) the
 // Rerun Options task of every manual rerun shows them again and writes the
 // user's choice back, so they can be changed at any time without recreating
-// the search (TRC, 2 Nov 2026).
+// the search.
 //
 // Each file asset says whether it is kept in sync in its DataXray Sync
-// attribute (syncModeAttrOn, dxr_model.groovy). The rule, agreed with Colin
-// Walker on 2 Nov 2026: a file is "Kept in sync nightly" when at least one
-// sync filter that still returns it is kept in sync nightly — sync wins over
-// one-time import — and "One-time import" otherwise (including a file no search
-// returns any more: nothing refreshes it).
+// attribute (syncModeAttrOn, dxr_model.groovy). The rule: a file is "Kept in
+// sync nightly" when at least one sync filter that still returns it is kept in
+// sync nightly — sync wins over one-time import — and "One-time import"
+// otherwise (including a file no search returns any more: nothing refreshes it).
 
 // {{include:dxr_model.groovy}}
 // {{include:collibra_lookup.groovy}}

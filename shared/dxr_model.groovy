@@ -195,11 +195,11 @@ def objectKeyAttrOn() {
     return on
 }
 
-// The DataXray Sync attribute (v2.10, TRC 2 Nov 2026): whether a file asset is
+// The DataXray Sync attribute (v2.10): whether a file asset is
 // refreshed every night or was a one-time import, so a person can tell when its
 // attributes may be stale. A file is kept in sync when at least one sync filter
-// that still returns it is kept in sync nightly (sync wins over one-time import,
-// agreed with Colin Walker, 2 Nov 2026; querySyncedNightly in query_flags.groovy).
+// that still returns it is kept in sync nightly (sync wins over one-time import;
+// querySyncedNightly in query_flags.groovy).
 // Configure creates the attribute type; a sync writes it only while the type
 // exists (cached in dxrSyncModeAttrOn), like objectKeyAttrOn.
 def dxrSyncModeKeptInSync() { return 'Kept in sync nightly' }

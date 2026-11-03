@@ -220,7 +220,7 @@ def test_configure_twice_keeps_names_and_reruns_still_work(edge, lifecycle_searc
     assert all(c.linked(s["query"], "returns", f) for f in s["files"])
 
 
-# --- v2.10: Rerun Options task and DataXray Sync (TRC, 2 Nov 2026) -----------------------------------------
+# --- v2.10: Rerun Options task and DataXray Sync -----------------------------------------
 
 def test_rerun_options_change_the_tags_and_dataxray_sync(edge, lifecycle_search, track):
     """RERUN-OPT-1/3, SYNC-1/3: the options task comes first and its choices are written back as tags."""
