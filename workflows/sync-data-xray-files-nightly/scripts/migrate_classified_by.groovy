@@ -3,7 +3,7 @@
 // ASYNC task of Sync DataXray Files (Nightly), right after the driver (v2.11).
 // Moves the integration's file → classification links from Collibra's
 // built-in "groups" type to the pack's "classified by / classifies" type
-// (TRC, 2 Nov 2026: the wording "groups / is grouped by" was confusing).
+// (the wording "groups / is grouped by" was confusing).
 // Reruns already move the links of every file they touch (reconcileFileGroups);
 // this catches the rest — files no search reruns, one-time imports — so an
 // instance converges within a night or two of running Configure.

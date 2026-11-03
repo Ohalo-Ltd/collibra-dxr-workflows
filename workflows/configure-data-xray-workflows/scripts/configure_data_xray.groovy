@@ -171,10 +171,10 @@ def TEXT_FILTER_RELTYPE_ID = '019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'
 def FORMERLY_RETURNS_RELTYPE_ID = '019e9212-1b22-7d4f-8c3a-6e5f7a8b9c01'
 
 // "classified by / classifies" (v2.11) — DataXray File → classification (Data
-// Asset): "File classified by Label", "Label classifies File" (TRC, agreed
-// with Collibra on 2 Nov 2026; Collibra's "groups / is grouped by" read as
-// confusing). Before v2.11 these links used the system "groups" type; syncs
-// and the files nightly move the integration's links over.
+// Asset): "File classified by Label", "Label classifies File" (Collibra's
+// "groups / is grouped by" read as confusing). Before v2.11 these links used
+// the system "groups" type; syncs and the files nightly move the integration's
+// links over.
 def CLASSIFIED_BY_RELTYPE_ID    = '019e9212-aebb-77e9-9f14-026d8e9fa0ab'
 
 // "formerly classified by / formerly classifies" — the same for a

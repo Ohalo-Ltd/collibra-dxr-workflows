@@ -86,7 +86,7 @@ test('links to other classifications are left as they are') {
     assert links('formerlyGroups', [source: f])*.targetId == [dropped]
 }
 
-// --- v2.11: "classified by / classifies" replaces "groups" for file links (TRC, 2 Nov 2026) ------
+// --- v2.11: "classified by / classifies" replaces "groups" for file links ------
 
 test('LINK-1: an integration-made groups link that still applies is moved to classified by') {
     def f = fileAsset('f1')

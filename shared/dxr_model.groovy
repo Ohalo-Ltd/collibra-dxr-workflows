@@ -218,9 +218,9 @@ def syncModeAttrOn() {
     return on
 }
 
-// The file → classification link type (v2.11, TRC 2 Nov 2026: "groups / is
-// grouped by" read as confusing; Colin Walker and Collibra agreed "File
-// classified by Label" / "Label classifies File"). Collibra's built-in
+// The file → classification link type (v2.11: "groups / is grouped by" read
+// as confusing, so file links read "File classified by Label" / "Label
+// classifies File"). Collibra's built-in
 // "groups" (7017) is shared with every other use on the instance and keeps
 // linking sync filters to their criteria; file links get the pack's own
 // "classified by / classifies" type, which Configure creates. Until it has,
