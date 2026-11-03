@@ -38,8 +38,7 @@ To import, enable and configure workflows you need a Collibra account with one o
 
 The DataXray user whose Bearer token the workflows use needs **level 2**
 access (or higher) to each datasource the workflows should see: with less,
-DataXray returns its files without their classifications (found in TRC's
-testing, 2 Nov 2026).
+DataXray returns its files without their classifications.
 
 ---
 
