@@ -42,7 +42,7 @@ test('configuration placeholders count as unset') {
     assert normalizeBaseUrl(' https://dxr.example/// ') == 'https://dxr.example'
 }
 
-// --- Rerun DataXray Search's settings come from Search DataXray (v2.10.1, ADM-10) ---------
+// --- Rerun DataXray Search's settings come from Search DataXray (v2.11.1, ADM-10) ---------
 
 test('adoptSearchDataXraySettings copies the URL and token (on-prem) / connection (Edge) set on Search DataXray') {
     settings('searchDataXray', [dataxrayUrl: 'https://dxr.example.com', dataxrayAuthToken: 'prod-token',

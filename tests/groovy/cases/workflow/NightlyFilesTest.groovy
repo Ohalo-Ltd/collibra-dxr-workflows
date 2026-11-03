@@ -123,7 +123,13 @@ test('a failed relation scan aborts the sweep: nothing is parked on a partial pi
     def orphan = fileAsset('orphan')
     fx.maxPageSize = 1                                      // two relations: the scan needs two pages
     int calls = 0
-    fx.before('relationApi.findRelations') { args -> if (++calls == 2) { throw new RuntimeException('timeout on page 2') } }
+    // Page 2 of the sweep's scan of every returns link (the link migration, which runs first, scans other types).
+    fx.before('relationApi.findRelations') { args ->
+        def r = args[0].props
+        if (r.relationTypeId == ids.returnsRelationTypeId && r.sourceId == null && r.targetId == null && ++calls == 2) {
+            throw new RuntimeException('timeout on page 2')
+        }
+    }
 
     def run = nightly(delegate)
 
@@ -196,6 +202,91 @@ test('SYNC-7: DataXray Sync is kept current even when the rerun workflow is miss
     assert attr(f, 'syncMode') == 'Kept in sync nightly'
 }
 
+// --- v2.11: moving file links to "classified by" ------------------------------------------------
+
+test('LINK-4: the nightly moves the integration\'s file links from groups to classified by, and nothing else') {
+    def label = classification('Contacts')
+    def other = classification('Other')
+    def q = query('Search', labels: [label])                 // a sync filter's criterion: stays groups
+    def f = fileAsset('f')                                   // a one-time import no rerun touches
+    link(f, 'groups', label)
+    link(f, 'groups', other, by: 'person')
+
+    def run = nightly(delegate)
+
+    assert linked(f, 'classifiedBy', label) && !linked(f, 'groups', label)
+    assert linked(f, 'groups', other) && !linked(f, 'classifiedBy', other)
+    assert linked(q, 'groups', label)
+    assert run.var('nightlyLinksMigrated') == 1
+    assert fx.relations.values().find { it.typeId == ids.classifiedByRelationTypeId }.createdBy == WORKFLOW_USER
+    // Each link is re-read on its own (file AND classification), not by reloading all the file's links.
+    def rereads = fx.calls.findAll { it[0] == 'relationApi.findRelations' && it[1][0].props.relationTypeId == ids.groupsRelationTypeId && it[1][0].props.sourceId == f }
+    assert rereads && rereads.every { it[1][0].props.targetId != null }
+}
+
+test('LINK-4: a file already linked with classified by just loses its groups twin') {
+    def label = classification('Contacts')
+    def f = fileAsset('f')
+    link(f, 'classifiedBy', label)
+    link(f, 'groups', label)
+
+    nightly(delegate)
+
+    assert linked(f, 'classifiedBy', label) && !linked(f, 'groups', label)
+}
+
+test('LINK-6: the nightly moves the links before it starts any rerun, so no rerun reconciles them meanwhile') {
+    def label = classification('Contacts')
+    def q = query('Synced', tags: ['dataxray-keep-in-sync'], labels: [label])
+    def f = fileAsset('f')
+    link(q, 'returns', f)
+    link(f, 'groups', label)
+    def groupsAtFanOut = null
+    fx.before('workflowInstanceApi.startWorkflowInstances') { args ->
+        if (groupsAtFanOut == null) { groupsAtFanOut = links('groups', [source: f]).size() }
+    }
+
+    nightly(delegate)
+
+    assert fx.startedInstances.size() == 1
+    assert groupsAtFanOut == 0                               // already moved when the rerun was started
+    assert linked(f, 'classifiedBy', label)
+}
+
+test('LINK-6: a link that changed between the scan and its move is left to the file\'s next sync') {
+    def label = classification('Contacts')
+    def f = fileAsset('f')
+    def legacy = link(f, 'groups', label)
+    // A manual rerun swaps it to formerly right after the nightly's scan.
+    boolean swapped = false
+    fx.before('relationApi.findRelations') { args ->
+        if (!swapped && args[0].props.sourceId == f) {
+            swapped = true
+            fx.relations.remove(legacy)
+            link(f, 'formerlyGroups', label)
+        }
+    }
+
+    def run = nightly(delegate)
+
+    assert !linked(f, 'classifiedBy', label)                  // not recreated from the stale scan
+    assert linked(f, 'formerlyGroups', label)
+    assert run.var('nightlyLinksMigrated') == 0
+    assert logged('INFO', 'changed since the scan')
+}
+
+test('LINK-3: before Configure has created classified by, the nightly moves nothing') {
+    fx.relationTypes.remove(ids.classifiedByRelationTypeId)
+    def label = classification('Contacts')
+    def f = fileAsset('f')
+    link(f, 'groups', label)
+
+    def run = nightly(delegate)
+
+    assert linked(f, 'groups', label)
+    assert run.var('nightlyLinksMigrated') == 0
+}
+
 test(variant: 'edge', 'story 31 / NIGHT-8: a parked file deleted in DataXray becomes Not in DataXray') {
     def gone = fileAsset('gone', status: ids.notInAnySearchStatusId, ds: '312', obj: 'obj-gone')
     def kept = fileAsset('kept', status: ids.notInAnySearchStatusId, ds: '312', obj: 'obj-kept')
@@ -225,13 +316,13 @@ test(variant: 'edge', 'NIGHT-11: a file no search returns gets its classificatio
     def label = classification('Contacts', 'label', indexId: '7')
     def email = classification('Email', 'annotator', indexId: '12')
     def f = fileAsset('f1', status: ids.notInAnySearchStatusId, ds: '312', obj: 'obj-f1')
-    link(f, 'groups', label)                                // DataXray no longer has the label on it
+    link(f, 'classifiedBy', label)                                // DataXray no longer has the label on it
     dxrFile('f1', annotators: ['12': 2], size: 4096)
 
     def run = nightly(delegate)
 
-    assert !linked(f, 'groups', label) && linked(f, 'formerlyGroups', label)
-    assert linked(f, 'groups', email)
+    assert !linked(f, 'classifiedBy', label) && linked(f, 'formerlyGroups', label)
+    assert linked(f, 'classifiedBy', email)
     assert attr(f, 'fileSize') == '4.0 KB (4,096 bytes)'
     assert status(f) == 'Not in any search'
     assert run.var('existsRefreshed') == 1

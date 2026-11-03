@@ -45,7 +45,7 @@ test(variant: 'edge', 'a rerun imports the matching files and stops at its summa
     assert run.var('importCreatedCount') == 2
     assert fileAssets() as Set == [assetIdOf('f1'), assetIdOf('f2')] as Set
     assert linked(s.q, 'returns', assetIdOf('f1'))
-    assert linked(assetIdOf('f2'), 'groups', s.label) && linked(assetIdOf('f2'), 'groups', s.email)
+    assert linked(assetIdOf('f2'), 'classifiedBy', s.label) && linked(assetIdOf('f2'), 'classifiedBy', s.email)
 }
 
 test(variant: 'edge', 'file assets carry the Full Object ID, datasource name and readable size (R1, R22)') {
@@ -95,8 +95,8 @@ test(variant: 'edge', 'story 28/29: a file whose label was removed is parked and
     def a2 = assetIdOf('f2')
     assert status(a2) == 'Not in any search'
     assert !linked(s.q, 'returns', a2) && linked(s.q, 'formerlyReturns', a2)
-    assert !linked(a2, 'groups', s.label) && linked(a2, 'formerlyGroups', s.label)
-    assert linked(a2, 'groups', s.email)
+    assert !linked(a2, 'classifiedBy', s.label) && linked(a2, 'formerlyGroups', s.label)
+    assert linked(a2, 'classifiedBy', s.email)
     assert run.var('rerunExistsRan') == true && run.var('existsRefreshed') == 1
     assert status(assetIdOf('f1')) == 'Candidate'
     assert run.task.missingFormVariables == []
@@ -160,7 +160,7 @@ test(variant: 'edge', 'a file matching again is reactivated and its link swapped
 
     assert status(assetIdOf('f1')) == 'Candidate'
     assert linked(s.q, 'returns', assetIdOf('f1')) && !linked(s.q, 'formerlyReturns', assetIdOf('f1'))
-    assert linked(assetIdOf('f1'), 'groups', s.label) && !linked(assetIdOf('f1'), 'formerlyGroups', s.label)
+    assert linked(assetIdOf('f1'), 'classifiedBy', s.label) && !linked(assetIdOf('f1'), 'formerlyGroups', s.label)
 }
 
 // --- zero results --------------------------------------------------------------------------
@@ -567,7 +567,7 @@ test(variant: 'edge', 'RERUN-OPT-8: switching keep in sync off updates DataXray 
     assert attr(known, 'syncMode') == 'One-time import'
 }
 
-// --- Settings come from Search DataXray (v2.10.1) ----------------------------------------
+// --- Settings come from Search DataXray (v2.11.1) ----------------------------------------
 // Collibra refuses to save the rerun's own settings page once Configure has given
 // the asset-scoped workflow global start roles (workflowWrongRoles), so it has none.
 

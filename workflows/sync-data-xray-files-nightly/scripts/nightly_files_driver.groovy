@@ -48,7 +48,7 @@
 //
 // This script never calls DataXray, so it ships unchanged in both editions.
 // Each rerun instance it starts uses the connection settings configured on the
-// Search DataXray workflow (v2.10.1; the rerun has none of its own) — the Base
+// Search DataXray workflow (v2.11.1; the rerun has none of its own) — the Base
 // URL / Bearer token on-prem, the Edge HTTP connection name in the Collibra
 // Cloud + Edge edition. The Edge
 // edition then runs a third phase after this script, with its own connection

@@ -61,7 +61,7 @@ def abort = { String title, String message ->
 
 // --- Config -----------------------------------------------------------------------
 
-// The connection settings are Search DataXray's (v2.10.1; dxr_config.groovy).
+// The connection settings are Search DataXray's (v2.11.1; dxr_config.groovy).
 // The External API tasks name their connection with ${dataxrayConnectionName},
 // which resolves to the process variable set here.
 def adopted = adoptSearchDataXraySettings(['dataxrayConnectionName', 'dataxrayUrl', 'dataxrayPageSize'])

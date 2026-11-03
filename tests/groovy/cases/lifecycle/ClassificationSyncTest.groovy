@@ -29,26 +29,26 @@ test('a rename in DataXray renames the same asset, keeping its links (CAT-2, sto
     sync(delegate, [item(id: 'l-1', name: 'Contacts')])
     def label = assetByDxrId(delegate, 'l-1')
     def f = fileAsset('f1')
-    link(f, 'groups', label)
+    link(f, 'classifiedBy', label)
 
     sync(delegate, [item(id: 'l-1', name: 'Contacted')])
 
     assert assetByDxrId(delegate, 'l-1') == label
     assert fx.assets[label].name == 'Contacted'
-    assert linked(f, 'groups', label)
+    assert linked(f, 'classifiedBy', label)
 }
 
 test('a classification deleted in DataXray is retired (Obsolete), never deleted (CAT-3, story 8)') {
     sync(delegate, [item(id: 'l-1', name: 'Contacts'), item(id: 'l-2', name: 'Kept')])
     def gone = assetByDxrId(delegate, 'l-1')
     def f = fileAsset('f1')
-    link(f, 'groups', gone)
+    link(f, 'classifiedBy', gone)
 
     def r = sync(delegate, [item(id: 'l-2', name: 'Kept')])
 
     assert r.retired == 1
     assert status(gone) == 'Obsolete'
-    assert linked(f, 'groups', gone)
+    assert linked(f, 'classifiedBy', gone)
 }
 
 test('a retired classification that reappears is reactivated (CAT-4)') {
@@ -114,7 +114,7 @@ test('a classification moved to another community is updated where it is, not du
     def elsewhere = otherDomain('Business Glossary')
     fx.assets[label].domainId = elsewhere
     def f = fileAsset('f1')
-    link(f, 'groups', label)
+    link(f, 'classifiedBy', label)
 
     def r = sync(delegate, [item(id: 'l-1', name: 'Contacts renamed', description: 'v2')])
 
@@ -122,7 +122,7 @@ test('a classification moved to another community is updated where it is, not du
     assert fx.assets.values().count { it.typeId == ids.labelTypeId } == 1
     assert fx.assets[label].domainId == elsewhere
     assert fx.assets[label].name == 'Contacts renamed'
-    assert linked(f, 'groups', label)
+    assert linked(f, 'classifiedBy', label)
 }
 
 test('a moved classification deleted in DataXray is retired where it is (CAT-11)') {

@@ -39,7 +39,7 @@ def normalizeBaseUrl(Object url) {
     return (url == null ? '' : url.toString()).trim().replaceAll('/+$', '')
 }
 
-// --- Settings borrowed from Search DataXray (v2.10.1) ------------------------
+// --- Settings borrowed from Search DataXray (v2.11.1) ------------------------
 //
 // Rerun DataXray Search declares no DataXray settings of its own: Collibra
 // refuses every change to its definition — including saving its settings

@@ -16,7 +16,8 @@ Terminology used throughout:
 | **Query asset** | An asset of type **DataXray Sync Filter** in the **DataXray Sync Filter** domain. Created by **Search DataXray**; one per saved search. |
 | **Returns** | The relation from a query asset to each file asset its search currently matches (*query* **returns** *file* / *file* **returned by** *query*). This is the integration's record of "which searches this file belongs to". |
 | **Formerly returns** | The relation a *returns* link becomes when the search stops matching the file (*query* **formerly returns** *file* / *file* **formerly returned by** *query*). It is a record only: it never counts as the file being returned. |
-| **Formerly groups** | The same for a classification link: when DataXray no longer finds a label, extractor or annotator on a file, the file's *groups* link to it becomes *file* **formerly groups** *classification* / *classification* **formerly grouped by** *file*. |
+| **Classified by** | The relation from a file asset to each label, extractor or annotator DataXray finds on it (*file* **classified by** *classification* / *classification* **classifies** *file*). Releases before v2.11 used Collibra's *groups / is grouped by* relation; see [Classification links before v2.11](#classification-links-before-v211). |
+| **Formerly classified by** | The relation a *classified by* link becomes when DataXray no longer finds that classification on the file (*file* **formerly classified by** *classification* / *classification* **formerly classifies** *file*). Called *formerly groups / formerly grouped by* before v2.11. |
 | **Active** | Collibra status **Candidate** — the status every file asset is created with and set back to when a search matches it again. |
 | **Not in any search** | A status created by **Configure DataXray Workflows** for file assets that no saved search returns any more. The asset and everything attached to it (attributes, relations, comments, attachments, history) is kept. Releases before v2.4 used **Obsolete** for this. |
 | **Status set by a person** | Any status other than Candidate, Not in any search and Obsolete (for example Accepted, Under Review or Approval Pending). The integration never changes it. |
@@ -137,7 +138,7 @@ What the import does, per matching file:
 4. **Links it to the query** with a *returns* relation — the record that this
    search currently matches this file.
 5. **Links it to the classifications it matched** (labels, extractors and
-   annotators, using Collibra's *groups / is grouped by* relation) — but only
+   annotators, with the *classified by / classifies* relation) — but only
    where the DataXray result carries positive evidence: a label applied to
    the file, an extractor that produced metadata, an annotator with at least
    one hit. An annotator that was *checked* but found nothing is not a match
@@ -372,8 +373,8 @@ results, and then for each matching file:
 | File renamed or moved, and DataXray assigned a new file id (e.g. on an SMB share) | A **new** asset is created; the old one drops out of the search as described below. |
 | Size / last-modified changed | Attributes refreshed. |
 | A person renamed the asset in Collibra | Kept. Syncs never change an asset's name after creating it; DataXray's name is in the DataXray File Name attribute. Any **attribute** a person changes in Collibra is overwritten by the next sync. |
-| A label was added, or an annotator/extractor now has hits | A *groups* relation to that classification is **added**. If the file had a *formerly groups* link to it, that link is replaced. If a person already linked the file to that classification, nothing is added. |
-| A label was removed, or a classification no longer has hits on the file | The *groups* relation becomes **formerly groups**, so the change stays visible on the file asset. This applies only to links the integration created; see below. |
+| A label was added, or an annotator/extractor now has hits | A *classified by* relation to that classification is **added**. If the file had a *formerly classified by* link to it, that link is replaced. If a person already linked the file to that classification, nothing is added. |
+| A label was removed, or a classification no longer has hits on the file | The *classified by* relation becomes **formerly classified by**, so the change stays visible on the file asset. This applies only to links the integration created; see below. |
 | A person linked the file to a classification by hand | The link is never removed or changed, whatever DataXray reports. |
 | The file had status **Not in any search** (or **Obsolete**, from a release before v2.4) and matches again | The status goes back to **Candidate**, history intact, and this query's *formerly returns* link becomes *returns* again. |
 | A person set the file asset's status (Accepted, Under Review, …) | The status is kept. Attributes and relations are still refreshed and links are still swapped. |
@@ -381,13 +382,30 @@ results, and then for each matching file:
 
 **Which links count as the integration's own.** Collibra records who created
 each relation. The integration's background tasks run as Collibra's built-in
-**Workflow** user, so every *groups* link the integration creates is recorded
+**Workflow** user, so every *classified by* link the integration creates is recorded
 as created by that user, and those are the only file-to-classification links a
 sync ever removes or swaps. A link created by a person (or by any other
 process) is left exactly as it is. One caveat: links created by your **own**
 Collibra workflows are also recorded as created by the Workflow user, so the
 integration cannot tell them apart from its own and may swap them to
-*formerly groups* when DataXray no longer reports the classification.
+*formerly classified by* when DataXray no longer reports the classification.
+
+### Classification links before v2.11
+
+Until v2.11, file assets were linked to their classifications with Collibra's
+built-in *groups / is grouped by* relation, which read as unclear on the
+asset pages. v2.11 uses its own **classified by / classifies** relation for
+these links ("*Report.pdf* classified by *Contacts*", "*Contacts* classifies
+*Report.pdf*"), and renames *formerly groups / formerly grouped by* to
+**formerly classified by / formerly classifies**. Saved searches keep linking
+their criteria with *groups*.
+
+After **Configure DataXray Workflows** has run on v2.11, the integration's old
+*groups* links on file assets are moved to *classified by* as each file is
+synced, and the nightly file sync moves the rest (up to 20,000 a night). A
+*groups* link a **person** created stays exactly as it is, and still counts as
+linking the file to that classification, so no second link is added. Until
+Configure has run, file links keep using *groups*.
 
 ### Rerun Options: changing a search's options on any rerun
 
@@ -510,7 +528,7 @@ returned* vs *In no search*):
 | Scenario | Outcome |
 |---|---|
 | File deleted in DataXray | Disappears from every search's results → each search's link becomes *formerly returns* as it reruns → Not in any search once the last one has rerun → in the Cloud + Edge edition, **Not in DataXray** at the end of that same rerun, which asks DataXray about every file it parks (see [3](#3-dataxray-no-longer-has-the-file-cloud--edge)). |
-| File changed so it no longer meets the criteria (e.g. a label removed) | That query's link becomes *formerly returns*; the status changes only if no other query returns it. Its link to the removed label becomes *formerly groups* when the file is next re-synced: by the rerun of another search that still returns it, or, in the Cloud + Edge edition, by the check the rerun that parked it runs at its end (see [3](#3-dataxray-no-longer-has-the-file-cloud--edge)). In the on-prem edition a file no search returns keeps its links as they were. |
+| File changed so it no longer meets the criteria (e.g. a label removed) | That query's link becomes *formerly returns*; the status changes only if no other query returns it. Its link to the removed label becomes *formerly classified by* when the file is next re-synced: by the rerun of another search that still returns it, or, in the Cloud + Edge edition, by the check the rerun that parked it runs at its end (see [3](#3-dataxray-no-longer-has-the-file-cloud--edge)). In the on-prem edition a file no search returns keeps its links as they were. |
 | Search criteria narrowed (a criterion removed in DataXray is *not* silently dropped — the rerun fails instead, see the deployment guide) | Files outside the new criteria get *formerly returns* links, then Not in any search if no query returns them. |
 | DataXray re-scanned a datasource and assigned **new file ids** | The new generation is created as new assets; the old generation becomes orphaned and gets Not in any search, with its history intact. |
 | File renamed or moved on a connector that identifies files by path, or moved to another datasource | The same, for that one file: a new asset for the new file id, the old asset Not in any search. |
@@ -565,10 +583,10 @@ still has. It runs twice over:
   attributes (including DataXray Extracted Values, when that option is on)
   are rewritten, and the links to labels, extractors and annotators are
   brought up to date. A link to a classification DataXray no longer finds on
-  the file becomes *formerly groups*; a new one is added. This is what
+  the file becomes *formerly classified by*; a new one is added. This is what
   completes the picture when a file drops out of its only search because the
   label that search selects on was removed: the rerun makes it Not in any
-  search, and that night its link to the label becomes *formerly groups*.
+  search, and that night its link to the label becomes *formerly classified by*.
   Links a person created are never changed.
 - A **Not in DataXray** asset whose file DataXray has again goes back to
   **Not in any search** (and is refreshed too), and to **Candidate** as soon
@@ -796,7 +814,7 @@ needed).
 | How do I know whether one is kept current? | Its **DataXray Sync** attribute: *Kept in sync nightly* when at least one search that returns it is kept in sync nightly, else *One-time import*. Sync wins over one-time import. |
 | I didn't import when I ran the search. Can I import later? | Yes. Rerun the search: its **Rerun Options** task offers to create the assets, and lets you change the sync options. No need to recreate the search. |
 | When does one get Not in any search? | When no query returns it any more — after a rerun stops returning it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). Never if a person set its status. |
-| What happens to links that stop applying? | *returns* becomes *formerly returns*, and an integration-made *groups* becomes *formerly groups*. Both swap back if they apply again. Links a person created are never touched. For a file no search returns, the Cloud + Edge existence check (at the end of the rerun that parked it, and nightly) keeps the *groups* links current. |
+| What happens to links that stop applying? | *returns* becomes *formerly returns*, and an integration-made *classified by* becomes *formerly classified by*. Both swap back if they apply again. Links a person created are never touched. For a file no search returns, the Cloud + Edge existence check (at the end of the rerun that parked it, and nightly) keeps the *groups* links current. |
 | When does one get Not in DataXray? | Cloud + Edge only: when it is Not in any search and the existence check — at the end of the rerun that parked it, or nightly — finds DataXray no longer has the file, or its datasource; or when a rerun gets 0 results and DataXray confirms it has none of the files the search returned. Never if a person set its status. |
 | When is one deleted? | Only by a person. The integration never deletes. |
 | When does one go back to Candidate? | As soon as any search's import or rerun matches it again, unless a person set its status. |

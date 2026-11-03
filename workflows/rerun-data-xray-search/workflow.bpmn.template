@@ -30,7 +30,7 @@
   it via start roles. The nightly driver starts it per flagged query with the
   hidden 'headless' form property set to 'true'.
 
-  The DataXray connection settings are NOT declared here (v2.10.1): the
+  The DataXray connection settings are NOT declared here (v2.11.1): the
   collector copies Search DataXray's (adoptSearchDataXraySettings,
   shared/dxr_config.groovy). Once Configure gives this asset-scoped workflow
   global start roles, Collibra refuses every change to its definition,
@@ -64,7 +64,7 @@
 
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
       <extensionElements>
-        <!-- No DataXray settings here (v2.10.1): the collector uses Search
+        <!-- No DataXray settings here (v2.11.1): the collector uses Search
              DataXray's (shared/dxr_config.groovy, adoptSearchDataXraySettings).
              Collibra refuses to save this definition's settings page once
              Configure has given it global start roles (workflowWrongRoles). -->
