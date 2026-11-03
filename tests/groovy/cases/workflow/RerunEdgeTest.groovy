@@ -16,9 +16,17 @@ def contactsSearch(Map opts, fake.World world) { world.with {
 
 def rerun(fake.World world, UUID q) { rerun([:], world, q) }
 
-// opts: headless (boolean), expect (the state the run must end in).
+// opts: headless (boolean), expect (the state the run must end in),
+// options (the Rerun Options task's values; default: send it as prefilled),
+// atOptions (true: stop at the Rerun Options task instead of sending it).
 def rerun(Map opts, fake.World world, UUID q) {
     def r = world.run('rerun-data-xray-search', [item: q, vars: opts.headless ? [headless: 'true'] : [:]])
+    if (!opts.atOptions && r.state == 'waiting' && r.task.formKey == 'rerunOptionsForm') {
+        assert r.task.missingFormVariables == [] : r.task.toString()
+        r = world.complete(r, opts.options ?: [importDecision    : r.var('importDecision'),
+                                               keepInSync        : r.var('keepInSync'),
+                                               autoImportNewFiles: r.var('autoImportNewFiles')])
+    }
     if (opts.expect != null) { assert r.state == opts.expect : r.toString() }
     return r
 }
@@ -359,15 +367,138 @@ test(variant: 'edge', 'a rerun matching more files than DataXray can page throug
     assert fileAssets().isEmpty()
 }
 
-test(variant: 'edge', 'R21 / FILE-23: a rerun that would create more than 10,000 assets is refused') {
+test(variant: 'edge', 'R21 / FILE-23: creating more than 10,000 assets is refused on the Rerun Options task; refreshing still works') {
     def s = contactsSearch(delegate)
     dxr.maxResultWindow = 50_000                            // an instance with a raised paging window
     (1..10_001).each { dxr.add([id: "f${it}".toString(), ds: 312, dsName: 'SharePoint', objectId: "o${it}".toString(),
                                 name: "f${it}.pdf".toString(), labels: ['7']]) }
 
+    def run = rerun(delegate, s.q, atOptions: true, expect: 'waiting')
+
+    assert run.task.formKey == 'rerunOptionsForm'
+    assert run.var('importBlocked') == true && run.var('importAllowed') == false && run.var('importDecision') == false
+    assert run.var('importBlockedMessage').contains('more than the 10,000 one run may create')
+
+    def refused = complete(run, [importDecision: true, keepInSync: false, autoImportNewFiles: true])
+    assert refused.state == 'error'
+    assert refused.error.message.contains('more than the 10,000 one run may create')
+    assert fileAssets().isEmpty()
+    assert fx.assets[s.q].tags.isEmpty()                     // refused before any option was written
+
+    def refreshOnly = rerun(delegate, s.q, expect: 'waiting') // sent as prefilled: create nothing
+    assert refreshOnly.task.formKey == 'rerunSummaryForm'
+    assert refreshOnly.var('rerunAborted') == false
+    assert refreshOnly.var('importSkippedNewCount') == 10_001
+    assert fileAssets().isEmpty()
+}
+
+// --- the Rerun Options task (v2.10, TRC 2 Nov 2026) ------------------------------------------------
+
+test(variant: 'edge', 'RERUN-OPT-1: the Rerun Options task shows today\'s count and the options as the tags have them') {
+    def s = contactsSearch(delegate, query: [tags: ['dataxray-keep-in-sync']])
+    def known = fileAsset('known')
+    link(s.q, 'returns', known)
+    dxrFile('known', labels: ['7'])
+    dxrFile('new', labels: ['7'])
+
+    def run = rerun(delegate, s.q, atOptions: true, expect: 'waiting')
+
+    assert run.task.formKey == 'rerunOptionsForm'
+    assert run.task.name ==~ /Rerun Options: Contacts search \(\d{1,2} \w{3} \d{4}, \d\d:\d\d UTC\)/
+    assert run.task.missingFormVariables == []
+    assert run.var('rerunResultCountDisplay') == '2'
+    assert run.var('rerunNewFilesDisplay') == 'up to 1'
+    assert run.var('rerunPreviousCountDisplay') == '1'
+    assert [run.var('importDecision'), run.var('keepInSync'), run.var('autoImportNewFiles')] == [true, true, true]
+    assert fileAssets() == [known]                            // nothing changed before Send
+    def counted = dxr.searchRequests()
+    assert counted.size() == 1
+    assert counted[0].body.pageSize == 1 && counted[0].body.excludedFields == ['*']
+}
+
+test(variant: 'edge', 'RERUN-OPT-2: a search whose files were not imported at first can import them on a rerun') {
+    def s = contactsSearch(delegate, query: [tags: ['dataxray-no-auto-import']])
+    dxrFile('f1', labels: ['7'])
+    dxrFile('f2', labels: ['7'])
+
+    def run = rerun(delegate, s.q, atOptions: true, expect: 'waiting')
+    assert run.var('importDecision') == false                 // prefilled from dataxray-no-auto-import
+
+    run = complete(run, [importDecision: true, keepInSync: false, autoImportNewFiles: false])
+
+    assert run.state == 'waiting' && run.task.formKey == 'rerunSummaryForm'
+    assert run.var('importCreatedCount') == 2
+    assert fileAssets() as Set == [assetIdOf('f1'), assetIdOf('f2')] as Set
+    assert fx.assets[s.q].tags as Set == ['dataxray-no-auto-import'] as Set
+}
+
+test(variant: 'edge', 'RERUN-OPT-2: unticking the first option refreshes only the files already in Collibra') {
+    def s = contactsSearch(delegate)
+    def known = fileAsset('known')
+    dxrFile('known', labels: ['7'])
+    dxrFile('new', labels: ['7'])
+
+    def run = rerun(delegate, s.q, options: [importDecision: false, keepInSync: false, autoImportNewFiles: true], expect: 'waiting')
+
+    assert fileAssets() == [known]
+    assert linked(s.q, 'returns', known)
+    assert run.var('importSkippedNewCount') == 1
+    assert fx.assets[s.q].tags.isEmpty()                     // this run only: no tag written
+}
+
+test(variant: 'edge', 'RERUN-OPT-3: the options change the sync filter\'s tags, both ways') {
+    def s = contactsSearch(delegate, query: [tags: ['dataxray-keep-in-sync']])
+    dxrFile('f1', labels: ['7'])
+
+    rerun(delegate, s.q, options: [importDecision: true, keepInSync: false, autoImportNewFiles: false], expect: 'waiting')
+    assert fx.assets[s.q].tags as Set == ['dataxray-no-auto-import'] as Set
+    assert attr(assetIdOf('f1'), 'syncMode') == 'One-time import'
+
+    rerun(delegate, s.q, options: [importDecision: true, keepInSync: true, autoImportNewFiles: true], expect: 'waiting')
+    assert fx.assets[s.q].tags as Set == ['dataxray-keep-in-sync'] as Set
+    assert attr(assetIdOf('f1'), 'syncMode') == 'Kept in sync nightly'
+}
+
+test(variant: 'edge', 'RERUN-OPT-4: a headless rerun asks nothing, makes no count request and follows the tags') {
+    def s = contactsSearch(delegate, query: [tags: ['dataxray-keep-in-sync', 'dataxray-no-auto-import']])
+    def known = fileAsset('known')
+    dxrFile('known', labels: ['7'])
+    dxrFile('new', labels: ['7'])
+
+    def run = rerun(delegate, s.q, headless: true, expect: 'completed')
+
+    assert run.tasks.isEmpty()
+    assert dxr.searchRequests().every { it.body.pageSize != 1 }
+    assert fileAssets() == [known]
+    assert run.var('importSkippedNewCount') == 1
+    assert fx.assets[s.q].tags as Set == ['dataxray-keep-in-sync', 'dataxray-no-auto-import'] as Set
+    assert attr(known, 'syncMode') == 'Kept in sync nightly'
+}
+
+test(variant: 'edge', 'RERUN-OPT-5: DataXray unreachable while counting: no options task, the summary says why') {
+    def s = contactsSearch(delegate)
+    def known = fileAsset('known')
+    link(s.q, 'returns', known)
+    dxrFile('known', labels: ['7'])
+    3.times { dxr.failNext([error: 'IO exception occurred']) }
+
     def run = rerun(delegate, s.q, expect: 'waiting')
 
+    assert run.task.formKey == 'rerunSummaryForm'
+    assert run.task.missingFormVariables == []
+    assert run.tasks*.formKey == ['rerunSummaryForm']
     assert run.var('rerunAborted') == true
-    assert run.var('rerunAbortReason').contains('more than the 10,000 one run may create')
-    assert fileAssets().isEmpty()
+    assert run.var('rerunAbortReason').contains('Could not reach DataXray')
+    assert linked(s.q, 'returns', known) && status(known) == 'Candidate'   // nothing changed
+}
+
+test(variant: 'edge', 'RERUN-OPT-5: a count request that fails once is retried') {
+    def s = contactsSearch(delegate)
+    dxrFile('f1', labels: ['7'])
+    dxr.failNext([error: 'IO exception occurred'])
+
+    def run = rerun(delegate, s.q, atOptions: true, expect: 'waiting')
+
+    assert run.task.formKey == 'rerunOptionsForm'
+    assert run.var('rerunResultCountDisplay') == '1'
 }

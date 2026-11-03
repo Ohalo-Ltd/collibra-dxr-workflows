@@ -29,7 +29,7 @@ def conditionName = (execution.getVariable('conditionName') ?: '').toString()
 def classIndex = readJsonVariable('classIndex', [byDxrId: [:], byName: [:]])
 def previousFileIds = readJsonVariable('previousFileIds', [])
 int filesDomainCount = (execution.getVariable('filesDomainCount') ?: 0) as int
-boolean noAutoImport = execution.getVariable('rerunNoAutoImport') == true
+boolean createNew = execution.getVariable('rerunCreateNew') != false
 
 def opts = [
     label       : 'Import batch',
@@ -38,7 +38,7 @@ def opts = [
     pageSize    : edgePageSize(execution.getVariable('dataxrayPageSize')),
     index       : classIndex,
     classIndex  : classIndex,
-    createNew   : !noAutoImport,
+    createNew   : createNew,
     onPageZero  : { Map page ->
         if (page.total > page.maxResultWindow) {
             return "Rerun of '${conditionName}' refused: it matches ${page.total} file(s), more than the ${page.maxResultWindow} results DataXray can page through in one query.".toString()
@@ -47,11 +47,12 @@ def opts = [
         // files grow the domain. Without the full row set up front, bound the
         // growth optimistically here; processFileBatch never creates beyond
         // what each page actually holds.
-        // Tagged dataxray-no-auto-import: no new assets, so no growth.
-        int growth = noAutoImport ? 0 : Math.max(0, page.total - previousFileIds.size())
+        // Not creating assets for new files (the Rerun Options task, or the
+        // tag dataxray-no-auto-import for the nightly): no growth.
+        int growth = createNew ? Math.max(0, page.total - previousFileIds.size()) : 0
         int projected = filesDomainCount + growth
         if (growth > dxrMaxImportFiles()) {
-            return "Rerun of '${conditionName}' refused: it could add up to ${growth} new file asset(s), more than the ${String.format(Locale.ENGLISH, '%,d', dxrMaxImportFiles())} one run may create. Refine the search, or tag it ${dxrNoAutoImportTag()} to refresh only the files already imported.".toString()
+            return "Rerun of '${conditionName}' refused: it could add up to ${growth} new file asset(s), more than the ${String.format(Locale.ENGLISH, '%,d', dxrMaxImportFiles())} one run may create. Refine the search, or untick creating assets for new files (tag ${dxrNoAutoImportTag()} for the nightly) to refresh only the files already imported.".toString()
         }
         if (growth > 0 && projected > dxrMaxTotalFileAssets()) {
             return "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} DataXray file asset(s) and this rerun could add up to ${growth} more — the projected ${projected} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.".toString()

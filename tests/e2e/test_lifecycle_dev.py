@@ -218,3 +218,22 @@ def test_configure_twice_keeps_names_and_reruns_still_work(edge, lifecycle_searc
     assert {k: c.get(f"/domains/{c.ids[k]}")["name"] for k in names} == names
     rerun(c, track, s["query"])
     assert all(c.linked(s["query"], "returns", f) for f in s["files"])
+
+
+# --- v2.10: Rerun Options task and DataXray Sync (TRC, 2 Nov 2026) -----------------------------------------
+
+def test_rerun_options_change_the_tags_and_dataxray_sync(edge, lifecycle_search, track):
+    """RERUN-OPT-1/3, SYNC-1/3: the options task comes first and its choices are written back as tags."""
+    c, s = edge, lifecycle_search
+    tags = lambda: {t["name"] for t in c.get(f"/assets/{s['query']}/tags")}
+
+    run = rerun(c, track, s["query"], options={"importDecision": True, "keepInSync": True, "autoImportNewFiles": True})
+    assert run["options_title"].startswith(f"Rerun Options: {s['name']} (")
+    assert "dataxray-keep-in-sync" in tags()
+    for f in s["files"]:
+        assert c.attr(f, "syncModeAttrTypeId") == "Kept in sync nightly"
+
+    rerun(c, track, s["query"], options={"importDecision": True, "keepInSync": False, "autoImportNewFiles": True})
+    assert "dataxray-keep-in-sync" not in tags()
+    for f in s["files"]:
+        assert c.attr(f, "syncModeAttrTypeId") == "One-time import"

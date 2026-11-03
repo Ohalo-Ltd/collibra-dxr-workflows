@@ -35,7 +35,15 @@
 //   rerunExistsRan / rerunExistsNoted / rerunExistsNote, exists* counters –
 //                               false / '' / 0: only the Cloud + Edge rerun
 //                               runs the DataXray existence check
-// and replaces the query asset's "Files" preview with this run's results.
+//   rerunTagKeepInSync / rerunTagNoAutoImport (Boolean) – the sync filter's
+//                               tags as found
+//   rerunNewFileCount / rerunSkippedNoId / filesDomainCount (Integer) – for
+//                               rerun_apply_options.groovy's limit checks
+//   the Rerun Options form's variables (publishRerunOptions, rerun_common.groovy)
+// Nothing is written to Collibra beyond the DataXray Query attribute: the
+// Rerun Options task comes next (interactive runs; v2.10), and
+// rerun_apply_options.groovy then applies the options, checks the limits and
+// refreshes the sync filter's "Files" preview.
 
 import com.collibra.dgc.workflow.api.exception.WorkflowException
 import groovy.json.JsonOutput
@@ -46,7 +54,6 @@ import groovy.json.JsonOutput
 // {{include:dxr_http_direct.groovy}}
 // {{include:collibra_lookup.groovy}}
 // {{include:rerun_common.groovy}}
-// {{include:query_preview.groovy}}
 // {{include:worklist.groovy}}
 
 announceDxrVersion('Rerun DataXray Search')
@@ -74,7 +81,12 @@ def abort = { String title, String message ->
     execution.setVariable('rerunRetireSkipped', false)
     execution.setVariable('rerunRetireSkipReason', '')
     zeroRerunExistsSummary()
-    execution.setVariable('rerunNoAutoImport', false)
+    execution.setVariable('rerunTagKeepInSync', false)
+    execution.setVariable('rerunTagNoAutoImport', false)
+    execution.setVariable('rerunNewFileCount', 0)
+    execution.setVariable('rerunSkippedNoId', 0)
+    execution.setVariable('filesDomainCount', 0)
+    zeroRerunOptions()
     if (!headless) {
         def wf = new WorkflowException(message)
         wf.setTitleMessage(title)
@@ -131,10 +143,13 @@ def conditionName = queryAsset.getName()
 execution.setVariable('conditionName', conditionName)
 execution.setVariable('queryAssetId', queryId.toString())
 
-// Tagged dataxray-no-auto-import: refresh the file assets already in Collibra
-// and create none for new matching files.
-boolean noAutoImport = assetTagNames(queryId).contains(dxrNoAutoImportTag())
-execution.setVariable('rerunNoAutoImport', noAutoImport)
+// The sync filter's options as they stand (its tags): they prefill the Rerun
+// Options task, and a headless run follows them.
+def queryTags = assetTagNames(queryId)
+boolean tagKeepInSync = queryTags.contains(dxrKeepInSyncTag())
+boolean tagNoAutoImport = queryTags.contains(dxrNoAutoImportTag())
+execution.setVariable('rerunTagKeepInSync', tagKeepInSync)
+execution.setVariable('rerunTagNoAutoImport', tagNoAutoImport)
 
 // --- Rebuild the criteria from relations + the stored filter -------------------------
 
@@ -192,32 +207,23 @@ if (skippedNoId > 0) {
     loggerApi.warn("Rerun of '${conditionName}': skipped ${skippedNoId} result row(s) without a usable file id")
 }
 
-// --- Instance-wide cap guard -----------------------------------------------------------
+// --- What creating assets for the new files would mean ----------------------------------
 
 // Files this query already returns update in place — only genuinely new files
 // grow the domain, so subtract the overlap (exact for THIS query; overlap with
-// other queries' files still counts as new, which errs on the safe side).
+// other queries' files still counts as new, which errs on the safe side). The
+// limits themselves are checked once the options are known
+// (rerun_apply_options.groovy): refreshing only the files already imported is
+// always allowed.
 int alreadyOurs = 0
 workItems.each { tuple ->
     if (previousFileIds.contains(deterministicFileAssetId(tuple[0]).toString())) { alreadyOurs++ }
 }
 int filesDomainCount = countFileAssets(ids)
-int newFiles = noAutoImport ? 0 : workItems.size() - alreadyOurs
-int projectedTotal = filesDomainCount + newFiles
-if (newFiles > dxrMaxImportFiles()) {
-    abort('Rerun DataXray Search refused',
-        "Rerun of '${conditionName}' refused: it would add ${newFiles} new file asset(s), more than the ${String.format(Locale.ENGLISH, '%,d', dxrMaxImportFiles())} one run may create. Refine the search, or tag it ${dxrNoAutoImportTag()} to refresh only the files already imported.")
-    return
-}
-if (newFiles > 0 && projectedTotal > dxrMaxTotalFileAssets()) {
-    abort('Rerun DataXray Search refused',
-        "Rerun of '${conditionName}' refused: Collibra holds ${filesDomainCount} DataXray file asset(s) and this rerun would add ${newFiles} more — the projected ${projectedTotal} exceeds the ${dxrMaxTotalFileAssets()} instance-wide limit.")
-    return
-}
-
-// --- Refresh the Files preview (the whole answer is in hand) -----------------------------
-
-refreshQueryPreview(queryId, ids.filesAttrTypeId, workItems, workItems.size() + skippedNoId)
+int newFiles = workItems.size() - alreadyOurs
+execution.setVariable('rerunNewFileCount', newFiles)
+execution.setVariable('rerunSkippedNoId', skippedNoId)
+execution.setVariable('filesDomainCount', filesDomainCount)
 
 // --- Resolve classifications and store the work list -------------------------------------
 
@@ -228,6 +234,9 @@ execution.setVariable('rerunAborted', false)
 execution.setVariable('rerunAbortReason', '')
 int batchCount = publishWorkList(workItems, unresolvedClassifications)
 execution.setVariable('previousFileIds', JsonOutput.toJson(previousFileIds as List))
+execution.setVariable('rerunCreateNew', !tagNoAutoImport)
+publishRerunOptions(computeRerunFeasibility(workItems.size() + skippedNoId, newFiles, filesDomainCount, true),
+                    workItems.size() + skippedNoId, newFiles, true, tagKeepInSync, !tagNoAutoImport)
 execution.setVariable('rerunRetiredCount', 0)
 execution.setVariable('rerunUnlinkedCount', 0)
 execution.setVariable('rerunRetireSkipped', false)

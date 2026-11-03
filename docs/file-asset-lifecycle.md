@@ -100,6 +100,12 @@ file, and they are saved as tags on the query asset as soon as you click
 **Send**, whatever you chose about importing. You can add or remove either tag
 on the query asset at any time; the change applies from the next rerun.
 
+Passing on the import is never final. Every manual rerun of the search starts
+with a **Rerun Options** task that offers the same options again (see
+[Rerun Options](#rerun-options-changing-a-searchs-options-on-any-rerun)), so you
+can import the files later, or change the sync options, without recreating the
+search.
+
 What the import does, per matching file:
 
 1. **Works out the asset's identity.** A new file asset's UUID is derived
@@ -329,8 +335,9 @@ that returns it was run. It is brought up to date by a **rerun** of any query
 that returns it:
 
 - **Manually** — open the **DataXray Sync Filter** asset and start
-  **Rerun DataXray Search** from its **Actions** menu. A **Rerun complete**
-  summary task reports what changed.
+  **Rerun DataXray Search** from its **Actions** menu. A **Rerun Options**
+  task appears first (see below); once you send it, the rerun runs in the
+  background and a **Rerun Summary** task reports what changed.
 - **Automatically** — **Sync DataXray Files (Nightly)** runs every night at
   **02:30** (server time), finds every query asset tagged
   `dataxray-keep-in-sync`, and starts one headless rerun per query. It runs
@@ -350,8 +357,8 @@ results, and then for each matching file:
 
 | Change in DataXray | Effect on the Collibra file asset |
 |---|---|
-| New file matches the search | A new file asset is created and linked (as in an import). |
-| New file matches the search, and the query is tagged `dataxray-no-auto-import` | No asset is created. The **Rerun complete** task counts it under *Not imported*. If the file already has an asset (another search imported it), that asset is refreshed and linked to this query as usual. |
+| New file matches the search | A new file asset is created and linked (as in an import), when the rerun creates assets for new files: you ticked it on the **Rerun Options** task, or, for the nightly sync, the query is not tagged `dataxray-no-auto-import`. |
+| New file matches the search, and the rerun does not create assets for new files | No asset is created. The **Rerun Summary** task counts it under *Not imported*. If the file already has an asset (another search imported it), that asset is refreshed and linked to this query as usual. |
 | File renamed or moved, and DataXray kept its file id (see [What counts as the same file?](#what-counts-as-the-same-file)) | The **same** asset is updated: DataXray File Name, File Path and the other attributes are refreshed. The asset's name is not changed (it may be one a person gave it). |
 | File renamed or moved, and DataXray assigned a new file id (e.g. on an SMB share) | A **new** asset is created; the old one drops out of the search as described below. |
 | Size / last-modified changed | Attributes refreshed. |
@@ -373,20 +380,73 @@ Collibra workflows are also recorded as created by the Workflow user, so the
 integration cannot tell them apart from its own and may swap them to
 *formerly groups* when DataXray no longer reports the classification.
 
+### Rerun Options: changing a search's options on any rerun
+
+Every manual rerun stops at a **Rerun Options** task before it changes
+anything in Collibra. The task shows how many files DataXray matches now, how
+many the search returned before, and how many of today's matches are new to
+it (in the Cloud + Edge edition this is an upper bound, shown as "up to N"). It
+then offers the search's options again, prefilled from the query asset's tags:
+
+| Option | Effect |
+|---|---|
+| **Create assets for the new matching files on this run** | Applies to this rerun only. Unticked, the rerun refreshes the file assets already in Collibra and creates none. Prefilled ticked unless the query is tagged `dataxray-no-auto-import`. |
+| **Keep in sync nightly** | Adds or removes the `dataxray-keep-in-sync` tag. |
+| **Create assets for new files found on later reruns** | Unticked, adds the `dataxray-no-auto-import` tag; ticked, removes it. This is what the nightly sync follows. |
+
+Click **Send** to run the rerun with these options. Sending the task as it was
+prefilled behaves exactly like a rerun before v2.10. The file assets the search
+still returns are always refreshed, whatever you choose. If creating the new
+assets would break the per-run or instance-wide limit, the first option is
+hidden and the task explains why; you can still send it to refresh the files
+already in Collibra. The nightly sync never shows this task: it follows the
+tags.
+
+In the Cloud + Edge edition, the task's count costs one small extra request to
+DataXray (one row, file ids only). If DataXray cannot be reached, no options
+task appears; the **Rerun Summary** says why and nothing is changed.
+
+### Which file assets are kept in sync? (the DataXray Sync attribute)
+
+Each file asset's **DataXray Sync** attribute says whether something keeps it
+current:
+
+| Value | Meaning |
+|---|---|
+| **Kept in sync nightly** | At least one search that returns the file is kept in sync nightly: tagged `dataxray-keep-in-sync`, in the DataXray Sync Filter domain, and not retired (Obsolete). The nightly sync refreshes the file every night. |
+| **One-time import** | No search that returns the file is kept in sync nightly, or no search returns it any more. Its attributes are as of the last time a search that returns it was run, and may be stale. |
+
+**Sync wins.** A file that several searches return is kept in sync as long as
+any one of them is, even if another was a one-time import. Unticking **Keep in
+sync nightly** on one search therefore only turns the files *no other synced
+search returns* into one-time imports.
+
+The value is updated by every import and rerun for the files it touches, by
+the rerun that stops returning a file, and by the nightly sync for every file
+asset, which catches changes no rerun sees: a tag removed by hand, a search
+retired or deleted. Configure DataXray Workflows creates the attribute (v2.10);
+until it has run once after the upgrade, file assets simply have no DataXray
+Sync value.
+
 Controlling the nightly sync per query:
 
 - **Pause**: retire the query asset (set its status to **Obsolete**). The
   nightly skips retired queries even if still tagged; its file assets are left
-  as they are. Reactivate the query to resume. A manual rerun still works on a
-  retired query.
-- **Stop**: remove the `dataxray-keep-in-sync` tag from the query asset. Its
-  file assets stay exactly as they are (they are still *returned* by the
-  query, so nothing changes their status).
-- **Start**: add the tag to any query asset — including one whose search was
-  never imported.
-- **Refresh only**: add the `dataxray-no-auto-import` tag. Reruns, manual or
-  nightly, then refresh the file assets that already exist and create none for
-  new matches. Remove the tag to let reruns create assets again.
+  as they are, and that night their DataXray Sync becomes *One-time import*
+  unless another synced search returns them. Reactivate the query to resume. A
+  manual rerun still works on a retired query.
+- **Stop**: untick **Keep in sync nightly** on the next rerun's Rerun Options
+  task, or remove the `dataxray-keep-in-sync` tag from the query asset. Its
+  file assets stay as they are (they are still *returned* by the query, so
+  nothing changes their status); their DataXray Sync becomes *One-time import*
+  unless another synced search returns them.
+- **Start**: tick **Keep in sync nightly** on a rerun, or add the tag to any
+  query asset — including one whose search was never imported.
+- **Refresh only**: untick **Create assets for new files found on later
+  reruns** on a rerun, or add the `dataxray-no-auto-import` tag. The nightly
+  sync then refreshes the file assets that already exist and creates none for
+  new matches. Tick it again, or remove the tag, to let reruns create assets
+  again.
 
 Because the integration mirrors the source system, Collibra reflects DataXray
 *as of the last sync*. Changes in DataXray appear after DataXray has
@@ -522,7 +582,7 @@ returned it.
   basis would be wrong. The result set is fetched with up to three attempts,
   and if all fail the rerun stops with an error and changes nothing.
   - **On-prem**: the files stay as they are until the search matches
-    something again or the query asset is deleted. The **Rerun complete**
+    something again or the query asset is deleted. The **Rerun Summary**
     summary says so ("No file was unlinked from this search") and how many
     files stay linked, so *No longer returned: 0* is not mistaken for
     "nothing changed".
@@ -701,13 +761,15 @@ needed).
 
 | Question | Answer |
 |---|---|
-| What creates a file asset? | An import from a search's results task, or a rerun that finds a new match (not for a query tagged `dataxray-no-auto-import`). Never a search on its own. |
+| What creates a file asset? | An import from a search's results task, or a rerun that finds a new match: a manual rerun when its Rerun Options task says so, a nightly one unless the query is tagged `dataxray-no-auto-import`. Never a search on its own. |
 | What is a file asset's identity? | Its DataXray file id — the Collibra UUID is derived from it, so the same file is always the same asset. On path-based connectors (SMB, file shares, S3, Azure Blob, SharePoint on-premises) a rename or move gives the file a new id, and so a new asset. |
 | Can I rename one? | Yes. The name is set once, when the asset is created, and no sync changes it. DataXray's current name is in the **DataXray File Name** attribute. The other attributes always come from DataXray. |
 | Which domain / type? | Created in **DataXray Files** / **DataXray File**, status **Candidate** when active. |
 | Can I move one to another community? | Yes; syncs update it where it is, and it still counts towards the cap and is included in the nightly sweep. The placement is lost if DataXray assigns the file a new id. |
 | Maximum number? | **10,000** new file assets per import or rerun, and **25,000** DataXray File assets in total, wherever they live and whatever their status; warning above **5,000** per import. Fixed in the scripts. |
 | What keeps them current? | Manual **Rerun DataXray Search** on the query asset, or the **02:30 nightly** for queries tagged `dataxray-keep-in-sync`. |
+| How do I know whether one is kept current? | Its **DataXray Sync** attribute: *Kept in sync nightly* when at least one search that returns it is kept in sync nightly, else *One-time import*. Sync wins over one-time import. |
+| I didn't import when I ran the search. Can I import later? | Yes. Rerun the search: its **Rerun Options** task offers to create the assets, and lets you change the sync options. No need to recreate the search. |
 | When does one get Not in any search? | When no query returns it any more — after a rerun stops returning it, or after the nightly orphan sweep finds it with no *returns* relation (deleted query). Never if a person set its status. |
 | What happens to links that stop applying? | *returns* becomes *formerly returns*, and an integration-made *groups* becomes *formerly groups*. Both swap back if they apply again. Links a person created are never touched. For a file no search returns, the Cloud + Edge existence check (at the end of the rerun that parked it, and nightly) keeps the *groups* links current. |
 | When does one get Not in DataXray? | Cloud + Edge only: when it is Not in any search and the existence check — at the end of the rerun that parked it, or nightly — finds DataXray no longer has the file, or its datasource; or when a rerun gets 0 results and DataXray confirms it has none of the files the search returned. Never if a person set its status. |

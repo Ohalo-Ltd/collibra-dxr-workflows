@@ -7,6 +7,7 @@
 // {{include:dxr_query.groovy}}
 // {{include:collibra_lookup.groovy}}
 // {{include:worklist.groovy}}
+// {{include:query_flags.groovy}}
 // {{include:file_batch.groovy}}
 // {{include:query_preview.groovy}}
 // {{include:rerun_common.groovy}}

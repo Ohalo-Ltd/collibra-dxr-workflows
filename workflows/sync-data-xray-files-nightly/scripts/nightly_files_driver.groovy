@@ -31,6 +31,14 @@
 //    swept file reappears in any query's results, the rerun's batch stage
 //    reactivates it (deterministic asset ids converge).
 //
+// 3. DataXray Sync (v2.10): the same scan sets every file asset's DataXray
+//    Sync attribute to "Kept in sync nightly" when a sync filter phase 1
+//    reruns returns it, else "One-time import" — the catch-all for changes no
+//    rerun sees (a keep-in-sync tag removed by hand, a sync filter archived or
+//    deleted). Reruns keep it current for the files they touch. Only changed
+//    values are written, each after re-reading the file's links (the reruns
+//    phase 1 started run alongside).
+//
 // This workflow is triggered by a timer start event (nightly at 02:30, after
 // the 02:00 classification sync so renamed/retired classifications are
 // up to date before queries are rebuilt). It runs unattended with no
@@ -56,6 +64,7 @@
 //   nightlyFailedCount    (Integer) – queries whose rerun could not be started
 //   nightlyRetiredSkipped (Integer) – flagged queries skipped because they are retired
 //   nightlyOrphansRetired (Integer) – file assets set to 'Not in any search' because no query returns them
+//   nightlySyncModeUpdated (Integer) – file assets whose DataXray Sync value changed
 
 import com.collibra.dgc.core.api.dto.instance.asset.FindAssetsRequest
 import com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest
@@ -66,7 +75,7 @@ import com.collibra.dgc.core.api.model.workflow.WorkflowBusinessItemType
 // {{include:collibra_lookup.groovy}}
 // {{include:file_batch.groovy}}
 
-final String KEEP_IN_SYNC_TAG = 'dataxray-keep-in-sync'
+final String KEEP_IN_SYNC_TAG = dxrKeepInSyncTag()
 final String RERUN_PROCESS_ID = 'rerunDataXraySearch'
 
 announceDxrVersion('Sync DataXray Files (Nightly)')
@@ -75,25 +84,29 @@ def queryDomainId         = ids.queryDomainId
 def returnsRelationTypeId = ids.returnsRelationTypeId
 def OBSOLETE_STATUS_ID    = ids.obsoleteStatusId
 
-def recordRunSummary = { int found, int started, int failed, int retiredSkipped, int orphansRetired, String note ->
+def recordRunSummary = { int found, int started, int failed, int retiredSkipped, int orphansRetired, int syncModeUpdated, String note ->
     execution.setVariable('nightlyQueriesFound', found)
     execution.setVariable('nightlyRerunsStarted', started)
     execution.setVariable('nightlyFailedCount', failed)
     execution.setVariable('nightlyRetiredSkipped', retiredSkipped)
     execution.setVariable('nightlyOrphansRetired', orphansRetired)
-    loggerApi.info("Sync DataXray Files (Nightly): found=${found}, started=${started}, failed=${failed}, retiredSkipped=${retiredSkipped}, orphansRetired=${orphansRetired}${note ? ', ' + note : ''}")
+    execution.setVariable('nightlySyncModeUpdated', syncModeUpdated)
+    loggerApi.info("Sync DataXray Files (Nightly): found=${found}, started=${started}, failed=${failed}, retiredSkipped=${retiredSkipped}, orphansRetired=${orphansRetired}, syncModeUpdated=${syncModeUpdated}${note ? ', ' + note : ''}")
 }
 
-// Park file assets that no query "returns" any more (see header, phase 2).
-// Returns the number set to 'Not in any search'; any failure while building
-// the FULL picture of returned files aborts the sweep — never park on a
-// partial scan.
-def sweepOrphanedFiles = {
-    if (!statusApi.exists(ids.notInAnySearchStatusId)) {
+// Park file assets that no query "returns" any more (see header, phase 2), and
+// bring every file asset's DataXray Sync value up to date (phase 3) when
+// `syncedQueryIds` (the sync filters phase 1 reruns) is known. Returns
+// [parked:, syncModeUpdated:]; any failure while building the FULL picture of
+// returned files aborts both — never act on a partial scan.
+def sweepOrphanedFiles = { Set syncedQueryIds ->
+    boolean parkOn = statusApi.exists(ids.notInAnySearchStatusId)
+    if (!parkOn) {
         loggerApi.warn("Orphan sweep skipped: the status 'Not in any search' does not exist. Run Configure DataXray Workflows once after upgrading.")
-        return 0
     }
-    def returnedFileIds = [] as Set
+    boolean syncModeOn = syncedQueryIds != null && syncModeAttrOn()
+    if (!parkOn && !syncModeOn) { return [parked: 0, syncModeUpdated: 0] }
+    def returnedBy = [:]   // file asset id → ids of the sync filters that return it
     def cursor = ''
     while (true) {
         def page = relationApi.findRelations(FindRelationsRequest.builder()
@@ -101,14 +114,31 @@ def sweepOrphanedFiles = {
             .limit(1000)
             .cursor(cursor)
             .build())
-        page.getResults().each { rel -> returnedFileIds << rel.getTarget().getId() }
+        page.getResults().each { rel ->
+            returnedBy.computeIfAbsent(rel.getTarget().getId()) { [] as Set } << rel.getSource().getId()
+        }
         cursor = page.getNextCursor()
         if (!cursor) break
     }
+    def currentModes = syncModeOn ? attributeValuesOfType(ids.syncModeAttrTypeId) : [:]
+    def modeFor = { Collection sources -> sources.any { syncedQueryIds.contains(it) } ? dxrSyncModeKeptInSync() : dxrSyncModeOneTime() }
 
     int parked = 0
+    int syncModeUpdated = 0
     eachFileAsset(ids) { asset ->
-        if (returnedFileIds.contains(asset.getId())) { return }
+        if (syncModeOn && currentModes[asset.getId().toString()] != modeFor(returnedBy[asset.getId()] ?: [])) {
+            try {
+                // A rerun started above may have linked the file since the scan.
+                def mode = modeFor(relationIdsByFarEnd(returnsRelationTypeId, null, asset.getId()).keySet())
+                if (currentModes[asset.getId().toString()] != mode) {
+                    writeFileSyncMode(asset.getId(), mode, ids)
+                    syncModeUpdated++
+                }
+            } catch (Exception modeEx) {
+                loggerApi.error("Failed to update DataXray Sync on file asset '${asset.getName()}' [${asset.getId()}]: ${modeEx.message}")
+            }
+        }
+        if (!parkOn || returnedBy.containsKey(asset.getId())) { return }
         def sid = asset.getStatus()?.getId()
         // Nothing to change (already parked, or a person's status): no further lookups.
         if (!isIntegrationOwnedFileStatus(sid, ids) || sid == ids.notInAnySearchStatusId || sid == ids.notInDataXrayStatusId) { return }
@@ -127,7 +157,7 @@ def sweepOrphanedFiles = {
             loggerApi.error("Failed to park orphaned file asset '${asset.getName()}' [${asset.getId()}]: ${parkEx.message}")
         }
     }
-    return parked
+    return [parked: parked, syncModeUpdated: syncModeUpdated]
 }
 
 // --- Phase 1: fan out one headless rerun per flagged query -----------------------
@@ -149,29 +179,31 @@ try {
     fanOutNote = 'rerun workflow not deployed'
 }
 
-if (rerunDefinitionId != null) {
-    def flaggedQueries = []
-    try {
-        def cursor = ''
-        while (true) {
-            def page = assetApi.findAssets(FindAssetsRequest.builder()
-                .domainId(queryDomainId)
-                .tagNames([KEEP_IN_SYNC_TAG])
-                .limit(1000)
-                .cursor(cursor)
-                .build())
-            flaggedQueries.addAll(page.getResults())
-            cursor = page.getNextCursor()
-            if (!cursor) break
-        }
-    } catch (Exception findEx) {
-        loggerApi.error("Sync DataXray Files (Nightly) fan-out skipped: could not list flagged queries: ${findEx.message}")
-        fanOutNote = 'query lookup failed'
-        flaggedQueries = []
+// The flagged sync filters are listed even when the rerun workflow is missing:
+// the DataXray Sync pass (phase 3) needs them. null = could not be listed.
+def flaggedQueries = []
+try {
+    def cursor = ''
+    while (true) {
+        def page = assetApi.findAssets(FindAssetsRequest.builder()
+            .domainId(queryDomainId)
+            .tagNames([KEEP_IN_SYNC_TAG])
+            .limit(1000)
+            .cursor(cursor)
+            .build())
+        flaggedQueries.addAll(page.getResults())
+        cursor = page.getNextCursor()
+        if (!cursor) break
     }
+} catch (Exception findEx) {
+    loggerApi.error("Sync DataXray Files (Nightly) fan-out skipped: could not list flagged queries: ${findEx.message}")
+    fanOutNote = 'query lookup failed'
+    flaggedQueries = null
+}
 
+def syncedQueryIds = null
+if (flaggedQueries != null) {
     found = flaggedQueries.size()
-
     // Retired (archived) queries keep their tag but are not synced — archiving
     // is the supported "pause" (see header). Reactivate the query to resume.
     def retiredFlagged = flaggedQueries.findAll { it.getStatus()?.getId() == OBSOLETE_STATUS_ID }
@@ -180,7 +212,10 @@ if (rerunDefinitionId != null) {
     }
     retiredSkipped = retiredFlagged.size()
     flaggedQueries = flaggedQueries.findAll { it.getStatus()?.getId() != OBSOLETE_STATUS_ID }
+    syncedQueryIds = flaggedQueries.collect { it.getId() } as Set
+}
 
+if (rerunDefinitionId != null && flaggedQueries != null) {
     flaggedQueries.each { query ->
         try {
             workflowInstanceApi.startWorkflowInstances(StartWorkflowInstancesRequest.builder()
@@ -202,12 +237,15 @@ if (rerunDefinitionId != null) {
 // --- Phase 2: retire orphaned file assets ----------------------------------------
 
 int orphansRetired = 0
+int syncModeUpdated = 0
 try {
-    orphansRetired = sweepOrphanedFiles()
+    def swept = sweepOrphanedFiles(syncedQueryIds)
+    orphansRetired = swept.parked
+    syncModeUpdated = swept.syncModeUpdated
 } catch (Exception sweepEx) {
     // A failed relation/asset scan aborts the sweep — better to leave orphans
     // one more night than to retire based on a partial picture.
     loggerApi.error("Sync DataXray Files (Nightly) orphan sweep skipped: ${sweepEx.message}")
 }
 
-recordRunSummary(found, started, failed, retiredSkipped, orphansRetired, fanOutNote)
+recordRunSummary(found, started, failed, retiredSkipped, orphansRetired, syncModeUpdated, fanOutNote)

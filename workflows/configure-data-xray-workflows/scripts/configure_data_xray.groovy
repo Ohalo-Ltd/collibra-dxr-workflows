@@ -138,6 +138,9 @@ def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
 // is set from it once, when the asset is created, and is the user's after that.
 def FILE_NAME_ATTR_ID     = '019e9212-5f66-7183-a07e-ac1d2e3f4a45'
 def OBJECT_KEY_ATTR_ID    = '019e9212-8c99-74b6-b3d1-df3a5b6c7d78'   // v2.9: "<datasource id>:<object id>" (TRC R1)
+// v2.10: "Kept in sync nightly" / "One-time import" — whether any sync filter
+// that returns the file is kept in sync nightly (TRC, 2 Nov 2026)
+def SYNC_MODE_ATTR_ID     = '019e9212-9daa-75c7-b4e2-f04b6c7d8e89'
 // DataXray Extracted Values (v2.8, optional): the extractor values of each file,
 // as a table. Exists only while this workflow's syncExtractorValues variable
 // is true; the syncs write it only while it exists (extractedValuesOn).
@@ -275,6 +278,7 @@ def attrTypeDefs = [
     [id: OBJECT_ID_ATTR_ID,     name: 'DataXray Object ID',    stringType: 'PLAIN_TEXT'],
     [id: FILE_NAME_ATTR_ID,     name: 'DataXray File Name',    stringType: 'PLAIN_TEXT'],
     [id: OBJECT_KEY_ATTR_ID,    name: 'DataXray Full Object ID', stringType: 'PLAIN_TEXT'],
+    [id: SYNC_MODE_ATTR_ID,     name: 'DataXray Sync',         stringType: 'PLAIN_TEXT'],
     [id: QUERY_ATTR_ID,         name: 'DataXray Query',        stringType: 'PLAIN_TEXT'],
     [id: FILTER_ATTR_ID,        name: 'Annotated Text Filter', stringType: 'PLAIN_TEXT'],
 ]
@@ -313,7 +317,7 @@ def assignmentDefs = [
     [assetTypeId: FILE_TYPE_ID, name: 'DataXray File', descriptionMin: 0,
      customAttrs: [FILE_NAME_ATTR_ID, FILE_PATH_ATTR_ID, FILE_SIZE_ATTR_ID, LAST_MODIFIED_ATTR_ID,
                    DATASOURCE_ATTR_ID, LINK_ATTR_ID, DXID_ATTR_ID,
-                   DATASOURCE_ID_ATTR_ID, OBJECT_ID_ATTR_ID, OBJECT_KEY_ATTR_ID] + (syncExtractorValues ? [EXTRACTED_VALUES_ATTR_ID] : []),
+                   DATASOURCE_ID_ATTR_ID, OBJECT_ID_ATTR_ID, OBJECT_KEY_ATTR_ID, SYNC_MODE_ATTR_ID] + (syncExtractorValues ? [EXTRACTED_VALUES_ATTR_ID] : []),
      relations: [[id: GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],   // groups matched classifications
                  [id: RETURNS_RELTYPE_ID, direction: 'TO_SOURCE'],   // returned by queries
                  [id: FORMERLY_GROUPS_RELTYPE_ID,  direction: 'TO_TARGET'],  // formerly groups classifications

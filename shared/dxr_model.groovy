@@ -43,6 +43,7 @@ def dxrModelIds() {
         fileNameAttrTypeId     : string2Uuid('019e9212-5f66-7183-a07e-ac1d2e3f4a45'),  // DataXray File Name (file assets: DataXray's name, kept in sync; the asset name is the user's)
         objectKeyAttrTypeId    : string2Uuid('019e9212-8c99-74b6-b3d1-df3a5b6c7d78'),  // DataXray Full Object ID (file assets; "<datasource id>:<object id>", the one value that identifies a file to DataXray's APIs; Cloud + Edge)
         extractedValuesAttrTypeId: string2Uuid('019e9212-7b88-73a5-a2c0-ce2f4a5b6c67'), // DataXray Extracted Values (optional, see extractedValuesOn)
+        syncModeAttrTypeId     : string2Uuid('019e9212-9daa-75c7-b4e2-f04b6c7d8e89'),  // DataXray Sync (file assets: kept in sync nightly / one-time import; see syncModeAttrOn)
         linkAttrTypeId         : string2Uuid('019c9fc5-aa4c-72af-8918-caa54fe61eba'),
         searchLinkAttrTypeId   : string2Uuid('019c9fc5-8ff5-77a7-962d-4b6b05c69254'),
         subtypeAttrTypeId      : string2Uuid('019c9fc5-ecc8-759b-9c0b-78547fa315ad'),
@@ -190,6 +191,29 @@ def objectKeyAttrOn() {
         loggerApi.warn("Could not check for the DataXray Full Object ID attribute type: ${lookupEx.message}")
     }
     execution.setVariable('dxrObjectKeyAttrOn', on.toString())
+    return on
+}
+
+// The DataXray Sync attribute (v2.10, TRC 2 Nov 2026): whether a file asset is
+// refreshed every night or was a one-time import, so a person can tell when its
+// attributes may be stale. A file is kept in sync when at least one sync filter
+// that still returns it is kept in sync nightly (sync wins over one-time import,
+// agreed with Colin Walker, 2 Nov 2026; querySyncedNightly in query_flags.groovy).
+// Configure creates the attribute type; a sync writes it only while the type
+// exists (cached in dxrSyncModeAttrOn), like objectKeyAttrOn.
+def dxrSyncModeKeptInSync() { return 'Kept in sync nightly' }
+def dxrSyncModeOneTime() { return 'One-time import' }
+
+def syncModeAttrOn() {
+    def cached = execution.getVariable('dxrSyncModeAttrOn')
+    if (cached != null) { return cached.toString() == 'true' }
+    boolean on = false
+    try {
+        on = attributeTypeApi.exists(dxrModelIds().syncModeAttrTypeId)
+    } catch (Exception lookupEx) {
+        loggerApi.warn("Could not check for the DataXray Sync attribute type: ${lookupEx.message}")
+    }
+    execution.setVariable('dxrSyncModeAttrOn', on.toString())
     return on
 }
 

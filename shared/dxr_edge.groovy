@@ -186,6 +186,31 @@ def startEdgeFilesPage(List queryItems, int pageNo, int pageSize, String pitId) 
     execution.setVariable('hasMoreWork', true)
 }
 
+// The rerun's count probe (v2.10): one row, every field excluded (~400 bytes
+// whatever the rows look like), to learn hits.total and max_result_window
+// before the Rerun Options task. Stage 'count' — not 'probe', which
+// handleEdgeFilesPage uses for the oversized-row lookup. Its point-in-time id
+// is never reused: the task may stay open for days, so the results pass that
+// follows opens a fresh one (startEdgeFilesPage with pitId null).
+def armEdgeCountProbe(List queryItems) {
+    execution.setVariable('dxrStage', 'count')
+    armEdgeRequest('POST', '/api/indexed-files/search', buildEdgeSearchBody(queryItems, 0, 1, null, ['*']))
+    edgeResetRetries()
+    execution.setVariable('hasMoreWork', true)
+}
+
+// The count probe's answer: [ok: true, total:, maxResultWindow:] or [ok: false, error:].
+def readEdgeCountProbe() {
+    def r = readEdgeResponse()
+    if (!r.ok) { return [ok: false, error: r.error] }
+    try {
+        def page = parseEdgeSearchPage(r.body)
+        return [ok: true, total: page.total, maxResultWindow: page.maxResultWindow]
+    } catch (Exception parseEx) {
+        return [ok: false, error: "Unreadable DataXray search response: ${parseEx.message}".toString()]
+    }
+}
+
 // The page size the files loop is using now: the configured one until Collibra
 // refuses a page as too large, then smaller (shrinkEdgeFilesPage). The row
 // offset is always dxrPageNo × this.

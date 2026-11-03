@@ -36,8 +36,14 @@
 //     classification), and swapped back if they apply again. Only links the
 //     integration created (createdBy = the workflow user) are ever touched: a
 //     file→classification link a person made is left exactly as it is.
-//   – opts.createNew == false (query tagged dataxray-no-auto-import): files
-//     with no asset yet are counted as skippedNew and not created.
+//   – opts.createNew == false (query tagged dataxray-no-auto-import, or the
+//     Rerun Options task said so): files with no asset yet are counted as
+//     skippedNew and not created.
+//   – DataXray Sync (v2.10, optional, syncModeAttrOn): every file the batch
+//     touches gets "Kept in sync nightly" when at least one sync filter that
+//     returns it is kept in sync nightly, else "One-time import"
+//     (query_flags.groovy). The retire pass recomputes it for the files a
+//     search stops returning, the nightly sweep for everything else.
 //
 // A failing batch is logged, counted as failed, and the caller STILL advances
 // — one bad batch must never wedge the loop.
@@ -45,6 +51,7 @@
 // {{include:dxr_model.groovy}}
 // {{include:dxr_rows.groovy}}
 // {{include:collibra_lookup.groovy}}
+// {{include:query_flags.groovy}}
 
 // Upsert one batch of work-item tuples. `label` names the batch in log lines
 // (e.g. "Import batch 3/12"). opts.createNew (default true): false refreshes
@@ -88,6 +95,8 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             loggerApi.info("${label}: ${skippedNew} new matching file(s) not imported (automatic import is off for this search)")
         }
         def owned = integrationIdentityIds()
+        boolean syncModeOn = syncModeAttrOn()
+        def syncCache = [:]   // sync filter id → kept in sync nightly, for this batch
 
         // --- Bulk-create the missing assets -------------------------------------
 
@@ -181,6 +190,15 @@ def processFileBatch(List batch, UUID queryAssetId, String label, Map opts = [:]
             def links = reconcileFileGroups(assetId, tuple[7], ids, owned)
             relationsAdded += links.added
             relationsRemoved += links.removed
+
+            if (syncModeOn) {
+                writeFileSyncMode(assetId, fileSyncModeFor(existingReturns.keySet() + [queryAssetId], ids, syncCache), ids)
+            }
+        }
+        if (syncModeOn && !newItems.isEmpty()) {
+            // A new asset is returned by this sync filter only.
+            def mode = fileSyncModeFor([queryAssetId], ids, syncCache)
+            newItems.each { pair -> writeFileSyncMode(pair[1] as UUID, mode, ids) }
         }
     } catch (Exception batchEx) {
         // Count the whole batch as failed but keep the loop moving — one bad batch
@@ -321,6 +339,8 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
     int unlinked = 0
     int retired = 0
     def parkedIds = []
+    boolean syncModeOn = syncModeAttrOn()
+    def syncCache = [:]
 
     if (!orphanIds.isEmpty()) {
         // Map file-asset id → relation id for this query's "returns" relations, so
@@ -341,12 +361,11 @@ def retireOrphanFiles(Set currentIds, Collection previousIds, UUID queryAssetId)
                         .sourceId(queryAssetId).targetId(fileAssetId).typeId(ids.formerlyReturnsRelationTypeId).build())
                 }
                 // Park only when no query at all still returns this file.
-                def stillReturned = relationApi.findRelations(com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest.builder()
-                    .relationTypeId(ids.returnsRelationTypeId)
-                    .targetId(fileAssetId)
-                    .limit(1)
-                    .build())
-                if (stillReturned.getResults().isEmpty()) {
+                def stillReturnedBy = relationIdsByFarEnd(ids.returnsRelationTypeId, null, fileAssetId).keySet()
+                if (syncModeOn) {
+                    writeFileSyncMode(fileAssetId, fileSyncModeFor(stillReturnedBy, ids, syncCache), ids)
+                }
+                if (stillReturnedBy.isEmpty()) {
                     def current = assetApi.getAsset(fileAssetId)
                     boolean parked = parkFileAsset(current, ids, 'no query returns it any more')
                     retired++
