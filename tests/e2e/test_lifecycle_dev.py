@@ -33,7 +33,7 @@ def test_search_imports_with_full_object_id_and_named_tasks(edge, lifecycle_sear
         ds, obj = real_key(c, f)
         assert ds and obj, f"file asset {f} has no object key"
         assert c.attr(f, "objectKeyAttrTypeId") == f"{ds}:{obj}"
-        assert c.linked(f, "groups", s["label"]["id"])
+        assert c.linked(f, "classifiedBy", s["label"]["id"])
     attachments = c.get("/attachments", baseResourceId=s["query"])["results"]
     assert attachments, "the sync filter has no results file"
     data = c.call("GET", f"/attachments/{attachments[0]['id']}/file")
@@ -51,7 +51,7 @@ def test_rerun_settles_parked_files_before_its_summary(edge, lifecycle_search, t
     gone = track.standin("gone", ds=ds, obj=UNKNOWN_OBJECT.format(run=c.run_id, n=1))
     still_there = track.standin("still-there", ds=ds, obj=obj)
     person_label = track.asset("person label", "classificationsDomainId", "labelTypeId")
-    c.link(still_there, "groups", person_label)                  # made by a person (the REST user)
+    c.link(still_there, "groups", person_label)                  # made by a person (the REST user), old type: never moved
     for f in (gone, still_there):
         c.link(s["query"], "returns", f)
 
@@ -63,7 +63,7 @@ def test_rerun_settles_parked_files_before_its_summary(edge, lifecycle_search, t
     assert c.status(still_there) == "Not in any search"           # stories 28, 29
     assert c.attr(still_there, "filePathAttrTypeId"), "refreshed from DataXray before the summary"
     assert c.attr(still_there, "objectKeyAttrTypeId") == f"{ds}:{obj}"
-    assert c.linked(still_there, "groups", s["label"]["id"])
+    assert c.linked(still_there, "classifiedBy", s["label"]["id"])
     assert c.linked(still_there, "groups", person_label)          # EVID-9: a person's link is kept
     assert not c.linked(still_there, "formerlyGroups", person_label)
     for f in s["files"]:

@@ -239,8 +239,8 @@ everything without being added to these roles.
   (Accepted, Under Review and so on) is never changed.
 - **Links are kept as history** — when a search stops returning a file, its
   *returns* link becomes *formerly returns*; when DataXray no longer finds a
-  classification on a file, the file's *groups* link becomes *formerly
-  groups*. Both are swapped back if they apply again. Links that people create
+  classification on a file, the file's *classified by* link becomes *formerly
+  classified by*. Both are swapped back if they apply again. Links that people create
   are never removed or changed. The full file-asset lifecycle — creation, the
   25,000 cap, sync, orphaning, deletion and what to do at the limit — is
   explained in [file-asset-lifecycle.md](file-asset-lifecycle.md).
@@ -294,6 +294,24 @@ the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute type
 name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes:
 settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
 (`data-xray` by default) stay as they are.
+
+### Upgrading to v2.11
+
+Re-import the workflows, then run **Configure DataXray Workflows** once.
+
+- **Clearer link names.** File assets are now linked to their labels,
+  extractors and annotators with a new **classified by / classifies**
+  relation ("*Report.pdf* classified by *Contacts*", "*Contacts* classifies
+  *Report.pdf*") instead of Collibra's *groups / is grouped by*, and
+  *formerly groups / formerly grouped by* is renamed **formerly classified by
+  / formerly classifies**. Configure creates the new relation type, shows it
+  on the DataXray File, Label, Annotator and Extractor pages, and renames the
+  *formerly* one (unless you renamed it yourself).
+- The integration's existing *groups* links on file assets move to
+  *classified by* as each file is synced, and the nightly file sync moves the
+  rest, up to 20,000 a night. A *groups* link a person created is left as it
+  is. Saved searches keep linking their criteria with *groups*.
+- Until Configure has run, file links keep using *groups*; nothing fails.
 
 ### Upgrading to v2.10
 
@@ -422,7 +440,7 @@ that case, re-enter the token/URL (Step 4) and **run Configure once more** (Step
 | The DataXray Sync attribute is missing on file assets. | Configure has not been re-run since the upgrade to v2.10 — run it once, then rerun the searches or wait for the nightly. |
 | The import controls don't appear on the search results task. | Either the search returned 0 results, matched more than 10,000 files, or the projected number of DataXray File assets (wherever they live) exceeds the 25,000 cap (the task shows the reason). |
 | A rerun stops with "This instance is missing the status 'Not in any search' …". | The workflows were upgraded to v2.4 but Configure has not been re-run — run it once (Step 3). |
-| *formerly returns* or *formerly groups* links don't show on an asset page. | Configure left that asset type's assignment alone because it has hand-tuned rules (its results list it). Add the relation types in Settings > Operating model > Asset types > Assignments. |
+| *classified by*, *formerly returns* or *formerly classified by* links don't show on an asset page. | Configure left that asset type's assignment alone because it has hand-tuned rules (its results list it). Add the relation types in Settings > Operating model > Asset types > Assignments. |
 | A search is refused with "… was deleted in DataXray (its Collibra asset is retired)". | A classification picked in the form was deleted in DataXray; the sync marked its Collibra asset Obsolete, but the pickers still offer it. Remove it from the search. |
 | A rerun fails with "criterion no longer exists". | A classification used by the saved search was deleted in DataXray. Recreate it there and run the classification sync, or create a new search. |
 | Nightly file sync did nothing. | No query assets carry the `dataxray-keep-in-sync` tag, or **Rerun DataXray Search** isn't imported/enabled — check `dgc.log` for the run summary. |

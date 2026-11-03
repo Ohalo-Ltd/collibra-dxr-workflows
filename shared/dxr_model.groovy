@@ -22,11 +22,12 @@ def dxrModelIds() {
         extractorTypeId        : string2Uuid('019c9fbd-a91b-7242-9451-79ab632163a3'),
         labelTypeId            : string2Uuid('019c9fbe-25c3-71b7-90ac-057dd582fa1e'),
         // Relation types
-        groupsRelationTypeId   : string2Uuid('00000000-0000-0000-0000-000000007017'),  // groups (query→classification, file→classification)
+        groupsRelationTypeId   : string2Uuid('00000000-0000-0000-0000-000000007017'),  // Collibra's groups (query→classification; file→classification before v2.11 — see fileClassRelationTypeId)
+        classifiedByRelationTypeId: string2Uuid('019e9212-aebb-77e9-9f14-026d8e9fa0ab'), // classified by / classifies (file→classification, v2.11)
         returnsRelationTypeId  : string2Uuid('019e9210-f180-79dc-b5a0-6c31e94f82d5'),  // returns / returned by (query→file)
         textFilterRelTypeId    : string2Uuid('019e9210-f2a1-7d3e-8c4b-5a6f7e8d9c01'),  // searches text in (query→Annotator)
         formerlyReturnsRelationTypeId: string2Uuid('019e9212-1b22-7d4f-8c3a-6e5f7a8b9c01'), // formerly returns (query→file): the query stopped returning the file
-        formerlyGroupsRelationTypeId : string2Uuid('019e9212-2c33-7e50-9d4b-7f6a8b9c0d12'), // formerly groups (file→classification): DataXray no longer finds it on the file
+        formerlyGroupsRelationTypeId : string2Uuid('019e9212-2c33-7e50-9d4b-7f6a8b9c0d12'), // formerly classified by (file→classification; "formerly groups" before v2.11): DataXray no longer finds it on the file
         // Attribute types
         descriptionAttrTypeId  : string2Uuid('00000000-0000-0000-0000-000000003114'),  // Collibra system Description
         filesAttrTypeId        : string2Uuid('019e2736-8bd0-727a-b4ab-6899517a3e73'),  // Files (HTML preview table)
@@ -217,6 +218,37 @@ def syncModeAttrOn() {
     return on
 }
 
+// The file → classification link type (v2.11: "groups / is grouped by" read
+// as confusing, so file links read "File classified by Label" / "Label
+// classifies File"). Collibra's built-in
+// "groups" (7017) is shared with every other use on the instance and keeps
+// linking sync filters to their criteria; file links get the pack's own
+// "classified by / classifies" type, which Configure creates. Until it has,
+// file links keep using "groups", so nothing breaks before Configure runs.
+// Links of the old type are moved over as each file is synced
+// (reconcileFileGroups) and by the files nightly's first task, before it starts
+// any rerun (migrate_classified_by.groovy).
+// Checked once per process and cached in dxrClassifiedByOn.
+def classifiedByOn() {
+    def cached = execution.getVariable('dxrClassifiedByOn')
+    if (cached != null) { return cached.toString() == 'true' }
+    boolean on = false
+    try {
+        on = relationTypeApi.exists(dxrModelIds().classifiedByRelationTypeId)
+    } catch (Exception lookupEx) {
+        loggerApi.warn("Could not check for the 'classified by' relation type: ${lookupEx.message}")
+    }
+    execution.setVariable('dxrClassifiedByOn', on.toString())
+    return on
+}
+
+def fileClassRelationTypeId(Map ids) {
+    return classifiedByOn() ? ids.classifiedByRelationTypeId : ids.groupsRelationTypeId
+}
+
+// The nightly moves at most this many old-type file links per night.
+def dxrMigrateLinksMaxPerNight() { return 20_000 }
+
 // Extractor values kept per file: each value is cut to dxrExtractedValueMaxChars()
 // and a file's values stop at dxrExtractedValuesMaxChars() in total. The Cloud +
 // Edge edition keeps less: its values travel in 100 KB External API pages.
@@ -233,7 +265,7 @@ def rerunModelGap(Map ids) {
     def missing = []
     if (!statusApi.exists(ids.notInAnySearchStatusId)) { missing << "the status 'Not in any search'" }
     if (!relationTypeApi.exists(ids.formerlyReturnsRelationTypeId)) { missing << "the relation type 'formerly returns'" }
-    if (!relationTypeApi.exists(ids.formerlyGroupsRelationTypeId)) { missing << "the relation type 'formerly groups'" }
+    if (!relationTypeApi.exists(ids.formerlyGroupsRelationTypeId)) { missing << "the relation type 'formerly classified by'" }
     if (!attributeTypeApi.exists(ids.datasourceIdAttrTypeId)) { missing << "the attribute type 'DataXray Datasource ID'" }
     if (!attributeTypeApi.exists(ids.objectIdAttrTypeId)) { missing << "the attribute type 'DataXray Object ID'" }
     if (!attributeTypeApi.exists(ids.fileNameAttrTypeId)) { missing << "the attribute type 'DataXray File Name'" }

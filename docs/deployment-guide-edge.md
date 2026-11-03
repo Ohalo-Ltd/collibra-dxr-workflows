@@ -62,7 +62,7 @@ Identical to the on-prem edition: members of `DataXray User` may run the search 
 
 Run **Sync DataXray Classifications** first — it is mandatory in this edition: searches and reruns translate classifications to DataXray's internal ids stored by that sync (attribute *DataXray Index ID*), and refuse to run for a classification it has not synced. Then **Search DataXray** from the **+ Create** menu. Results appear in your task inbox after a few seconds (the search is asynchronous in this edition). Importing and reruns page through the results; the nightly jobs run unattended at 02:00 and 02:30 server time.
 
-The search results task works as in the on-prem edition (see *Using the workflows* in [deployment-guide.md](deployment-guide.md#using-the-workflows)): three independent options, **Import now**, **Keep in sync nightly** (tag `dataxray-keep-in-sync`) and **Create assets for new files found on later reruns** (unticked: tag `dataxray-no-auto-import`, so reruns only refresh file assets already in Collibra). A file asset that no saved search returns any more gets the status **Not in any search**; links that stop applying become *formerly returns* / *formerly groups*. A status a person set and links people created are never changed. [file-asset-lifecycle.md](file-asset-lifecycle.md) has the details.
+The search results task works as in the on-prem edition (see *Using the workflows* in [deployment-guide.md](deployment-guide.md#using-the-workflows)): three independent options, **Import now**, **Keep in sync nightly** (tag `dataxray-keep-in-sync`) and **Create assets for new files found on later reruns** (unticked: tag `dataxray-no-auto-import`, so reruns only refresh file assets already in Collibra). A file asset that no saved search returns any more gets the status **Not in any search**; links that stop applying become *formerly returns* / *formerly classified by*. A status a person set and links people created are never changed. [file-asset-lifecycle.md](file-asset-lifecycle.md) has the details.
 
 ## Who can see what
 
@@ -77,6 +77,10 @@ The same guidance as the on-prem edition applies:
 ## Upgrading from Data X-Ray to DataXray names
 
 Releases before the DataXray rename call the product **Data X-Ray** and the queries domain **Data X-Ray Custom Queries**. After re-importing the workflows, run **Configure DataXray Workflows** once: it renames the community, the three domains (the queries domain becomes **DataXray Sync Filter**), the **DataXray File** asset type, the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute types, the **DataXray Admin** and **DataXray User** roles and the six workflow definitions. It only renames an element that still has its old default name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes: settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name (`data-xray` by default) stay as they are.
+
+## Upgrading to v2.11
+
+Re-import the workflows, then run **Configure DataXray Workflows** once. File assets are now linked to their labels, extractors and annotators with a new **classified by / classifies** relation instead of Collibra's *groups / is grouped by*, and *formerly groups* becomes **formerly classified by / formerly classifies**. The integration's existing *groups* links on file assets move over as each file is synced, and the nightly file sync moves the rest (up to 20,000 a night); a *groups* link a person created is left as it is. Saved searches keep linking their criteria with *groups*. Until Configure has run, file links keep using *groups*. See *Upgrading to v2.11* in [deployment-guide.md](deployment-guide.md#upgrading-to-v211). No extra DataXray requests.
 
 ## Upgrading to v2.10
 
