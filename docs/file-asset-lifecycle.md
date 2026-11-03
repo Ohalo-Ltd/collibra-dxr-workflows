@@ -171,12 +171,21 @@ yes/no answer. By default Collibra only links a file asset to each extractor
 that produced a value. An admin can also have every sync copy the values
 themselves onto the file asset.
 
+**It is for display, not for searching.** The values are copied onto file
+assets so people can read them in Collibra. The setting does not change what a
+search matches: picking an extractor in **Search DataXray** finds every file
+the extractor produced a value for, whatever the value was (a *yes/no*
+extractor matches both the *yes* and the *no* files).
+
 **Off by default, and invisible while off.** Nothing about it appears in
 Collibra until an admin turns it on:
 
-1. Open **Configure DataXray Workflows** on the workflow settings page and set
-   its configuration variable **Sync extractor values to file assets
-   (true/false)** to `true`.
+1. Go to **Settings → Workflows → Definitions → Configure DataXray Workflows**,
+   open the **Variables** section and set **Sync extractor values to file
+   assets (true/false)** to `true`. The setting belongs to Configure, not to
+   Search or Rerun, and only Sysadmins and roles with the *Workflow
+   administration* permission (such as **DataXray Admin**) see the Variables
+   section.
 2. Run **Configure DataXray Workflows**. It creates the **DataXray Extracted
    Values** attribute and adds it to the **DataXray File** asset type.
 3. From then on every import and rerun (including the nightly ones) writes a

@@ -50,6 +50,9 @@ Settings → Workflows → Definitions → select a workflow → **Variables**:
 | Search DataXray, Rerun DataXray Search, Sync DataXray Classifications, Sync DataXray Classification (Nightly), Sync DataXray Files (Nightly) | **Edge HTTP connection name (DataXray)** | The connection name from Step 1 (`data-xray` unless you chose another). |
 | Search DataXray, Rerun DataXray Search | **DataXray results per request (1-100)** | Leave at `25`. Lower it only if a DataXray page exceeds Collibra's response limit (see *Limits*). |
 | all four | **DataXray Base URL (deep links only)** | Optional. Used only to build links from Collibra assets back to DataXray; leave the placeholder to skip links. |
+| Configure DataXray Workflows | **Sync extractor values to file assets (true/false)** | Optional, default `false`. Set `true` and run Configure again to have every sync copy the values DataXray's extractors found onto the file assets, for display; it does not change what a search matches. See [Optional: extractor values on file assets](file-asset-lifecycle.md#optional-extractor-values-on-file-assets). |
+
+Only Sysadmins and roles with the *Workflow administration* permission (such as **DataXray Admin**) see the **Variables** section.
 
 There is **no Bearer token** in this edition: credentials live on the Edge connection.
 
@@ -143,6 +146,7 @@ Check all six after an upgrade: a workflow that was not re-imported still shows 
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| The **Sync extractor values to file assets** setting can't be found. | It belongs to **Configure DataXray Workflows**, not Search or Rerun; or you lack workflow administration; or Configure was imported before v2.8. | Settings → Workflows → Definitions → **Configure DataXray Workflows** → Variables, as a Sysadmin or **DataXray Admin**. Re-import Configure if the variable is not there. |
 | The workflow instance shows an **error** right after starting and never reaches a task. | The **connection name** does not match an HTTP connection on any Edge site (Collibra rejects the External API task before sending it). | Correct the variable, cancel the errored instance (Settings → Workflows → Instances), start again. |
 | Task **Search Failed** / **Sync Failed** with *Edge request failed* or *HTTP 401/403*. | The Edge site cannot reach DataXray, or the connection's credentials are wrong or the account lacks permissions. | Test the connection in Settings → Edge; check the Edge host's network path; check the DataXray account. |
 | A rerun was started but nothing happened. | Every manual rerun waits for its **Rerun Options** task (v2.10). | Open it from your task list and click **Send**. |
