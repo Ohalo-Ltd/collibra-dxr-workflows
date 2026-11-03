@@ -101,7 +101,7 @@ Classifications**, and **Sync DataXray Classification (Nightly)** — need to
 know your DataXray instance's address and an authentication token. These are
 hidden configuration variables; they are never shown to people who *run* the
 workflow and can only be set by an admin. **Rerun DataXray Search** uses the
-settings of **Search DataXray** (from v2.11.1), and **Sync DataXray Files
+settings of **Search DataXray** (from v2.11), and **Sync DataXray Files
 (Nightly)** has no connection settings: it only starts reruns.
 
 For **each** of those three workflows:
@@ -297,15 +297,6 @@ name: one you renamed yourself keeps your name. The workflows refer to all of th
 settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
 (`data-xray` by default) stay as they are.
 
-### Upgrading to v2.11.1
-
-Re-import **Rerun DataXray Search**. It no longer has DataXray settings of its
-own: every rerun, manual or nightly, uses the Base URL and Bearer token set on
-**Search DataXray**. Before v2.11.1, Collibra refused to save the rerun's
-settings page once Configure had set who may run it, so its connection could
-not be changed. Check that Search DataXray's settings point at the DataXray
-you want reruns to use; the values the rerun held before are discarded.
-
 ### Upgrading to v2.11
 
 Re-import the workflows, then run **Configure DataXray Workflows** once.
@@ -323,6 +314,12 @@ Re-import the workflows, then run **Configure DataXray Workflows** once.
   rest, up to 20,000 a night. A *groups* link a person created is left as it
   is. Saved searches keep linking their criteria with *groups*.
 - Until Configure has run, file links keep using *groups*; nothing fails.
+- **Rerun DataXray Search has no DataXray settings of its own**: every rerun,
+  manual or nightly, uses the Base URL and Bearer token set on **Search
+  DataXray**. Before v2.11, Collibra refused to save the rerun's settings page
+  once Configure had set who may run it, so its connection could not be
+  changed. Check that Search DataXray's settings point at the DataXray you
+  want reruns to use; the values the rerun held before are discarded.
 
 ### Upgrading to v2.10
 
@@ -443,7 +440,7 @@ that case, re-enter the token/URL (Step 4) and **run Configure once more** (Step
 |---|---|
 | Workflow's overview page is blank. | The workflow is disabled — enable it (Step 2). |
 | A run stops with "DataXray … is not set" / "misconfigured". | The Base URL or Bearer token is still the placeholder — set it (Step 4). For **Rerun DataXray Search**, set it on **Search DataXray**. |
-| Saving the settings of **Rerun DataXray Search** fails (`workflowWrongRoles` in `dgc.log`). | Releases before v2.11.1 kept the rerun's DataXray connection on its own settings page, which Collibra refuses to save once Configure has set who may run it. Import v2.11.1: the rerun then uses Search DataXray's settings. |
+| Saving the settings of **Rerun DataXray Search** fails (`workflowWrongRoles` in `dgc.log`). | Releases before v2.11 kept the rerun's DataXray connection on its own settings page, which Collibra refuses to save once Configure has set who may run it. Import v2.11: the rerun then uses Search DataXray's settings. |
 | The **Sync extractor values to file assets** setting can't be found. | It is a variable of **Configure DataXray Workflows**, not of Search or Rerun (Settings → Workflows → Definitions → Configure DataXray Workflows → Variables). The Variables section is shown only to Sysadmins and to roles with the *Workflow administration* permission, such as **DataXray Admin**. If Configure was imported before v2.8, re-import it. |
 | Configure's results list a workflow as **"not deployed yet"**. | That workflow wasn't imported when Configure ran — import it (Steps 1–2) and run Configure again (Step 3). |
 | A user can't see Search/Sync in **+ Create**. | They don't hold **DataXray User** or **DataXray Admin** — assign the role (Step 5). |

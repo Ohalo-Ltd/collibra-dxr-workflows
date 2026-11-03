@@ -567,7 +567,7 @@ test(variant: 'edge', 'RERUN-OPT-8: switching keep in sync off updates DataXray 
     assert attr(known, 'syncMode') == 'One-time import'
 }
 
-// --- Settings come from Search DataXray (v2.11.1) ----------------------------------------
+// --- Settings come from Search DataXray (v2.11) ----------------------------------------
 // Collibra refuses to save the rerun's own settings page once Configure has given
 // the asset-scoped workflow global start roles (workflowWrongRoles), so it has none.
 

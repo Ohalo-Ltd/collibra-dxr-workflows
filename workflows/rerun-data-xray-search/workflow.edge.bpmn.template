@@ -59,7 +59,7 @@
     </extensionElements>
     <startEvent id="startEvent" name="Start" flowable:initiator="initiator">
       <extensionElements>
-        <!-- No DataXray settings here (v2.11.1): the collector uses Search
+        <!-- No DataXray settings here (v2.11): the collector uses Search
              DataXray's (shared/dxr_config.groovy, adoptSearchDataXraySettings).
              Collibra refuses to save this definition's settings page once
              Configure has given it global start roles (workflowWrongRoles). -->

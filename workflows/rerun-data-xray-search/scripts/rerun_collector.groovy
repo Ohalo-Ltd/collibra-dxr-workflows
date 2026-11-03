@@ -97,7 +97,7 @@ def abort = { String title, String message ->
 
 // --- Config (Search DataXray's settings) -------------------------------------------
 
-// The connection settings are Search DataXray's (v2.11.1; dxr_config.groovy).
+// The connection settings are Search DataXray's (v2.11; dxr_config.groovy).
 def adopted = adoptSearchDataXraySettings(['dataxrayUrl', 'dataxrayAuthToken'])
 def cfg = readRequiredConfig([
     dataxrayUrl      : 'DataXray Base URL',
