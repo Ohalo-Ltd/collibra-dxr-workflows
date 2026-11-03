@@ -84,3 +84,24 @@ def writeFileSyncMode(UUID assetId, String mode, Map ids) {
         loggerApi.warn("Could not set DataXray Sync on file asset ${assetId}: ${attrEx.message}")
     }
 }
+
+// Recompute the DataXray Sync value of these file assets (UUIDs or their
+// strings) from the sync filters that return them now. For the files a run did
+// not get to after its options changed (rerun_common.groovy,
+// refreshSyncModesAfterOptionChange). Never throws; returns how many were written.
+def refreshFileSyncModes(Collection assetIds, Map ids) {
+    if (!syncModeAttrOn()) { return 0 }
+    def cache = [:]
+    int written = 0
+    assetIds.each { raw ->
+        try {
+            def assetId = raw instanceof UUID ? raw : string2Uuid(raw.toString())
+            def sources = relationIdsByFarEnd(ids.returnsRelationTypeId, null, assetId).keySet()
+            writeFileSyncMode(assetId, fileSyncModeFor(sources, ids, cache), ids)
+            written++
+        } catch (Exception refreshEx) {
+            loggerApi.warn("Could not recompute DataXray Sync on file asset ${raw}: ${refreshEx.message}")
+        }
+    }
+    return written
+}

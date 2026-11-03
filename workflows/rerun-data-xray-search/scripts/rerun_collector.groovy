@@ -174,7 +174,8 @@ if (!criteria.hasCriteria) {
 def queryString = composeDxrQuery(criteria.labelNames, criteria.extractorNames, criteria.annotatorNames,
                                   criteria.filter, criteria.filterAnnotatorNames)
 loggerApi.info("Rerun of '${conditionName}' — rebuilt DataXray query: ${displayQuery(queryString)}")
-recordQueryAttribute(queryId, ids, displayQuery(queryString))
+// Written to the DataXray Query attribute once the options are applied (applyRerunOptions).
+execution.setVariable('rerunQueryDisplay', displayQuery(queryString))
 
 // --- The files this query currently returns (for the retire diff) --------------------
 
