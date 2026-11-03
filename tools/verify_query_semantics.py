@@ -218,7 +218,7 @@ def main():
     sAnB, _ = dxr.ids(f'annotators: {{ {nm("name", A)} AND {nm("name", B)} }}')
     check('single nested block cannot hold two names: files({A AND B}) == ∅', A == B or not sAnB, f'{len(sAnB)}')
 
-    # 7. The full agreed shape (Colin\'s example): E AND A AND B AND ((A OR C) AND T)
+    # 7. The full agreed shape: E AND A AND B AND ((A OR C) AND T)
     if E:
         full = ' AND '.join([nm('extractedMetadata.name', E), nm('annotators.name', A),
                              nm('annotators.name', B), nested([A, C], T)])

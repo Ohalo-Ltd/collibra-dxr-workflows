@@ -24,7 +24,7 @@
 //    never parks based on a partial view, and re-checks each asset's "returns"
 //    relations just before parking it, because the reruns started in phase 1
 //    run alongside the sweep and may have created or linked it since the scan
-//    (otherwise a brand-new asset could be parked with a live link, TRC
+//    (otherwise a brand-new asset could be parked with a live link, review
 //    stories #28/#29). A status a person set (anything but
 //    Candidate / Obsolete) is never changed. Orphans still Obsolete from a
 //    release before v2.4 move to 'Not in any search' on the first run. If a

@@ -1,5 +1,5 @@
 // processFileBatch: one batch of DataXray rows upserted into file assets — what
-// an import, a rerun and every Edge results page run. TRC stories 13a, 14, 19,
+// an import, a rerun and every Edge results page run. Review stories 13a, 14, 19,
 // 20, 22, 24; R1, R3, R19, R22, R23; IMP-6, -7; FILE-6, -10, -16, -19, -20,
 // -24, -25, -26, -29.
 

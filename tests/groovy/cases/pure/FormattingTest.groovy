@@ -5,7 +5,7 @@ table('readableFileSize (FILE-24)', [
     [case: 'one byte', in: '1', out: '1 byte'],
     [case: 'under 1 KB', in: '1023', out: '1,023 bytes'],
     [case: '1 KB', in: '1024', out: '1.0 KB (1,024 bytes)'],
-    [case: 'the TRC example', in: '27885', out: '27.2 KB (27,885 bytes)'],
+    [case: 'a real example', in: '27885', out: '27.2 KB (27,885 bytes)'],
     [case: 'megabytes', in: '5242880', out: '5.0 MB (5,242,880 bytes)'],
     [case: 'gigabytes', in: '1610612736', out: '1.5 GB (1,610,612,736 bytes)'],
     [case: 'a number DataXray sends as text with spaces', in: ' 2048 ', out: '2.0 KB (2,048 bytes)'],

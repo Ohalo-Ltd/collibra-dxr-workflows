@@ -34,7 +34,7 @@ def emptyIndex = [labelDxrIdByIndexId: [:], annotatorDxrIdByIndexId: [:], extrac
 
 // One chunk of the results file: CSV lines (no header) for these tuples:
 // Datasource, Path, Full Object ID ("<datasource id>:<object id>", the key
-// DataXray identifies the file by — TRC R1).
+// DataXray identifies the file by — requirement R1).
 def writeResultsFileChunk = { List tuples ->
     int n = (execution.getVariable('resultsFileChunks') ?: 0) as int
     def sb = new StringBuilder()

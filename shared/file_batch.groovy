@@ -462,7 +462,7 @@ def writeFileAssetAttrs(UUID assetId, List tuple, Map ids, boolean valuesOn) {
         setFileAssetAttr(assetId, ids.datasourceIdAttrTypeId, tuple[8])
         setFileAssetAttr(assetId, ids.objectIdAttrTypeId,     tuple[9])
         // "<datasource id>:<object id>": the one value DataXray's APIs identify
-        // a file by (TRC R1). Only while Configure has created the attribute type.
+        // a file by (requirement R1). Only while Configure has created the attribute type.
         if (objectKeyAttrOn()) { setFileAssetAttr(assetId, ids.objectKeyAttrTypeId, objectKey) }
     }
     if (valuesOn) {

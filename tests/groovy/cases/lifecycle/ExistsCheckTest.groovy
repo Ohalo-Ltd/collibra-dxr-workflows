@@ -1,6 +1,6 @@
 // The DataXray existence check's decisions (shared/file_exists_edge.groovy):
 // which files are asked about, which become Not in DataXray, and the
-// zero-results verdict. TRC stories 15, 31; R11, R24; FILE-11, FILE-28,
+// zero-results verdict. Review stories 15, 31; R11, R24; FILE-11, FILE-28,
 // NIGHT-8, NIGHT-10. The request/response loop itself is exercised by the
 // workflow tests (cases/workflow).
 

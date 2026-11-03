@@ -63,7 +63,7 @@ def fetchTaggedAssetsInDomain(UUID domainId, String tagName) {
 // whole instance, never by domain: a classification someone moved out of the
 // DataXray Classifications domain is still the same asset — the sync updates
 // it where it is instead of creating a duplicate, and file rows still resolve
-// to it so its file links are kept (TRC requirements R4 and R6, Oct 2026).
+// to it so its file links are kept (requirements R4 and R6, Oct 2026).
 def classificationTypeIds(Map ids) {
     return [ids.classificationTypeId, ids.annotatorTypeId, ids.extractorTypeId, ids.labelTypeId]
 }

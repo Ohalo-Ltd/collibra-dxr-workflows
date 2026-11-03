@@ -1,6 +1,6 @@
 // Search DataXray, Cloud + Edge edition, run whole: the start form's values,
 // the search and its results file, the results task's three options and the
-// import. TRC stories 9, 10, 12, 13, 13a, 19; R1, R17, R19, R21; IMP-1..3,
+// import. Review stories 9, 10, 12, 13, 13a, 19; R1, R17, R19, R21; IMP-1..3,
 // -6, -9, -11..13.
 
 import java.util.zip.ZipInputStream

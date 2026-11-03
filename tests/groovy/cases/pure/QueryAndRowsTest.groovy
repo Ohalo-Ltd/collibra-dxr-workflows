@@ -1,5 +1,5 @@
 // How a saved search becomes a DataXray query, and how DataXray rows become
-// work items. TRC story 9 (AND semantics); EVID-1..6; FILE-1.
+// work items. Review story 9 (AND semantics); EVID-1..6; FILE-1.
 
 // --- on-prem: KQL for /api/v1/files -----------------------------------------------------------
 
@@ -100,7 +100,7 @@ table('largestPageSizeFor: a smaller page must start exactly at the current row'
 
 table('isEdgeRefusal: what counts as Collibra refusing a response as too large', [
     [case: 'the explicit error', r: [error: 'Edge request failed: Response size exceeds the allowed limit.', status: -1, body: ''], out: true],
-    [case: '500 with an empty body (TRC)', r: [error: 'x', status: 500, body: ''], out: true],
+    [case: '500 with an empty body (seen live)', r: [error: 'x', status: 500, body: ''], out: true],
     [case: '500 with a JSON body is a real DataXray error', r: [error: 'x', status: 500, body: '{"error":"boom"}'], out: false],
     [case: '404', r: [error: 'x', status: 404, body: ''], out: false],
 ]) { row -> assert isEdgeRefusal(row.r) == row.out }

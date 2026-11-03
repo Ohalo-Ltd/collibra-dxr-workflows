@@ -43,7 +43,7 @@
 //   – Lookups are by asset TYPE over the whole instance, not by domain, so a
 //     classification moved to another domain/community is matched by its
 //     DataXray ID and updated where it is: no duplicate in the Classifications
-//     domain, and its file links survive (TRC R4/R6). New assets are still
+//     domain, and its file links survive (requirements R4/R6). New assets are still
 //     created in the Classifications domain.
 //   – If DataXray returns zero classifications, the retirement step is
 //     skipped to avoid a transient/broken response retiring all assets.

@@ -2,7 +2,7 @@
 
 What the offline suite cannot prove: that real Collibra, the real Edge
 connection and the real DataXray behave as the fakes assume. Each scenario
-names the TRC story or acceptance criterion it covers. Collision rules and
+names the review story or acceptance criterion it covers. Collision rules and
 clean-up: see conftest.py.
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ def real_key(c, file_id):
 # --- search and import ------------------------------------------------------------------------------
 
 def test_search_imports_with_full_object_id_and_named_tasks(edge, lifecycle_search):
-    """Stories 10, 13, 13a; R1 (Full Object ID, CSV column); TRC 28 Oct task titles."""
+    """Stories 10, 13, 13a; R1 (Full Object ID, CSV column); 28 Oct task titles."""
     c, s = edge, lifecycle_search
     assert s["results_title"].startswith(f"Search Results: {s['name']} (")
     assert s["summary_title"].startswith(f"Import Summary: {s['name']} (")
@@ -43,7 +43,7 @@ def test_search_imports_with_full_object_id_and_named_tasks(edge, lifecycle_sear
     assert len(csv) - 1 == len(s["files"])
 
 
-# --- the TRC 28 Oct review: stories 28, 29, 31 (FILE-27) --------------------------------------------------
+# --- the 28 Oct review: stories 28, 29, 31 (FILE-27) --------------------------------------------------
 
 def test_rerun_settles_parked_files_before_its_summary(edge, lifecycle_search, track):
     c, s = edge, lifecycle_search

@@ -1,6 +1,6 @@
 // Sync DataXray Files (Nightly), run whole in both editions: the fan-out of
 // headless reruns, the orphan sweep and, in the Cloud + Edge edition, the
-// DataXray existence check. TRC stories 11, 15, 17, 18, 28, 29, 31; R11, R24;
+// DataXray existence check. Review stories 11, 15, 17, 18, 28, 29, 31; R11, R24;
 // NIGHT-2..5, -8..11; QRY-1..4.
 
 def nightly(fake.World world) { nightly([:], world) }

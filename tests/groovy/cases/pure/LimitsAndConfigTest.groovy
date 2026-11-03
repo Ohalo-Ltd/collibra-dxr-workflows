@@ -15,7 +15,7 @@ table('computeImportFeasibility at the limits', [
     if (row.msg) { assert r.importBlockedMessage.contains(row.msg) }
 }
 
-test('the limits agreed with TRC') {
+test('the agreed limits') {
     assert dxrMaxTotalFileAssets() == 25_000
     assert dxrMaxImportFiles() == 10_000
     assert dxrWarnImportFiles() == 5_000

@@ -137,7 +137,7 @@ def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
 // DataXray's own name for the file, refreshed on every sync. The asset's name
 // is set from it once, when the asset is created, and is the user's after that.
 def FILE_NAME_ATTR_ID     = '019e9212-5f66-7183-a07e-ac1d2e3f4a45'
-def OBJECT_KEY_ATTR_ID    = '019e9212-8c99-74b6-b3d1-df3a5b6c7d78'   // v2.9: "<datasource id>:<object id>" (TRC R1)
+def OBJECT_KEY_ATTR_ID    = '019e9212-8c99-74b6-b3d1-df3a5b6c7d78'   // v2.9: "<datasource id>:<object id>" (requirement R1)
 // DataXray Extracted Values (v2.8, optional): the extractor values of each file,
 // as a table. Exists only while this workflow's syncExtractorValues variable
 // is true; the syncs write it only while it exists (extractedValuesOn).

@@ -70,7 +70,7 @@ def dxrEdgeResultsFileMaxRows() { return 10_000 }
 
 // No single run creates more file assets than this (either edition): a search
 // matching more cannot be imported (the user is asked to refine it), and a
-// rerun that would add more new files than this is refused. Agreed with TRC on
+// rerun that would add more new files than this is refused. Agreed with the customer on
 // 13 Oct 2026.
 def dxrMaxImportFiles() { return 10_000 }
 
@@ -103,8 +103,8 @@ def dxrVersionLabel() { return "DataXray workflows ${dxrPackVersion()} (${dxrPac
 // Log which release is running and publish it for the task forms' footer, and
 // stamp when this run started (dxrRunStartedAt, "29 Oct 2026, 14:05 UTC"): the
 // user tasks carry it in their title, with the search's name, so several open
-// tasks can be told apart in the task list without opening each one (TRC, Oct
-// 2026). Called once, by the first script of every workflow.
+// tasks can be told apart in the task list without opening each one (customer
+// feedback, Oct 2026). Called once, by the first script of every workflow.
 def announceDxrVersion(String workflowName) {
     execution.setVariable('dxrVersionLabel', dxrVersionLabel())
     execution.setVariable('dxrRunStartedAt', dxrRunTimestamp())
@@ -171,7 +171,7 @@ def extractedValuesOn() {
     return on
 }
 
-// The DataXray Full Object ID attribute (TRC requirement R1, Oct 2026: "expose the
+// The DataXray Full Object ID attribute (requirement R1, Oct 2026: "expose the
 // full object id — the datasource prefix is missing"). DataXray's object id is
 // only meaningful together with its datasource (every DataXray API that takes
 // one takes both), so the attribute carries "<datasource id>:<object id>" —

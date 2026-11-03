@@ -1,7 +1,7 @@
 // Rerun DataXray Search, Cloud + Edge edition, run whole: the built BPMN and
 // its scripts against FakeCollibra and FakeDataXray, from the collector's
 // guards through the results pages, the retire pass and the existence check
-// to the summary task. TRC stories 8, 11, 14, 15, 17, 20, 28, 29, 31;
+// to the summary task. Review stories 8, 11, 14, 15, 17, 20, 28, 29, 31;
 // R1, R11, R19, R21, R24; FILE-2..5, -8..11, -19, -23, -27, -28.
 
 // A label criterion (index id 7) and an annotator (index id 12) the files can carry.
@@ -73,7 +73,7 @@ test(variant: 'edge', 'the rerun refreshes the sync filter Files preview') {
     assert attr(s.q, 'files').contains('first 2 of 2')
 }
 
-// --- the TRC 28 Oct review: stories 28, 29, 31 ------------------------------------------
+// --- the 28 Oct review: stories 28, 29, 31 ------------------------------------------
 
 test(variant: 'edge', 'story 28/29: a file whose label was removed is parked and its links refreshed before the summary') {
     def s = contactsSearch(delegate)
@@ -286,7 +286,7 @@ test(variant: 'edge', 'one failed request is retried and the rerun completes') {
 
 table(variant: 'edge', 'pages too large for Collibra are asked for again with fewer rows', [
     [case: 'explicit refusal', empty500: false],
-    [case: 'HTTP 500 with an empty body (TRC, 9 Oct 2026)', empty500: true],
+    [case: 'HTTP 500 with an empty body (seen live, 9 Oct 2026)', empty500: true],
 ]) { row ->
     def s = contactsSearch(delegate)
     (1..30).each { dxrFile("f${it}", labels: ['7'], rowBytes: 5_000) }
