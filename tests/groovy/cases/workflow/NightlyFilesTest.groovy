@@ -219,6 +219,9 @@ test('LINK-4: the nightly moves the integration\'s file links from groups to cla
     assert linked(q, 'groups', label)
     assert run.var('nightlyLinksMigrated') == 1
     assert fx.relations.values().find { it.typeId == ids.classifiedByRelationTypeId }.createdBy == WORKFLOW_USER
+    // Each link is re-read on its own (file AND classification), not by reloading all the file's links.
+    def rereads = fx.calls.findAll { it[0] == 'relationApi.findRelations' && it[1][0].props.relationTypeId == ids.groupsRelationTypeId && it[1][0].props.sourceId == f }
+    assert rereads && rereads.every { it[1][0].props.targetId != null }
 }
 
 test('LINK-4: a file already linked with classified by just loses its groups twin') {

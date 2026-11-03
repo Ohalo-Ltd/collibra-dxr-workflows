@@ -68,8 +68,8 @@ try {
         candidates.take(cap).each { rel ->
             def src = rel.getSource().getId()
             def tgt = rel.getTarget().getId()
-            // Still there as scanned? Otherwise something reconciled the file since.
-            if (relationsByFarEnd(ids.groupsRelationTypeId, src, null)[tgt]?.id != rel.getId()) { skippedChanged++; return }
+            // Still there as scanned? (one source + target lookup: just this link) Otherwise something reconciled the file since.
+            if (relationsByFarEnd(ids.groupsRelationTypeId, src, tgt)[tgt]?.id != rel.getId()) { skippedChanged++; return }
             boolean linked = already.contains("${src}:${tgt}".toString()) ||
                 addRelationQuietly(com.collibra.dgc.core.api.dto.instance.relation.AddRelationRequest.builder()
                     .sourceId(src).targetId(tgt).typeId(ids.classifiedByRelationTypeId).build())
