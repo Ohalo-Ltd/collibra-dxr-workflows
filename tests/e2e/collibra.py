@@ -163,14 +163,17 @@ class Collibra:
         return [t for t in self.get("/workflowTasks", limit=1000)["results"] if t.get("workflowInstanceId") in wanted]
 
 
-def rerun(c: Collibra, track, query: str, headless=False, wait_key="rerunSummaryTask"):
-    """Run Rerun DataXray Search on `query` to its end (interactive: until its summary task, then close it)."""
+def rerun(c: Collibra, track, query: str, headless=False, wait_key="rerunSummaryTask", options=None):
+    """Run Rerun DataXray Search on `query` to its end (interactive: send its Rerun Options task — as
+    prefilled, or with `options` — then wait for its summary task and close it)."""
     form = {"headless": "true"} if headless else {}
     inst = track.started(c.start(c.definitions["rerun-data-xray-search"], query, **form))
     if headless:
         ended = c.wait_ended(inst)
         assert not ended.get("inError"), f"headless rerun in error: {ended.get('errorMessage')}"
         return {"instance": inst}
+    options_task = c.wait_task(inst, "rerunOptionsTask")
+    c.complete(options_task["id"], **(options or {}))
     task = c.wait_task(inst, wait_key)
     c.complete(task["id"])
-    return {"instance": inst, "title": task["title"]}
+    return {"instance": inst, "title": task["title"], "options_title": options_task["title"]}

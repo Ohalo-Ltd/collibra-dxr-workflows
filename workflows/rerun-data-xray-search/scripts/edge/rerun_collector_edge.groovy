@@ -4,8 +4,11 @@
 // criteria rebuild as the on-prem script (shared/rerun_common.groovy); instead
 // of fetching, it translates the criteria into a DataXray query (numeric
 // index ids stamped on the classification assets by the Edge-edition sync),
-// snapshots the previously returned files, builds the classification index
-// from Collibra and arms page 0 of the results (rerun_page_edge.groovy).
+// snapshots the previously returned files and builds the classification index
+// from Collibra. An interactive run then arms the count probe
+// (rerun_count_edge.groovy: how many files match now, for the Rerun Options
+// task, v2.10); a headless run arms nothing — rerun_apply_options_edge.groovy
+// arms page 0 of the results (rerun_page_edge.groovy) for both.
 //
 // Headless mode: the nightly driver starts this workflow with 'headless'='true'.
 // Headless runs never throw; every abort path sets rerunAborted=true so the
@@ -44,7 +47,10 @@ def abort = { String title, String message ->
     zeroRerunExistsSummary()
     execution.setVariable('rerunExistsMode', '')
     execution.setVariable('rerunExistsCandidates', '[]')
-    execution.setVariable('rerunNoAutoImport', false)
+    execution.setVariable('rerunTagKeepInSync', false)
+    execution.setVariable('rerunTagNoAutoImport', false)
+    execution.setVariable('filesDomainCount', 0)
+    zeroRerunOptions()
     if (!headless) {
         def wf = new WorkflowException(message)
         wf.setTitleMessage(title)
@@ -92,10 +98,14 @@ def conditionName = queryAsset.getName()
 execution.setVariable('conditionName', conditionName)
 execution.setVariable('queryAssetId', queryId.toString())
 
-// Tagged dataxray-no-auto-import: refresh the file assets already in Collibra
-// and create none for new matching files.
-boolean noAutoImport = assetTagNames(queryId).contains(dxrNoAutoImportTag())
-execution.setVariable('rerunNoAutoImport', noAutoImport)
+// The sync filter's options as they stand (its tags): they prefill the Rerun
+// Options task, and a headless run follows them.
+def queryTags = assetTagNames(queryId)
+boolean tagKeepInSync = queryTags.contains(dxrKeepInSyncTag())
+boolean tagNoAutoImport = queryTags.contains(dxrNoAutoImportTag())
+execution.setVariable('rerunTagKeepInSync', tagKeepInSync)
+execution.setVariable('rerunTagNoAutoImport', tagNoAutoImport)
+execution.setVariable('rerunCreateNew', !tagNoAutoImport)
 
 // --- Rebuild the criteria from relations + the stored filter -------------------------
 
@@ -117,7 +127,8 @@ if (!criteria.hasCriteria) {
 def queryString = composeDxrQuery(criteria.labelNames, criteria.extractorNames, criteria.annotatorNames,
                                   criteria.filter, criteria.filterAnnotatorNames)
 loggerApi.info("Rerun of '${conditionName}' — rebuilt DataXray query: ${displayQuery(queryString)}")
-recordQueryAttribute(queryId, ids, displayQuery(queryString))
+// Written to the DataXray Query attribute once the options are applied (applyRerunOptions).
+execution.setVariable('rerunQueryDisplay', displayQuery(queryString))
 
 // --- Classification index from Collibra; translate the criteria ----------------------
 
@@ -153,6 +164,9 @@ execution.setVariable('dxrFetchComplete', false)
 execution.setVariable('rerunPageCount', 0)
 execution.setVariable('rerunRetireUnsafe', false)
 execution.setVariable('dxrDatasourceNames', '{}')
-beginEdgeFilesPass()
-startEdgeFilesPage(q.items, 0, pageSize, null)
-loggerApi.info("Rerun of '${conditionName}' via Edge connection '${connectionName}': ${previousFileIds.size()} previously returned file(s); page 0 armed")
+if (headless) {
+    loggerApi.info("Rerun of '${conditionName}' (headless) via Edge connection '${connectionName}': ${previousFileIds.size()} previously returned file(s)")
+} else {
+    armEdgeCountProbe(q.items)
+    loggerApi.info("Rerun of '${conditionName}' via Edge connection '${connectionName}': ${previousFileIds.size()} previously returned file(s); count probe armed")
+}

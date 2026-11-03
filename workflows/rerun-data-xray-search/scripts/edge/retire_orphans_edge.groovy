@@ -43,11 +43,13 @@ execution.setVariable('rerunExistsCandidates', '[]')
 
 if (execution.getVariable('rerunAborted') == true) {
     loggerApi.info('Retire pass skipped: the rerun was aborted')
+    refreshSyncModesAfterOptionChange()
     return
 }
 if (execution.getVariable('dxrFetchComplete') != true) {
     loggerApi.warn('Retire pass skipped: not every results page was fetched — not retiring anything from a partial picture')
     noteRetireSkipped('Not every page of results could be read from DataXray, so no file was unlinked from this search this time. The next rerun tries again.')
+    refreshSyncModesAfterOptionChange()
     return
 }
 
@@ -59,6 +61,7 @@ refreshQueryPreview(queryAssetId, dxrModelIds().filesAttrTypeId,
 if (execution.getVariable('rerunRetireUnsafe') == true) {
     loggerApi.warn('Retire pass skipped: a result too large to fetch was skipped and its file id could not be read — not retiring anything this run')
     noteRetireSkipped('One result was too large to send through Collibra Edge and could not be identified, so no file was unlinked from this search this time (it might have been one of them). The file is named in the Collibra log.')
+    refreshSyncModesAfterOptionChange()
     return
 }
 
@@ -72,6 +75,7 @@ if (total == 0) {
         execution.setVariable('rerunExistsMode', 'zeroResults')
         execution.setVariable('rerunExistsCandidates', JsonOutput.toJson(previousIds))
     }
+    refreshSyncModesAfterOptionChange()
     return
 }
 

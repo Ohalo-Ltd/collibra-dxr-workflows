@@ -16,7 +16,7 @@ Because an External API task is asynchronous and its response is limited in size
 |---|---|---|
 | 1 | **Collibra Cloud** (Collibra Data Intelligence Platform, cloud-hosted), with the Workflow Designer / workflow import feature. Tested against Collibra 2026.09. | Settings → Workflows → Definitions shows an **Upload** button. |
 | 2 | An **Edge site** that is installed, **healthy**, and has **network access to DataXray** on its HTTPS port. Tested against Edge 2026.6. | Settings → Edge → the site's status is *Healthy*. From the Edge host, `curl -sI https://<data-x-ray-host>/` answers. |
-| 3 | A **DataXray user** for the integration: a local (username + password) account with access to every datasource the workflows should see. The Edge connection authenticates with HTTP Basic auth using this account. Tested against DataXray 7.x. | Log in to DataXray with the account and open the datasources. |
+| 3 | A **DataXray user** for the integration: a local (username + password) account with **level 2** access (or higher) to every datasource the workflows should see — with less, DataXray returns files without their classifications. The Edge connection authenticates with HTTP Basic auth using this account. Tested against DataXray 7.x. | Log in to DataXray with the account and open the datasources. |
 | 4 | A Collibra global role with **Manage connections and capabilities** (or System administration) to create the HTTP connection. Note: the `DataXray Admin` role created by the configure workflow does **not** include this permission. | Settings → Edge → the site → **Connections** → *Create connection* is available. |
 | 5 | The six ZIPs from the `cloud-edge` bundle. | The bundle's file names end in `.zip` and there is no `-onprem-` in the bundle name. |
 
@@ -50,6 +50,9 @@ Settings → Workflows → Definitions → select a workflow → **Variables**:
 | Search DataXray, Rerun DataXray Search, Sync DataXray Classifications, Sync DataXray Classification (Nightly), Sync DataXray Files (Nightly) | **Edge HTTP connection name (DataXray)** | The connection name from Step 1 (`data-xray` unless you chose another). |
 | Search DataXray, Rerun DataXray Search | **DataXray results per request (1-100)** | Leave at `25`. Lower it only if a DataXray page exceeds Collibra's response limit (see *Limits*). |
 | all four | **DataXray Base URL (deep links only)** | Optional. Used only to build links from Collibra assets back to DataXray; leave the placeholder to skip links. |
+| Configure DataXray Workflows | **Sync extractor values to file assets (true/false)** | Optional, default `false`. Set `true` and run Configure again to have every sync copy the values DataXray's extractors found onto the file assets, for display; it does not change what a search matches. See [Optional: extractor values on file assets](file-asset-lifecycle.md#optional-extractor-values-on-file-assets). |
+
+Only Sysadmins and roles with the *Workflow administration* permission (such as **DataXray Admin**) see the **Variables** section.
 
 There is **no Bearer token** in this edition: credentials live on the Edge connection.
 
@@ -74,6 +77,14 @@ The same guidance as the on-prem edition applies:
 ## Upgrading from Data X-Ray to DataXray names
 
 Releases before the DataXray rename call the product **Data X-Ray** and the queries domain **Data X-Ray Custom Queries**. After re-importing the workflows, run **Configure DataXray Workflows** once: it renames the community, the three domains (the queries domain becomes **DataXray Sync Filter**), the **DataXray File** asset type, the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute types, the **DataXray Admin** and **DataXray User** roles and the six workflow definitions. It only renames an element that still has its old default name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes: settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name (`data-xray` by default) stay as they are.
+
+## Upgrading to v2.10
+
+Re-import the workflows, then run **Configure DataXray Workflows** once.
+
+- **Every manual rerun asks first.** *Rerun DataXray Search* stops at a **Rerun Options** task before it changes anything: it shows how many files DataXray matches now and up to how many are new to the search, and offers the search's three options again, prefilled from its tags (create assets for the new matching files on this run, keep in sync nightly, create assets for new files on later reruns). A user who did not import when the search ran can import from any rerun, and the sync options can be changed there without recreating the search. Sending it as prefilled behaves like a rerun before v2.10. To show the count, an interactive rerun sends one extra request before the task (one row, file ids only, well under 1 KB); headless nightly reruns do not. If DataXray cannot be reached for it, no task appears and the **Rerun Summary** says why.
+- **DataXray Sync attribute.** Configure creates the **DataXray Sync** attribute type on the **DataXray File** asset type. Every import and rerun writes *Kept in sync nightly* or *One-time import* on the file assets it touches, and the nightly file sync keeps the value current for all of them. A file several searches return is kept in sync while any one of them is. Until Configure has run, the attribute is not written; everything else works.
+- A rerun that would create more than 10,000 file assets, or break the 25,000 limit, is no longer refused outright: the Rerun Options task offers to refresh only the files already in Collibra instead.
 
 ## Upgrading to v2.9
 
@@ -131,8 +142,11 @@ Check all six after an upgrade: a workflow that was not re-imported still shows 
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| The **Sync extractor values to file assets** setting can't be found. | It belongs to **Configure DataXray Workflows**, not Search or Rerun; or you lack workflow administration; or Configure was imported before v2.8. | Settings → Workflows → Definitions → **Configure DataXray Workflows** → Variables, as a Sysadmin or **DataXray Admin**. Re-import Configure if the variable is not there. |
 | The workflow instance shows an **error** right after starting and never reaches a task. | The **connection name** does not match an HTTP connection on any Edge site (Collibra rejects the External API task before sending it). | Correct the variable, cancel the errored instance (Settings → Workflows → Instances), start again. |
 | Task **Search Failed** / **Sync Failed** with *Edge request failed* or *HTTP 401/403*. | The Edge site cannot reach DataXray, or the connection's credentials are wrong or the account lacks permissions. | Test the connection in Settings → Edge; check the Edge host's network path; check the DataXray account. |
+| A rerun was started but nothing happened. | Every manual rerun waits for its **Rerun Options** task (v2.10). | Open it from your task list and click **Send**. |
+| **Rerun Summary** right after starting a rerun, saying *Could not reach DataXray to rerun …* | The count request before the Rerun Options task failed three times: the Edge site cannot reach DataXray. | As for *Edge request failed* above, then rerun. |
 | *… is not visible to DataXray through this connection …* | The classification was synced with a different DataXray account (another organisational unit) or its DataXray ID is stale. | Run **Sync DataXray Classifications** through this connection, then search again. |
 | `dgc.log` shows *HTTP server error: status 500* for the External API task, and a search or rerun was retried with fewer results per request. | Collibra refused a DataXray response that was too large for it and reported this as an HTTP 500 with no body (DataXray itself answered normally). From v2.3.0 the workflow treats it like any oversized page and carries on with fewer results per request. | Nothing, unless it happens on every run: then lower **DataXray results per request** to save the extra requests. |
 | Task **Search Failed**, or a rerun aborted, with *Even a one-file request to DataXray failed … not a response-size problem*. | Even the smallest possible request failed, so DataXray or the Edge connection is unavailable. | Check that DataXray is up and test the HTTP connection in Settings → Edge; run the search again later. |

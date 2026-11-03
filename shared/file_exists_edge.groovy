@@ -355,6 +355,8 @@ def concludeZeroResultsCheck(Map ids, UUID queryAssetId) {
                unsafe    : execution.getVariable('existsUnsafeAny') == true]
     if (out.candidates == 0 || out.noKey > 0 || out.found > 0 || !out.complete || out.unsafe) { return out }
     out.allGone = true
+    boolean syncModeOn = syncModeAttrOn()
+    def syncCache = [:]
     def chunks = unpackJson((execution.getVariable('existsWork') ?: '').toString()) as List
     def relationIdByTarget = [:]
     relationIdsByFarEnd(ids.returnsRelationTypeId, queryAssetId, null).each { targetId, relId ->
@@ -373,12 +375,9 @@ def concludeZeroResultsCheck(Map ids, UUID queryAssetId) {
                         .sourceId(queryAssetId).targetId(assetId).typeId(ids.formerlyReturnsRelationTypeId).build())
                 }
                 if (!assetApi.exists(assetId)) { return }
-                def stillReturned = relationApi.findRelations(com.collibra.dgc.core.api.dto.instance.relation.FindRelationsRequest.builder()
-                    .relationTypeId(ids.returnsRelationTypeId)
-                    .targetId(assetId)
-                    .limit(1)
-                    .build())
-                if (!stillReturned.getResults().isEmpty()) { return }
+                def stillReturnedBy = relationIdsByFarEnd(ids.returnsRelationTypeId, null, assetId).keySet()
+                if (syncModeOn) { writeFileSyncMode(assetId, fileSyncModeFor(stillReturnedBy, ids, syncCache), ids) }
+                if (!stillReturnedBy.isEmpty()) { return }
                 def asset = assetApi.getAsset(assetId)
                 def sid = asset.getStatus()?.getId()
                 if (sid == ids.notInDataXrayStatusId) { return }

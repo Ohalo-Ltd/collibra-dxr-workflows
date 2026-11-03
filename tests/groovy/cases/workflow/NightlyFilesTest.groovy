@@ -153,6 +153,49 @@ test('files still Obsolete from a release before v2.4 move to Not in any search 
 
 // --- the existence check (Cloud + Edge) ---------------------------------------------------------
 
+// --- DataXray Sync (v2.10) ------------------------------------------------------------------
+
+test('SYNC-7: the nightly brings DataXray Sync up to date for changes no rerun sees') {
+    def untagged = query('Untagged since', [:])            // its keep-in-sync tag was removed by hand
+    def archived = query('Archived', tags: ['dataxray-keep-in-sync'], status: OBSOLETE)
+    def synced = query('Synced', tags: ['dataxray-keep-in-sync'])
+    def a = fileAsset('a'); link(untagged, 'returns', a)
+    def b = fileAsset('b'); link(archived, 'returns', b)
+    def c = fileAsset('c'); link(synced, 'returns', c); link(untagged, 'returns', c)
+    def orphan = fileAsset('orphan')
+    [a, b, orphan].each { fx.setAttributeValues(it, ids.syncModeAttrTypeId, ['Kept in sync nightly']) }
+    fx.setAttributeValues(c, ids.syncModeAttrTypeId, ['One-time import'])
+
+    def run = nightly(delegate)
+
+    assert attr(a, 'syncMode') == 'One-time import'
+    assert attr(b, 'syncMode') == 'One-time import'
+    assert attr(c, 'syncMode') == 'Kept in sync nightly'
+    assert attr(orphan, 'syncMode') == 'One-time import'
+    assert run.var('nightlySyncModeUpdated') == 4
+}
+
+test('SYNC-7: values already right are not rewritten') {
+    def synced = query('Synced', tags: ['dataxray-keep-in-sync'])
+    def f = fileAsset('f'); link(synced, 'returns', f)
+    fx.setAttributeValues(f, ids.syncModeAttrTypeId, ['Kept in sync nightly'])
+
+    def run = nightly(delegate)
+
+    assert fx.callCount('assetApi.setAssetAttributes') == 0
+    assert run.var('nightlySyncModeUpdated') == 0
+}
+
+test('SYNC-7: DataXray Sync is kept current even when the rerun workflow is missing') {
+    fx.workflowDefinitions.remove('rerunDataXraySearch')
+    def synced = query('Synced', tags: ['dataxray-keep-in-sync'])
+    def f = fileAsset('f'); link(synced, 'returns', f)
+
+    nightly(delegate)
+
+    assert attr(f, 'syncMode') == 'Kept in sync nightly'
+}
+
 test(variant: 'edge', 'story 31 / NIGHT-8: a parked file deleted in DataXray becomes Not in DataXray') {
     def gone = fileAsset('gone', status: ids.notInAnySearchStatusId, ds: '312', obj: 'obj-gone')
     def kept = fileAsset('kept', status: ids.notInAnySearchStatusId, ds: '312', obj: 'obj-kept')

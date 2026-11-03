@@ -1,0 +1,211 @@
+{
+  "rows": [
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "Rerun this search",
+          "value": "<p>Rerunning <b>{{conditionName}}</b>. DataXray matches <b>{{rerunResultCountDisplay}}</b> file(s) now. This search returned <b>{{rerunPreviousCountDisplay}}</b> file(s) before, so <b>{{rerunNewFilesDisplay}}</b> of today's matches are new to it.</p><p>Nothing in Collibra has changed yet. Choose what this rerun does and click <b>Send</b>. The file assets already in Collibra that the search still matches are always refreshed, and files it no longer matches are unlinked from it as usual.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "rerunOptionsSummary",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "Large import",
+          "value": "<p>⚠️ More than 5,000 of today's matches are new to this search. Creating their assets will work, but expect the rerun to run for a while in the background.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{importWarn}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "importWarnNote",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "Creating assets unavailable",
+          "value": "<p>🚫 {{importBlockedMessage}}</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{importBlocked}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "importBlockedNote",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "cloud-boolean"
+            ],
+            "stencilId": "cloud-boolean"
+          },
+          "label": "Create assets for the new matching files on this run",
+          "value": "{{importDecision}}",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{importAllowed}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "importDecision",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "cloud-boolean"
+            ],
+            "stencilId": "cloud-boolean"
+          },
+          "label": "Keep in sync nightly (rerun this search and re-sync its file assets every night)",
+          "value": "{{keepInSync}}",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{syncOffered}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "keepInSync",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "cloud-boolean"
+            ],
+            "stencilId": "cloud-boolean"
+          },
+          "label": "Create assets for new files found on later reruns (untick to only refresh files already in Collibra)",
+          "value": "{{autoImportNewFiles}}",
+          "defaultValue": true,
+          "size": 12,
+          "ignore": false,
+          "visible": "{{syncOffered}}",
+          "enabled": true,
+          "isRequired": false,
+          "id": "autoImportNewFiles",
+          "type": "boolean"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "About the options",
+          "value": "<p>The first option applies to this rerun only. The other two are saved on the search and apply to the nightly sync and to later reruns; every rerun shows them again, so you can change them at any time.</p><p>Each file asset's <b>DataXray Sync</b> attribute says whether it is <i>Kept in sync nightly</i> or a <i>One-time import</i>. A file stays in sync while at least one search that returns it is kept in sync nightly, so unticking <b>Keep in sync nightly</b> here only affects files no other synced search returns.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "optionsNote",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "Finish",
+          "value": "<p>Click <b>Send</b> to run the rerun. It works in the background; a <b>Rerun Summary</b> task will appear in your inbox when it finishes.</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "finishNote",
+          "type": "htmlComponent"
+        }
+      ]
+    },
+    {
+      "cols": [
+        {
+          "designInfo": {
+            "stencilSuperIds": [
+              "Output"
+            ],
+            "stencilId": "cloud-output"
+          },
+          "label": "",
+          "value": "<p style=\"color:#888;font-size:smaller\">{{dxrVersionLabel}} · started {{dxrRunStartedAt}}</p>",
+          "defaultValue": false,
+          "size": 12,
+          "ignore": false,
+          "visible": true,
+          "enabled": true,
+          "isRequired": false,
+          "id": "dxrVersionFooter",
+          "type": "htmlComponent"
+        }
+      ]
+    }
+  ],
+  "metadata": {
+    "key": "rerunOptionsForm",
+    "name": "Rerun Options",
+    "description": "Shows how many files the saved search matches now and offers the import options again before the rerun changes anything.",
+    "version": "1",
+    "modelType": "form",
+    "flowableDesignVersion": 3110,
+    "palette": "flowable-core-form-palette"
+  }
+}

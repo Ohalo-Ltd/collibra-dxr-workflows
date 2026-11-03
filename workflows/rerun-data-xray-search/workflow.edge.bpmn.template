@@ -7,11 +7,21 @@
     startEvent (no form — started from the query asset's page, or headlessly
                 by the nightly file sync driver)
       → rerunCollectorTask (script, sync: rebuild the criteria from the asset,
-           snapshot the previously returned files, arm the first request)
+           snapshot the previously returned files; interactive: arm the count probe)
       → rerunAbortedGateway ─ ${rerunAborted} ─→ retireTask (an aborted headless
            run arms no request; without this gateway the External API task fails
            on the unset ${dxrMethod} and the instance sits in error every night —
            seen on dev 29 Oct 2026 for a search whose label was deleted in DataXray)
+           ─ ${headless} ─→ rerunApplyOptionsTask (the nightly follows the tags)
+      → rerunCountFetchTask (External API task: 1 row, ids only) → rerunCountTask
+           (script, async: total matches → the Rerun Options form's variables)
+      → rerunCountGateway ─ ${hasMoreWork} ─→ back to rerunCountFetchTask (retry)
+      → rerunOptionsGateway ─ ${rerunAborted} ─→ retireTask (DataXray unreachable,
+           or more matches than it can page through)
+      → rerunOptionsTask (user form, v2.10: how many files match now, and the
+           three import options prefilled from the sync filter's tags)
+      → rerunApplyOptionsTask (script, sync: write the tags, decide whether to
+           create assets for new files, arm page 0 — always arms a request)
       → rerunFetchTask (External API task) → rerunPageTask (script, async:
            catalogue stages, then one results page = one batch of upserts)
       → rerunLoopGateway ─ ${hasMoreWork} ─→ back to rerunFetchTask
@@ -65,11 +75,56 @@
       </extensionElements>
       <script>{{script:rerun_collector_edge.groovy}}</script>
     </scriptTask>
-    <exclusiveGateway id="rerunAbortedGateway" name="Aborted?" default="flowFetchFirst">
+    <exclusiveGateway id="rerunAbortedGateway" name="Aborted? Headless?" default="flowCountFirst">
       <extensionElements>
         <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
       </extensionElements>
     </exclusiveGateway>
+    <serviceTask id="rerunCountFetchTask" name="Count Matches (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
+      <extensionElements>
+        <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestUrl"><flowable:expression><![CDATA[${dxrRequestPath}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestHeaders"><flowable:expression><![CDATA[${dxrRequestHeaders}]]></flowable:expression></flowable:field>
+        <flowable:field name="requestBody"><flowable:expression><![CDATA[${dxrRequestBody}]]></flowable:expression></flowable:field>
+        <flowable:field name="disallowRedirects"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="responseVariableName"><flowable:string><![CDATA[dxrResponseBody]]></flowable:string></flowable:field>
+        <flowable:field name="resultVariablePrefix"><flowable:string><![CDATA[dxr]]></flowable:string></flowable:field>
+        <flowable:field name="ignoreException"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveRequestVariables"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParameters"><flowable:string><![CDATA[true]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseParametersTransient"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <flowable:field name="saveResponseVariableAsJson"><flowable:string><![CDATA[false]]></flowable:string></flowable:field>
+        <design:stencilid><![CDATA[HttpTask]]></design:stencilid>
+        <design:http-connection-name><![CDATA[${dataxrayConnectionName}]]></design:http-connection-name>
+      </extensionElements>
+    </serviceTask>
+    <scriptTask id="rerunCountTask" name="Read Match Count" scriptFormat="groovy" flowable:async="true" flowable:exclusive="true" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:rerun_count_edge.groovy}}</script>
+    </scriptTask>
+    <exclusiveGateway id="rerunCountGateway" name="Retry?" default="flowCountDone">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <exclusiveGateway id="rerunOptionsGateway" name="Aborted?" default="flowOptions">
+      <extensionElements>
+        <design:stencilid><![CDATA[ExclusiveGateway]]></design:stencilid>
+      </extensionElements>
+    </exclusiveGateway>
+    <userTask id="rerunOptionsTask" name="Rerun Options: ${conditionName} (${dxrRunStartedAt})" flowable:candidateUsers="user(${initiator})" flowable:formKey="rerunOptionsForm">
+      <extensionElements>
+        <design:stencilid><![CDATA[FormTask]]></design:stencilid>
+      </extensionElements>
+    </userTask>
+    <scriptTask id="rerunApplyOptionsTask" name="Apply Rerun Options" scriptFormat="groovy" flowable:autoStoreVariables="false">
+      <extensionElements>
+        <design:stencilid><![CDATA[ScriptTask]]></design:stencilid>
+      </extensionElements>
+      <script>{{script:rerun_apply_options_edge.groovy}}</script>
+    </scriptTask>
     <serviceTask id="rerunFetchTask" name="Call DataXray (Edge)" flowable:async="true" flowable:exclusive="true" flowable:parallelInSameTransaction="false" flowable:type="http">
       <extensionElements>
         <flowable:field name="requestMethod"><flowable:expression><![CDATA[${dxrMethod}]]></flowable:expression></flowable:field>
@@ -162,10 +217,25 @@
     </endEvent>
     <sequenceFlow id="flow1" sourceRef="startEvent" targetRef="rerunCollectorTask"/>
     <sequenceFlow id="flow2" sourceRef="rerunCollectorTask" targetRef="rerunAbortedGateway"/>
-    <sequenceFlow id="flowFetchFirst" sourceRef="rerunAbortedGateway" targetRef="rerunFetchTask"/>
     <sequenceFlow id="flowAborted" sourceRef="rerunAbortedGateway" targetRef="retireTask">
       <conditionExpression xsi:type="tFormalExpression"><![CDATA[${rerunAborted == true}]]></conditionExpression>
     </sequenceFlow>
+    <sequenceFlow id="flowHeadlessNoOptions" sourceRef="rerunAbortedGateway" targetRef="rerunApplyOptionsTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${headless == 'true'}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowCountFirst" sourceRef="rerunAbortedGateway" targetRef="rerunCountFetchTask"/>
+    <sequenceFlow id="flowCountFetched" sourceRef="rerunCountFetchTask" targetRef="rerunCountTask"/>
+    <sequenceFlow id="flowCounted" sourceRef="rerunCountTask" targetRef="rerunCountGateway"/>
+    <sequenceFlow id="flowCountRetry" sourceRef="rerunCountGateway" targetRef="rerunCountFetchTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${hasMoreWork == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowCountDone" sourceRef="rerunCountGateway" targetRef="rerunOptionsGateway"/>
+    <sequenceFlow id="flowCountAborted" sourceRef="rerunOptionsGateway" targetRef="retireTask">
+      <conditionExpression xsi:type="tFormalExpression"><![CDATA[${rerunAborted == true}]]></conditionExpression>
+    </sequenceFlow>
+    <sequenceFlow id="flowOptions" sourceRef="rerunOptionsGateway" targetRef="rerunOptionsTask"/>
+    <sequenceFlow id="flowOptionsChosen" sourceRef="rerunOptionsTask" targetRef="rerunApplyOptionsTask"/>
+    <sequenceFlow id="flowFetchFirst" sourceRef="rerunApplyOptionsTask" targetRef="rerunFetchTask"/>
     <sequenceFlow id="flow3" sourceRef="rerunFetchTask" targetRef="rerunPageTask"/>
     <sequenceFlow id="flow4" sourceRef="rerunPageTask" targetRef="rerunLoopGateway"/>
     <sequenceFlow id="flowMoreWork" sourceRef="rerunLoopGateway" targetRef="rerunFetchTask">
@@ -195,6 +265,12 @@
       <bpmndi:BPMNShape bpmnElement="startEvent" id="S_startEvent"><omgdc:Bounds height="30.0" width="30.0" x="60.0" y="165.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunCollectorTask" id="S_rerunCollectorTask"><omgdc:Bounds height="80.0" width="100.0" x="130.0" y="140.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunAbortedGateway" id="S_rerunAbortedGateway"><omgdc:Bounds height="40.0" width="40.0" x="160.0" y="250.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunCountFetchTask" id="S_rerunCountFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="400.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunCountTask" id="S_rerunCountTask"><omgdc:Bounds height="80.0" width="100.0" x="410.0" y="400.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunCountGateway" id="S_rerunCountGateway"><omgdc:Bounds height="40.0" width="40.0" x="550.0" y="420.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunOptionsGateway" id="S_rerunOptionsGateway"><omgdc:Bounds height="40.0" width="40.0" x="630.0" y="420.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunOptionsTask" id="S_rerunOptionsTask"><omgdc:Bounds height="80.0" width="100.0" x="710.0" y="400.0"/></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape bpmnElement="rerunApplyOptionsTask" id="S_rerunApplyOptionsTask"><omgdc:Bounds height="60.0" width="100.0" x="270.0" y="0.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunFetchTask" id="S_rerunFetchTask"><omgdc:Bounds height="80.0" width="100.0" x="270.0" y="140.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunPageTask" id="S_rerunPageTask"><omgdc:Bounds height="80.0" width="100.0" x="410.0" y="140.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNShape bpmnElement="rerunLoopGateway" id="S_rerunLoopGateway"><omgdc:Bounds height="40.0" width="40.0" x="550.0" y="160.0"/></bpmndi:BPMNShape>
@@ -209,7 +285,16 @@
       <bpmndi:BPMNShape bpmnElement="endEvent" id="S_endEvent"><omgdc:Bounds height="28.0" width="28.0" x="1470.0" y="166.0"/></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge bpmnElement="flow1" id="E_flow1"><omgdi:waypoint x="90.0" y="180.0"/><omgdi:waypoint x="130.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow2" id="E_flow2"><omgdi:waypoint x="180.0" y="220.0"/><omgdi:waypoint x="180.0" y="250.0"/></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge bpmnElement="flowFetchFirst" id="E_flowFetchFirst"><omgdi:waypoint x="200.0" y="270.0"/><omgdi:waypoint x="320.0" y="270.0"/><omgdi:waypoint x="320.0" y="220.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowFetchFirst" id="E_flowFetchFirst"><omgdi:waypoint x="320.0" y="60.0"/><omgdi:waypoint x="320.0" y="140.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowHeadlessNoOptions" id="E_flowHeadlessNoOptions"><omgdi:waypoint x="160.0" y="270.0"/><omgdi:waypoint x="110.0" y="270.0"/><omgdi:waypoint x="110.0" y="20.0"/><omgdi:waypoint x="270.0" y="20.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowCountFirst" id="E_flowCountFirst"><omgdi:waypoint x="180.0" y="290.0"/><omgdi:waypoint x="180.0" y="440.0"/><omgdi:waypoint x="270.0" y="440.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowCountFetched" id="E_flowCountFetched"><omgdi:waypoint x="370.0" y="440.0"/><omgdi:waypoint x="410.0" y="440.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowCounted" id="E_flowCounted"><omgdi:waypoint x="510.0" y="440.0"/><omgdi:waypoint x="550.0" y="440.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowCountRetry" id="E_flowCountRetry"><omgdi:waypoint x="570.0" y="460.0"/><omgdi:waypoint x="570.0" y="510.0"/><omgdi:waypoint x="320.0" y="510.0"/><omgdi:waypoint x="320.0" y="480.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowCountDone" id="E_flowCountDone"><omgdi:waypoint x="590.0" y="440.0"/><omgdi:waypoint x="630.0" y="440.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowCountAborted" id="E_flowCountAborted"><omgdi:waypoint x="650.0" y="420.0"/><omgdi:waypoint x="650.0" y="380.0"/><omgdi:waypoint x="680.0" y="380.0"/><omgdi:waypoint x="680.0" y="220.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowOptions" id="E_flowOptions"><omgdi:waypoint x="670.0" y="440.0"/><omgdi:waypoint x="710.0" y="440.0"/></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge bpmnElement="flowOptionsChosen" id="E_flowOptionsChosen"><omgdi:waypoint x="810.0" y="440.0"/><omgdi:waypoint x="850.0" y="440.0"/><omgdi:waypoint x="850.0" y="560.0"/><omgdi:waypoint x="90.0" y="560.0"/><omgdi:waypoint x="90.0" y="40.0"/><omgdi:waypoint x="270.0" y="40.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flowAborted" id="E_flowAborted"><omgdi:waypoint x="180.0" y="290.0"/><omgdi:waypoint x="180.0" y="340.0"/><omgdi:waypoint x="680.0" y="340.0"/><omgdi:waypoint x="680.0" y="220.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow3" id="E_flow3"><omgdi:waypoint x="370.0" y="180.0"/><omgdi:waypoint x="410.0" y="180.0"/></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge bpmnElement="flow4" id="E_flow4"><omgdi:waypoint x="510.0" y="180.0"/><omgdi:waypoint x="550.0" y="180.0"/></bpmndi:BPMNEdge>

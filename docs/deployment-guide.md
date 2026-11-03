@@ -36,6 +36,10 @@ To import, enable and configure workflows you need a Collibra account with one o
 
 (The same permission is needed to set the Base URL and Bearer token in Step 4.)
 
+The DataXray user whose Bearer token the workflows use needs **level 2**
+access (or higher) to each datasource the workflows should see: with less,
+DataXray returns its files without their classifications.
+
 ---
 
 ## Step 1 — Import the six workflows
@@ -96,9 +100,9 @@ Four of the workflows — **Search DataXray**, **Rerun DataXray Search**,
 **Sync DataXray Classifications**, and **Sync DataXray Classification
 (Nightly)** — need to know your DataXray instance's address and an
 authentication token. These are hidden configuration variables; they are never
-shown to people who *run* the workflow and can only be set by an admin. (The
-**Configure** workflow and **Sync DataXray Files (Nightly)** have no such
-settings — the nightly file sync only starts reruns, which carry their own.)
+shown to people who *run* the workflow and can only be set by an admin.
+(**Sync DataXray Files (Nightly)** has no connection settings: it only starts
+reruns, which carry their own.)
 
 For **each** of those four workflows:
 
@@ -116,6 +120,15 @@ if it is still unset.
 > **Rerun DataXray Search** also has a hidden **Headless** variable. Leave it
 > at `false` — the nightly file sync sets it per run when it starts reruns
 > automatically.
+
+**Configure DataXray Workflows** has one optional setting of its own, in the
+same **Variables** section: **Sync extractor values to file assets
+(true/false)**, default `false`. Leave it at `false` unless you want every sync
+to copy the values DataXray's extractors found (an invoice number, a yes/no
+answer) onto the file assets, for display. It does not change what a search
+matches. To turn it on, set it to `true` and run Configure again; see
+*Optional: extractor values on file assets* in
+[file-asset-lifecycle.md](file-asset-lifecycle.md#optional-extractor-values-on-file-assets).
 
 ## Step 5 — Assign the access roles to users
 
@@ -196,17 +209,28 @@ everything without being added to these roles.
     only start matching later.
 
   The tags are set as soon as you click **Send**, and you can add or remove
-  either one on the query asset at any time.
+  either one on the query asset at any time. Every manual rerun offers all
+  three options again, so passing on the import is never final.
 - **Rerun DataXray Search** — open a saved **DataXray Sync Filter** asset
   and start the workflow from its page. The saved criteria are rebuilt from the
   query's linked classifications (so DataXray renames are picked up
   automatically); if a criterion was deleted in DataXray, the rerun stops and
-  names it rather than silently broadening the search.
+  names it rather than silently broadening the search. A **Rerun Options**
+  task then shows how many files match now and offers the search's options
+  again, prefilled from its tags: create assets for the new matching files on
+  this run, keep in sync nightly, create assets for new files on later reruns.
+  Nothing changes until you click **Send**.
+- **DataXray Sync** — every file asset says whether it is *Kept in sync
+  nightly* (at least one search that returns it is kept in sync nightly) or a
+  *One-time import*, whose attributes may be stale. Sync wins: a file several
+  searches return stays in sync while any one of them is.
 - **Sync DataXray Classification (Nightly)** — runs automatically every night
   at **02:00**; there is nothing to start by hand.
 - **Sync DataXray Files (Nightly)** — runs automatically every night at
-  **02:30**, rerunning every search tagged `dataxray-keep-in-sync`. Remove that
-  tag from a query asset to stop syncing it; add it to resume.
+  **02:30**, rerunning every search tagged `dataxray-keep-in-sync`. Untick
+  *Keep in sync nightly* on a rerun, or remove that tag from a query asset, to
+  stop syncing it; tick it or add the tag to resume. It also brings every file
+  asset's DataXray Sync value up to date.
 - **Never delete** — classification assets that disappear from DataXray are
   set to status **Obsolete**. A file asset that **no** saved search returns
   any more gets the status **Not in any search**, and goes back to
@@ -270,6 +294,30 @@ the **DataXray ID**, **DataXray Index ID** and **DataXray Query** attribute type
 name: one you renamed yourself keeps your name. The workflows refer to all of these by ID, so nothing else changes:
 settings, run permissions, tags (`dataxray-keep-in-sync`, `dataxray-no-auto-import`) and the Edge connection name
 (`data-xray` by default) stay as they are.
+
+### Upgrading to v2.10
+
+Re-import the workflows, then run **Configure DataXray Workflows** once. In
+both editions:
+
+- **Every manual rerun asks first.** *Rerun DataXray Search* now stops at a
+  **Rerun Options** task before it changes anything. It shows how many files
+  DataXray matches now and how many are new to the search, and offers the
+  search's three options again, prefilled from its tags. A user who did not
+  import when the search ran can import from any rerun, and the sync options
+  can be changed there without recreating the search. Sending the task as
+  prefilled behaves like a rerun before v2.10. The nightly sync never shows
+  the task.
+- **DataXray Sync attribute.** Configure creates the **DataXray Sync**
+  attribute type and adds it to the **DataXray File** asset type. Every import
+  and rerun then writes *Kept in sync nightly* or *One-time import* on the
+  file assets it touches, and the nightly file sync keeps the value current
+  for all of them. A file several searches return is kept in sync while any
+  one of them is. Until Configure has run, the attribute is simply not
+  written; everything else works.
+- A rerun that would create more than 10,000 file assets, or break the
+  25,000 limit, is no longer refused outright: the Rerun Options task offers
+  to refresh only the files already in Collibra instead.
 
 ### Upgrading to v2.9
 
@@ -366,9 +414,12 @@ that case, re-enter the token/URL (Step 4) and **run Configure once more** (Step
 |---|---|
 | Workflow's overview page is blank. | The workflow is disabled — enable it (Step 2). |
 | A run stops with "DataXray … is not set" / "misconfigured". | The Base URL or Bearer token is still the placeholder — set it (Step 4). |
+| The **Sync extractor values to file assets** setting can't be found. | It is a variable of **Configure DataXray Workflows**, not of Search or Rerun (Settings → Workflows → Definitions → Configure DataXray Workflows → Variables). The Variables section is shown only to Sysadmins and to roles with the *Workflow administration* permission, such as **DataXray Admin**. If Configure was imported before v2.8, re-import it. |
 | Configure's results list a workflow as **"not deployed yet"**. | That workflow wasn't imported when Configure ran — import it (Steps 1–2) and run Configure again (Step 3). |
 | A user can't see Search/Sync in **+ Create**. | They don't hold **DataXray User** or **DataXray Admin** — assign the role (Step 5). |
 | A user can't edit the Base URL / token. | Editing requires **DataXray Admin** (or Sysadmin / Workflow Administration). |
+| A rerun was started but nothing happened. | Every manual rerun waits for its **Rerun Options** task (v2.10): open it from your task list and click **Send**. |
+| The DataXray Sync attribute is missing on file assets. | Configure has not been re-run since the upgrade to v2.10 — run it once, then rerun the searches or wait for the nightly. |
 | The import controls don't appear on the search results task. | Either the search returned 0 results, matched more than 10,000 files, or the projected number of DataXray File assets (wherever they live) exceeds the 25,000 cap (the task shows the reason). |
 | A rerun stops with "This instance is missing the status 'Not in any search' …". | The workflows were upgraded to v2.4 but Configure has not been re-run — run it once (Step 3). |
 | *formerly returns* or *formerly groups* links don't show on an asset page. | Configure left that asset type's assignment alone because it has hand-tuned rules (its results list it). Add the relation types in Settings > Operating model > Asset types > Assignments. |

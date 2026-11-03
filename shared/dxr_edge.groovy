@@ -186,6 +186,31 @@ def startEdgeFilesPage(List queryItems, int pageNo, int pageSize, String pitId) 
     execution.setVariable('hasMoreWork', true)
 }
 
+// The rerun's count probe (v2.10): one row, every field excluded (~400 bytes
+// whatever the rows look like), to learn hits.total and max_result_window
+// before the Rerun Options task. Stage 'count' — not 'probe', which
+// handleEdgeFilesPage uses for the oversized-row lookup. Its point-in-time id
+// is never reused: the task may stay open for days, so the results pass that
+// follows opens a fresh one (startEdgeFilesPage with pitId null).
+def armEdgeCountProbe(List queryItems) {
+    execution.setVariable('dxrStage', 'count')
+    armEdgeRequest('POST', '/api/indexed-files/search', buildEdgeSearchBody(queryItems, 0, 1, null, ['*']))
+    edgeResetRetries()
+    execution.setVariable('hasMoreWork', true)
+}
+
+// The count probe's answer: [ok: true, total:, maxResultWindow:] or [ok: false, error:].
+def readEdgeCountProbe() {
+    def r = readEdgeResponse()
+    if (!r.ok) { return [ok: false, error: r.error] }
+    try {
+        def page = parseEdgeSearchPage(r.body)
+        return [ok: true, total: page.total, maxResultWindow: page.maxResultWindow]
+    } catch (Exception parseEx) {
+        return [ok: false, error: "Unreadable DataXray search response: ${parseEx.message}".toString()]
+    }
+}
+
 // The page size the files loop is using now: the configured one until Collibra
 // refuses a page as too large, then smaller (shrinkEdgeFilesPage). The row
 // offset is always dxrPageNo × this.
@@ -418,6 +443,8 @@ def zeroEdgeImportCounters(int total, int pageSize) {
     execution.setVariable('importRelationsRemovedCount', 0)
     execution.setVariable('importSkippedClassifications', 0)
     execution.setVariable('importSkippedNewCount', 0)
+    execution.setVariable('importCappedCount', 0)
+    execution.setVariable('importCapped', false)
 }
 
 // --- The files loop: one page per External API task, plus datasource lookups ---
@@ -565,7 +592,8 @@ def processEdgePage(Map page, Map dsNames, Map opts) {
 
 // The import/rerun page handler: upsert the page as one batch and keep counters.
 // opts additionally: queryAssetId (UUID), classIndex (Map byDxrId/byName → asset ids),
-// createNew (default true; false = refresh existing file assets only).
+// createNew (default true; false = refresh existing file assets only),
+// maxCreate (optional Closure → int: how many assets this page may still create).
 def importEdgePage(Map opts, Map page, List tuples) {
     int pageNo = (execution.getVariable('dxrPageNo') ?: 0) as int
     int pageSize = edgeCurrentPageSize(opts.pageSize as int)
@@ -579,7 +607,7 @@ def importEdgePage(Map opts, Map page, List tuples) {
     def res = tuples.isEmpty()
         ? [created: 0, updated: 0, failed: 0, relationsAdded: 0, relationsRemoved: 0, skippedNew: 0]
         : processFileBatch(tuples, opts.queryAssetId, "${opts.label} ${pageNo + 1}/${batchCount}".toString(),
-                           [createNew: opts.createNew != false])
+                           [createNew: opts.createNew != false, maxCreate: opts.maxCreate ? opts.maxCreate() : null])
     accumulateBatchCounters(res)
     if (opts.afterPage) { opts.afterPage(tuples, pageNo, res.seenAssetIds ?: tuples.collect { deterministicFileAssetId(it[0]).toString() }) }
     loggerApi.info("${opts.label} ${pageNo + 1}/${batchCount}: +${res.created} created, +${res.updated} updated, +${res.failed} failed, ${res.skippedNew} not imported, +${res.relationsAdded}/-${res.relationsRemoved} relation(s); ${Math.min((pageNo + 1) * pageSize, page.total)}/${page.total} done")
