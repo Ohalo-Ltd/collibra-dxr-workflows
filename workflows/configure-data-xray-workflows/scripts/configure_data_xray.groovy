@@ -139,7 +139,7 @@ def OBJECT_ID_ATTR_ID     = '019e9212-4e55-7072-9f6d-9b0c1d2e3f34'
 def FILE_NAME_ATTR_ID     = '019e9212-5f66-7183-a07e-ac1d2e3f4a45'
 def OBJECT_KEY_ATTR_ID    = '019e9212-8c99-74b6-b3d1-df3a5b6c7d78'   // v2.9: "<datasource id>:<object id>" (TRC R1)
 // v2.10: "Kept in sync nightly" / "One-time import" — whether any sync filter
-// that returns the file is kept in sync nightly (TRC, 2 Nov 2026)
+// that returns the file is kept in sync nightly
 def SYNC_MODE_ATTR_ID     = '019e9212-9daa-75c7-b4e2-f04b6c7d8e89'
 // DataXray Extracted Values (v2.8, optional): the extractor values of each file,
 // as a table. Exists only while this workflow's syncExtractorValues variable

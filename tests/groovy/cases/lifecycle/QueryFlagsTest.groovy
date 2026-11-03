@@ -1,6 +1,6 @@
 // applyQueryFlags: the sync filter's two options as tags, written by the Search
 // Results task and (v2.10) by every Rerun Options task — so they must be
-// removable as well as addable (TRC, 2 Nov 2026).
+// removable as well as addable.
 
 table('the tags follow the options both ways (RERUN-OPT-3)', [
     [case: 'nothing → keep in sync, no auto-import', before: [], keep: true, auto: false,

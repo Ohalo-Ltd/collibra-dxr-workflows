@@ -230,7 +230,7 @@ test('extractor values are cleared when the file no longer has any') {
     assert attr(assetIdOf('f1'), 'extractedValues') == null
 }
 
-// --- DataXray Sync (v2.10, TRC 2 Nov 2026) ---------------------------------------------------
+// --- DataXray Sync (v2.10) ---------------------------------------------------
 
 test('a file returned by a sync filter kept in sync nightly is Kept in sync nightly (SYNC-1)') {
     def q = query('Contacts', tags: ['dataxray-keep-in-sync'])

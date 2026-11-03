@@ -149,7 +149,7 @@ def zeroResultsRetireSkipReason(int linked) {
 // --- The Rerun Options task (v2.10) ---------------------------------------------------
 //
 // Every manual rerun stops at a Rerun Options task before it changes anything
-// (TRC, 2 Nov 2026: a user who passed on importing the first time could only
+// (a user who passed on importing the first time could only
 // recreate the search). It shows how many files the search matches now, and
 // offers the Search Results task's three options again, prefilled from the
 // sync filter's tags: create assets for the new matches on this run, keep in

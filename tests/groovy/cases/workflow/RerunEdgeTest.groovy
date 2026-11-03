@@ -392,7 +392,7 @@ test(variant: 'edge', 'R21 / FILE-23: creating more than 10,000 assets is refuse
     assert fileAssets().isEmpty()
 }
 
-// --- the Rerun Options task (v2.10, TRC 2 Nov 2026) ------------------------------------------------
+// --- the Rerun Options task (v2.10) ------------------------------------------------
 
 test(variant: 'edge', 'RERUN-OPT-1: the Rerun Options task shows today\'s count and the options as the tags have them') {
     def s = contactsSearch(delegate, query: [tags: ['dataxray-keep-in-sync']])
